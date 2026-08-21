@@ -33,23 +33,21 @@ function initMorningBrief() {
 
   Promise.all([
     sb.get('dispatch_assignments', '?tech_id=eq.' + tech + '&scheduled_date=eq.' + today + '&order=sort_order.asc&select=*,work_orders(wo_number,title,status,form_mode,customers(name,display_name))'),
-    sb.get('tasks', '?scheduled_date=eq.' + today + '&select=*,task_assignments(tech_id)'),
+    sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
+    sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)'),
     sb.get('location_event', '?tid=eq.' + (AppState.traccarId || 'KM') + '&timestamp=gte.' + today + 'T04:00:00Z&timestamp=lte.' + today + 'T23:59:59Z&order=timestamp.asc&limit=1&select=timestamp,lat,lng')
   ]).then(function(results) {
-    var dispatches = (results[0].ok ? results[0].data : []) || [];
-    var allTasks = (results[1].ok ? results[1].data : []) || [];
-    var firstPing = results[2].ok && results[2].data && results[2].data.length ? results[2].data[0] : null;
-    var myTasks = allTasks.filter(function(t) {
-      if (!t.task_assignments || !t.task_assignments.length) return true;
-      return t.task_assignments.some(function(a) { return a.tech_id === tech; });
-    });
-    renderMorningBrief(shell, dispatches, myTasks, clockedIn, firstPing, today, tech);
+    var dispatches  = (results[0].ok ? results[0].data : []) || [];
+    var dateTasks   = (results[1].ok ? results[1].data : []) || [];
+    var locTasks    = (results[2].ok ? results[2].data : []) || [];
+    var firstPing   = results[3].ok && results[3].data && results[3].data.length ? results[3].data[0] : null;
+    renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech);
   }).catch(function() {
-    renderMorningBrief(shell, [], [], clockedIn, null, today, tech);
+    renderMorningBrief(shell, [], [], [], clockedIn, null, today, tech);
   });
 }
 
-function renderMorningBrief(shell, dispatches, tasks, clockedIn, firstPing, today, tech) {
+function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech) {
   var now = new Date();
   var greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
   var techName = '';
@@ -121,32 +119,12 @@ function renderMorningBrief(shell, dispatches, tasks, clockedIn, firstPing, toda
   }
   html += '</div>';
 
-  // Tasks
-  html += '<div style="margin-bottom:16px">';
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-  html += '<div style="font-size:14px;font-weight:700;color:var(--text-primary)">Tasks</div>';
-  html += '<button onclick="mbAddTask()" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer">+ Add task</button>';
-  html += '</div>';
-
-  if (!tasks.length) {
-    html += '<div style="font-size:13px;color:var(--text-muted);padding:12px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No tasks for today</div>';
-  } else {
-    tasks.forEach(function(t) {
-      var done = t.status === 'done';
-      var checkedAttr = done ? 'checked' : '';
-      var strikeStyle = done ? 'text-decoration:line-through' : '';
-      var notesHtml = t.notes ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(t.notes) + '</div>' : '';
-      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;' + (done ? 'opacity:0.5' : '') + '">';
-      html += '<input type="checkbox" class="mb-task-check" data-id="' + t.id + '" ' + checkedAttr + ' style="width:18px;height:18px;cursor:pointer;flex-shrink:0">';
-      html += '<div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--text-primary);' + strikeStyle + '">' + escHtml(t.title) + '</div>' + notesHtml + '</div>';
-      html += '</div>';
-    });
-  }
-  html += '</div>';
+  // Tasks — container populated by tasksRenderSection in app-tasks.js
+  html += '<div id="mb-tasks-shell" style="margin-bottom:16px"></div>';
   html += '</div>';
   shell.innerHTML = html;
 
-  // Event delegation
+  // Event delegation for dispatch section
   shell.addEventListener('click', function(e) {
     var suggested = e.target.closest('.mb-clock-suggested');
     if (suggested) { e.stopPropagation(); mdrClockInFromSuggested(suggested.dataset.suggestedTs); return; }
@@ -157,10 +135,12 @@ function renderMorningBrief(shell, dispatches, tasks, clockedIn, firstPing, toda
     var card = e.target.closest('.mb-dispatch-card');
     if (card) { openWODetail(card.dataset.woId); return; }
   });
-  shell.addEventListener('change', function(e) {
-    var check = e.target.closest('.mb-task-check');
-    if (check) mbToggleTask(check.dataset.id, check.checked);
-  });
+
+  // Populate tasks section via app-tasks.js
+  var taskShell = document.getElementById('mb-tasks-shell');
+  if (taskShell && typeof tasksRenderSection === 'function') {
+    tasksRenderSection(taskShell, dateTasks, locTasks, tech, true);
+  }
 }
 
 // ── Morning Brief — Desktop ───────────────────────────────────
@@ -171,17 +151,19 @@ function initMorningBriefDesktop() {
   body.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-muted)">Loading...</div>';
   Promise.all([
     sb.get('dispatch_assignments', '?scheduled_date=eq.' + today + '&order=sort_order.asc&select=*,work_orders(wo_number,title,status,form_mode,customer_id,customers(name,display_name)),technicians(name)'),
-    sb.get('tasks', '?scheduled_date=eq.' + today + '&select=*,task_assignments(tech_id)')
+    sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
+    sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)')
   ]).then(function(results) {
     var dispatches = (results[0].ok ? results[0].data : []) || [];
-    var tasks = (results[1].ok ? results[1].data : []) || [];
-    renderMorningBriefDesktop(body, dispatches, tasks, today);
+    var dateTasks  = (results[1].ok ? results[1].data : []) || [];
+    var locTasks   = (results[2].ok ? results[2].data : []) || [];
+    renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today);
   }).catch(function() {
     body.innerHTML = '<div style="color:var(--text-muted)">Could not load morning brief</div>';
   });
 }
 
-function renderMorningBriefDesktop(body, dispatches, tasks, today) {
+function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today) {
   var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
   var html = '<div style="max-width:700px">';
   html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Morning Brief</div>';
@@ -231,23 +213,8 @@ function renderMorningBriefDesktop(body, dispatches, tasks, today) {
     });
   }
 
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 10px">';
-  html += '<div style="font-size:16px;font-weight:700">Tasks</div>';
-  html += '<button onclick="mbAddTask()" style="padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px;cursor:pointer">+ Add task</button>';
-  html += '</div>';
-
-  if (!tasks.length) {
-    html += '<div style="font-size:13px;color:var(--text-muted);padding:16px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No tasks today</div>';
-  } else {
-    tasks.forEach(function(t) {
-      var done = t.status === 'done';
-      var notesHtml = t.notes ? '<div style="font-size:12px;color:var(--text-muted)">' + escHtml(t.notes) + '</div>' : '';
-      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px;' + (done ? 'opacity:0.5' : '') + '">';
-      html += '<input type="checkbox" class="mb-task-check" data-id="' + t.id + '" ' + (done ? 'checked' : '') + ' style="width:18px;height:18px;cursor:pointer">';
-      html += '<div style="flex:1"><div style="font-size:13px;font-weight:500;' + (done ? 'text-decoration:line-through' : '') + '">' + escHtml(t.title) + '</div>' + notesHtml + '</div>';
-      html += '</div>';
-    });
-  }
+  // Tasks — container populated by tasksRenderSection in app-tasks.js
+  html += '<div id="mb-dt-tasks-shell" style="margin:24px 0 0"></div>';
 
   html += '</div>';
   body.innerHTML = html;
@@ -260,10 +227,13 @@ function renderMorningBriefDesktop(body, dispatches, tasks, today) {
     var woLink = e.target.closest('.mb-dt-wo-link');
     if (woLink) { openWODetail(woLink.closest('.mb-dt-dispatch').dataset.woId); return; }
   });
-  body.addEventListener('change', function(e) {
-    var check = e.target.closest('.mb-task-check');
-    if (check) mbToggleTask(check.dataset.id, check.checked);
-  });
+
+  // Populate tasks section via app-tasks.js
+  var taskShell = document.getElementById('mb-dt-tasks-shell');
+  if (taskShell && typeof tasksRenderSection === 'function') {
+    var tech = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+    tasksRenderSection(taskShell, dateTasks, locTasks, tech, false);
+  }
 }
 
 // ── Dispatch helpers ──────────────────────────────────────────

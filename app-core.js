@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.53';
+const APP_VERSION = '4.54';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -2085,6 +2085,7 @@ function desktopNav(panel) {
   if (panel==='exports') renderExportsPanel();
   if (panel==='morningbrief') initMorningBriefDesktop();
   if (panel==='endofday') initEndOfDayDesktop();
+  if (panel==='tasks' && typeof initTasksPanel === 'function') initTasksPanel();
 }
 
 function filterDesktopGrid() {
