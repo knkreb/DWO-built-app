@@ -925,9 +925,10 @@ function drRenderTimeline() {
     var ms = [];
     try { ms = typeof dayReview.merged_stops === 'string' ? JSON.parse(dayReview.merged_stops) : dayReview.merged_stops; } catch(e){}
     if (!Array.isArray(ms)) ms = [];
-    ms.forEach(function(m){ 
+    ms.forEach(function(m){
       (m.mergedSegments||[]).forEach(function(seg){ if (seg.arrivedAt) mergedSecondaryKeys[seg.arrivedAt] = true; });
-      // Apply correct duration to primary stop
+      // Apply total merged duration to primary stop for billing math.
+      // leftAt is NOT extended — each card shows its own real time window.
       var primaryStop = DRState.stops.find(function(s){ return s.arrivedAt === m.primaryArrivedAt; });
       if (primaryStop) {
         if (m.totalDurationMin) {
@@ -936,21 +937,13 @@ function drRenderTimeline() {
           var segTotal = (m.mergedSegments||[]).reduce(function(sum,seg){ return sum + (seg.durationMin||0); }, 0);
           primaryStop.durationMin = m.originalDurationMin + segTotal;
         }
-        // v4.43 fix — extend leftAt to last merged segment so stop card time range is accurate
-        // Reconciliation screen already did this; FTL was missing it causing display mismatch
-        var lastSeg = (m.mergedSegments||[]).reduce(function(latest, seg) {
-          return (!latest || new Date(seg.leftAt) > new Date(latest.leftAt)) ? seg : latest;
-        }, null);
-        if (lastSeg && new Date(lastSeg.leftAt) > new Date(primaryStop.leftAt)) {
-          primaryStop.leftAt = lastSeg.leftAt;
-        }
       }
     });
   }
   var workStops = DRState.stops.filter(function(s) {
     var arrived = new Date(s.arrivedAt);
     var left = new Date(s.leftAt);
-    return left >= clockInTime && arrived <= clockOutTime && !mergedSecondaryKeys[s.arrivedAt];
+    return left >= clockInTime && arrived <= clockOutTime;
   });
 
   if (!workStops.length && !DRState.pings.length) {
@@ -978,6 +971,25 @@ function drRenderTimeline() {
     var locName = stop.location ? stop.location.name : 'Unknown stop';
     var locType = stop.location ? (stop.location.location_type || 'untagged') : 'untagged';
     var isPendingLocation = stop.location && stop.location.status === 'pending';
+
+    // Merge state — detect early so billing math and card style can use it
+    var dayReviewForBadge = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate && r.tech_id === DRState.tech; });
+    var mergeListForBadge = [];
+    if (dayReviewForBadge && dayReviewForBadge.merged_stops) {
+      try { mergeListForBadge = typeof dayReviewForBadge.merged_stops === 'string' ? JSON.parse(dayReviewForBadge.merged_stops) : dayReviewForBadge.merged_stops; } catch(e){}
+      if (!Array.isArray(mergeListForBadge)) mergeListForBadge = [];
+    }
+    var isMerged = mergeListForBadge.some(function(m){ return m.primaryArrivedAt === stop.arrivedAt; });
+    // Secondary merged stop — part of a merge group but not the primary card
+    var isSecondaryMerged = !isMerged && (mergedSecondaryKeys[stop.arrivedAt] || false);
+    var primaryArrivedAtForSecondary = null;
+    if (isSecondaryMerged) {
+      var secRec = mergeListForBadge.find(function(m){
+        return (m.mergedSegments||[]).some(function(seg){ return seg.arrivedAt === stop.arrivedAt; });
+      });
+      if (secRec) primaryArrivedAtForSecondary = secRec.primaryArrivedAt;
+    }
+
     // Build customer subtitle for allocated stops
     var allocCustomers = '';
     if (hasAllocations) {
@@ -987,7 +999,9 @@ function drRenderTimeline() {
     }
     var hasEntries = stop.hoursEntries.length > 0 || stop.allocations.length > 0;
     var totalAllocMin = stop.allocations.reduce(function(s,a){return s+(parseFloat(a.hours||0)*60);},0);
-    var elapsedMin = drElapsedMin(stop);
+    // For billing comparison on a primary merged stop, use total merged duration so the
+    // under/over-billed badge reflects all segments, not just the first one.
+    var elapsedMin = (isMerged && stop.durationMin) ? stop.durationMin : drElapsedMin(stop);
     var underBilled = stop.location && locType === 'customer' && totalAllocMin > 0 && totalAllocMin < elapsedMin - 5;
     var overBilled = totalAllocMin > elapsedMin + 5;
 
@@ -1032,16 +1046,8 @@ function drRenderTimeline() {
     var isMultiAccount = stop.locationMatches && stop.locationMatches.length > 1 && !isConfirmedMulti;
     var isAllocated = hasEntries && !underBilled;
     var isNonBillable = stop.location && (locType === 'personal' || locType === 'office');
-    // Check if this stop has a merge record
-    var dayReviewForBadge = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate && r.tech_id === DRState.tech; });
-    var mergeListForBadge = [];
-    if (dayReviewForBadge && dayReviewForBadge.merged_stops) {
-      try { mergeListForBadge = typeof dayReviewForBadge.merged_stops === 'string' ? JSON.parse(dayReviewForBadge.merged_stops) : dayReviewForBadge.merged_stops; } catch(e){}
-      if (!Array.isArray(mergeListForBadge)) mergeListForBadge = [];
-    }
-    var isMerged = mergeListForBadge.some(function(m){ return m.primaryArrivedAt === stop.arrivedAt; });
-    var badgeCls = isConfirmedMulti ? 'ok' : !stop.location && !isMultiAccount ? 'warn' : isPendingLocation ? 'warn' : isMultiAccount ? 'warn' : underBilled ? 'err' : overBilled ? 'warn' : hasEntries ? 'ok' : 'gray';
-    var badgeText = isConfirmedMulti ? 'Confirmed' : isMultiAccount ? 'Select account' : !stop.location ? 'Untagged' : isPendingLocation ? 'Pending review' : underBilled ? 'Under-billed' : overBilled ? 'Min applied' : hasEntries ? 'Allocated' : 'No entries';
+    var badgeCls = isSecondaryMerged ? 'gray' : isConfirmedMulti ? 'ok' : !stop.location && !isMultiAccount ? 'warn' : isPendingLocation ? 'warn' : isMultiAccount ? 'warn' : underBilled ? 'err' : overBilled ? 'warn' : hasEntries ? 'ok' : 'gray';
+    var badgeText = isSecondaryMerged ? 'Merged' : isConfirmedMulti ? 'Confirmed' : isMultiAccount ? 'Select account' : !stop.location ? 'Untagged' : isPendingLocation ? 'Pending review' : underBilled ? 'Under-billed' : overBilled ? 'Min applied' : hasEntries ? 'Allocated' : 'No entries';
     var locIcon = locType === 'customer' ? 'C' : locType === 'vendor' ? 'V' : locType === 'personal' ? 'P' : locType === 'office' ? 'O' : isConfirmedMulti ? 'M' : isMultiAccount ? '?' : '?';
     var icClass = locType === 'customer' ? 'job' : locType === 'vendor' ? 'vendor' : locType === 'personal' ? 'nonbill' : locType === 'office' ? 'nonbill' : isConfirmedMulti ? 'job' : 'untagged';
     // Grey out fully allocated stops, neutral for non-billable
@@ -1061,14 +1067,20 @@ function drRenderTimeline() {
       (allocCustomers ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:1px">' + escHtml(allocCustomers) + '</div>' : '');
     html += '<div class="dr-stop-time">' + drFormatTime(stop.arrivedAt) + ' &ndash; ' + drFormatTime(stop.leftAt) + ' &middot; ' + drFormatDuration(drElapsedMin(stop)) + '</div></div>';
     html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">';
-    if (isMerged) html += '<div style="font-size:10px;font-weight:600;color:#534ab7;background:#f1efff;border:1px solid #a89fe8;border-radius:99px;padding:1px 7px;white-space:nowrap">&#8853; Merged</div>';
+    if (isMerged || isSecondaryMerged) html += '<div style="font-size:10px;font-weight:600;color:#534ab7;background:#f1efff;border:1px solid #a89fe8;border-radius:99px;padding:1px 7px;white-space:nowrap">&#8853; Merged</div>';
     html += '<div class="dr-stop-badge ' + badgeCls + '">' + badgeText + '</div>';
     html += '</div>';
     html += '</div>';
 
     if (isSelected) {
       html += '<div class="dr-stop-body">';
-      if (!stop.location && !isMultiAccount) {
+      if (isSecondaryMerged) {
+        // Secondary merged segment — just show Undo merge; allocation lives on the primary card
+        html += '<div style="background:#f1efff;border:1px solid #a89fe8;border-radius:var(--radius);padding:8px 10px;display:flex;align-items:center;gap:8px">';
+        html += '<span style="font-size:11px;color:#534ab7;font-weight:600">&#8853; Segment merged with ' + drFormatTime(primaryArrivedAtForSecondary) + ' visit</span>';
+        html += '<button onclick="event.stopPropagation();tbUnmerge(\'' + primaryArrivedAtForSecondary + '\')" style="margin-left:auto;font-size:11px;padding:3px 10px;background:#534ab7;color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Undo merge</button>';
+        html += '</div>';
+      } else if (!stop.location && !isMultiAccount) {
         html += DRState.identifyIdx === origIdx ? drRenderIdentifyForm(origIdx) : '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
           '<button onclick="event.stopPropagation();drStartIdentify(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Identify this stop</button>' +
           '<button onclick="event.stopPropagation();drMarkNotBillable(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Mark not billable</button>' +
@@ -1148,7 +1160,7 @@ function drRenderTimeline() {
         }
         if (stop.allocations.length) {
           var totalAlloc = stop.allocations.reduce(function(s,a){return s+parseFloat(a.hours||0);},0);
-          var gpsH = (drElapsedMin(stop)/60);
+          var gpsH = (elapsedMin/60); // uses merged total for primary merged stops
           var minBilling = parseFloat(AppState.settings.billing_minimum_hours || 2);
           var hasTM = stop.allocations.some(function(a){ return a.formMode !== 'quoted'; });
           var hasQuoted = stop.allocations.some(function(a){ return a.formMode === 'quoted'; });
