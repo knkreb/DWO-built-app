@@ -1,5 +1,5 @@
 // app-tasks.js — Task module (Phase A: standalone + location tasks)
-// v4.54 — Aug 2026
+// v4.55 — Aug 2026
 // Depends on: AppState, sb, escHtml, showToast
 // Loads after app-morning-brief.js — overrides mbAddTask, mbToggleTask
 
@@ -17,7 +17,7 @@ function tasksCheckExpiry(tasks) {
   });
   if (!expired.length) return;
   expired.forEach(function(t) {
-    sb.patch('tasks', '?id=eq.' + t.id, {
+    sb.patchWhere('tasks', 'id=eq.' + t.id, {
       status: 'open', claimed_by: null, claimed_at: null,
       modified_at: new Date().toISOString()
     });
@@ -135,7 +135,7 @@ function tasksCardHtml(t, tech) {
 function taskClaim(id) {
   var tech = AppState.userTechId;
   if (!tech) { showToast('Cannot identify technician'); return; }
-  sb.patch('tasks', '?id=eq.' + id, {
+  sb.patchWhere('tasks', 'id=eq.' + id, {
     status: 'claimed', claimed_by: tech, claimed_at: new Date().toISOString(),
     modified_at: new Date().toISOString()
   }).then(function(r) {
@@ -145,7 +145,7 @@ function taskClaim(id) {
 }
 
 function taskUnclaim(id) {
-  sb.patch('tasks', '?id=eq.' + id, {
+  sb.patchWhere('tasks', 'id=eq.' + id, {
     status: 'open', claimed_by: null, claimed_at: null,
     modified_at: new Date().toISOString()
   }).then(function(r) {
@@ -155,7 +155,7 @@ function taskUnclaim(id) {
 }
 
 function taskComplete(id) {
-  sb.patch('tasks', '?id=eq.' + id, {
+  sb.patchWhere('tasks', 'id=eq.' + id, {
     status: 'completed', modified_at: new Date().toISOString()
   }).then(function(r) {
     if (!r.ok) { showToast('Error completing task'); return; }
@@ -175,11 +175,13 @@ function tasksRefreshBrief() {
 // ── mbAddTask override ────────────────────────────────────────
 // Replaces the version in app-morning-brief.js with a richer quick-add form.
 function mbAddTask() {
+  if (document.querySelector('.task-quick-add-overlay')) return;
   var today = new Date().toISOString().slice(0, 10);
   var tech  = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var isMobile = AppState.deviceMode !== 'desktop';
 
   var overlay = document.createElement('div');
+  overlay.className = 'task-quick-add-overlay';
 
   if (isMobile) {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end';
@@ -327,9 +329,15 @@ function tasksRenderAdminPanel(el) {
   list += '</div>';
 
   el.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
-  el.innerHTML = header + tabs + list;
 
-  el.addEventListener('click', function(e) {
+  // Use a fresh wrapper so re-renders don't accumulate listeners on el.
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+  wrap.innerHTML = header + tabs + list;
+  el.innerHTML = '';
+  el.appendChild(wrap);
+
+  wrap.addEventListener('click', function(e) {
     if (e.target.closest('.tasks-admin-new'))    { tasksOpenCreate(); return; }
     var fb = e.target.closest('.tasks-admin-filter');
     if (fb) { TasksState.adminFilter = fb.dataset.filter; tasksRenderAdminPanel(el); return; }
@@ -487,7 +495,7 @@ function tasksSaveAdminForm(id, overlay) {
   if (overlay) overlay.remove();
 
   var save = id
-    ? sb.patch('tasks', '?id=eq.' + id, record)
+    ? sb.patchWhere('tasks', 'id=eq.' + id, record)
     : sb.post('tasks', record);
 
   save.then(function(r) {
@@ -495,11 +503,11 @@ function tasksSaveAdminForm(id, overlay) {
     var taskId = id || (Array.isArray(r.data) && r.data[0] && r.data[0].id);
     if (taskId) {
       if (assigneeType === 'tech' && techId) {
-        sb.delete('task_assignments', '?task_id=eq.' + taskId).then(function() {
+        sb.deleteWhere('task_assignments', 'task_id=eq.' + taskId).then(function() {
           sb.post('task_assignments', { task_id: taskId, tech_id: techId });
         });
       } else if (assigneeType === 'company') {
-        sb.delete('task_assignments', '?task_id=eq.' + taskId);
+        sb.deleteWhere('task_assignments', 'task_id=eq.' + taskId);
       }
     }
     showToast(id ? 'Task updated' : 'Task created');
@@ -509,8 +517,8 @@ function tasksSaveAdminForm(id, overlay) {
 
 function tasksDeleteConfirm(id) {
   if (!confirm('Delete this task? This cannot be undone.')) return;
-  sb.delete('task_assignments', '?task_id=eq.' + id).then(function() {
-    return sb.delete('tasks', '?id=eq.' + id);
+  sb.deleteWhere('task_assignments', 'task_id=eq.' + id).then(function() {
+    return sb.deleteWhere('tasks', 'id=eq.' + id);
   }).then(function(r) {
     if (!r || !r.ok) { showToast('Error deleting task'); return; }
     showToast('Task deleted');
