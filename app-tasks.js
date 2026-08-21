@@ -1,5 +1,5 @@
 // app-tasks.js — Task module (Phase A: standalone + location tasks)
-// v4.55 — Aug 2026
+// v4.56 — Aug 2026
 // Depends on: AppState, sb, escHtml, showToast
 // Loads after app-morning-brief.js — overrides mbAddTask, mbToggleTask
 
@@ -94,6 +94,12 @@ function tasksCardHtml(t, tech) {
     if (claimer) claimerName = claimer.name.split(' ')[0];
   }
 
+  var completedByName = '';
+  if (isCompleted && t.completed_by && AppState.technicians) {
+    var completer = AppState.technicians.find(function(x) { return x.id === t.completed_by; });
+    if (completer) completedByName = completer.name.split(' ')[0];
+  }
+
   var badge = '';
   if (isCompleted) {
     badge = '<span style="font-size:10px;background:#d4b8f0;color:#4a1a8a;border-radius:3px;padding:2px 6px;font-weight:600">DONE</span>';
@@ -105,6 +111,7 @@ function tasksCardHtml(t, tech) {
 
   var notesHtml = t.notes ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + escHtml(t.notes) + '</div>' : '';
   var locHtml   = (isLocTask && locName) ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">&#128205; ' + escHtml(locName) + '</div>' : '';
+  var completedByHtml = (isCompleted && completedByName) ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">&#10003; Completed by ' + escHtml(completedByName) + '</div>' : '';
 
   var actions = '';
   if (tech && !isCompleted && !isClaimedByOther) {
@@ -122,7 +129,7 @@ function tasksCardHtml(t, tech) {
   html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
   html += '<div style="flex:1">';
   html += '<div style="font-size:13px;font-weight:500;color:var(--text-primary)">' + escHtml(t.title) + '</div>';
-  html += notesHtml + locHtml;
+  html += notesHtml + locHtml + completedByHtml;
   html += '</div>';
   if (badge) html += '<div style="flex-shrink:0;margin-top:1px">' + badge + '</div>';
   html += '</div>';
@@ -155,8 +162,12 @@ function taskUnclaim(id) {
 }
 
 function taskComplete(id) {
+  var tech = AppState.userTechId;
   sb.patchWhere('tasks', 'id=eq.' + id, {
-    status: 'completed', modified_at: new Date().toISOString()
+    status: 'completed',
+    completed_by: tech || null,
+    completed_at: new Date().toISOString(),
+    modified_at: new Date().toISOString()
   }).then(function(r) {
     if (!r.ok) { showToast('Error completing task'); return; }
     tasksRefreshBrief();
@@ -313,14 +324,26 @@ function tasksRenderAdminPanel(el) {
       var sColor = { open:'#27ae60', claimed:'#b45309', completed:'#4a1a8a' }[t.status] || '#666';
       var dateLabel = isLocTask ? ('&#128205; ' + escHtml(locName || 'No location')) : (t.scheduled_date || 'No date');
 
+      var auditParts = [];
+      if (t.claimed_by && AppState.technicians) {
+        var claimerA = AppState.technicians.find(function(x){ return x.id === t.claimed_by; });
+        if (claimerA) auditParts.push('Claimed by ' + escHtml(claimerA.name.split(' ')[0]) + (t.claimed_at ? ' &middot; ' + t.claimed_at.slice(0,10) : ''));
+      }
+      if (t.completed_by && AppState.technicians) {
+        var completerA = AppState.technicians.find(function(x){ return x.id === t.completed_by; });
+        if (completerA) auditParts.push('Completed by ' + escHtml(completerA.name.split(' ')[0]) + (t.completed_at ? ' &middot; ' + t.completed_at.slice(0,10) : ''));
+      }
+
       list += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px">';
       list += '<div style="flex:1">';
       list += '<div style="font-size:14px;font-weight:600;margin-bottom:2px">' + escHtml(t.title) + '</div>';
       if (t.notes) list += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">' + escHtml(t.notes) + '</div>';
       list += '<div style="font-size:12px;color:var(--text-secondary)">' + dateLabel + ' &middot; ' + escHtml(assigneeLabel) + '</div>';
+      if (auditParts.length) list += '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">' + auditParts.join(' &nbsp;&bull;&nbsp; ') + '</div>';
       list += '</div>';
       list += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">';
       list += '<span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:' + sBg + ';color:' + sColor + '">' + (t.status||'open').toUpperCase() + '</span>';
+      if (t.status !== 'completed') list += '<button class="tasks-admin-complete" data-id="' + t.id + '" style="font-size:12px;padding:4px 10px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Complete</button>';
       list += '<button class="tasks-admin-edit" data-id="' + t.id + '" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);background:none;cursor:pointer">Edit</button>';
       list += '<button class="tasks-admin-delete" data-id="' + t.id + '" style="font-size:12px;padding:4px 10px;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius);background:none;cursor:pointer">Delete</button>';
       list += '</div></div>';
@@ -341,6 +364,8 @@ function tasksRenderAdminPanel(el) {
     if (e.target.closest('.tasks-admin-new'))    { tasksOpenCreate(); return; }
     var fb = e.target.closest('.tasks-admin-filter');
     if (fb) { TasksState.adminFilter = fb.dataset.filter; tasksRenderAdminPanel(el); return; }
+    var cb = e.target.closest('.tasks-admin-complete');
+    if (cb) { taskComplete(cb.dataset.id); return; }
     var eb = e.target.closest('.tasks-admin-edit');
     if (eb) { tasksOpenEdit(eb.dataset.id); return; }
     var db = e.target.closest('.tasks-admin-delete');
