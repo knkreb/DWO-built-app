@@ -992,8 +992,18 @@ function drRenderTimeline() {
     var overBilled = totalAllocMin > elapsedMin + 5;
 
     // Drive/gap segment before this stop
+    // Use max(leftAt) of all prior stops — merged stops can have a later leftAt than stops
+    // that appear after them in arrivedAt order (e.g. a merged Elementary Campus spanning
+    // 10:41–4:07 wraps around a McDonald's lunch at 1:12–1:40). Using only the immediately
+    // preceding card's leftAt would show 3h drive instead of ~33m.
     var prevStop = idx > 0 ? workStops[idx-1] : null;
-    var prevTime = prevStop ? new Date(prevStop.leftAt) : clockInTime;
+    var prevTime = clockInTime;
+    if (idx > 0) {
+      for (var pi = 0; pi < idx; pi++) {
+        var cand = new Date(workStops[pi].leftAt);
+        if (cand > prevTime) prevTime = cand;
+      }
+    }
     var driveMin = Math.round((new Date(stop.arrivedAt) - prevTime) / 60000);
     if (driveMin > 0) {
       var driveCap = parseInt(AppState.settings.gps_drive_cap_minutes || '240');
