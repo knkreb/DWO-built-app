@@ -1,5 +1,6 @@
 // gps-engine.js — GPS stop detection for ProMech
-// Version: 1.3 — consecutive good-accuracy departure rule
+// Version: 1.4 — increased DEPARTURE_CONSEC_REQUIRED default from 3 to 6
+// v1.3 — consecutive good-accuracy departure rule
 // v1.2 — two-condition departure rule (accuracy + movement)
 // v1.1 — accuracy-relative geofence matching + speed sanity filter
 // v1.0 — simplified speed-based detection
@@ -117,7 +118,7 @@
     // Departure: accuracy improves again (outside, clear sky)
     // Rule: require N consecutive good-accuracy pings all outside geofence to confirm departure
     // One or two outside pings = noise/brief wander = stay on site
-    var DEPARTURE_CONSEC_REQUIRED = parseInt(settings.gps_departure_consecutive || '3');
+    var DEPARTURE_CONSEC_REQUIRED = parseInt(settings.gps_departure_consecutive || '6');
     var DEPARTURE_ACC_THRESHOLD = parseInt(settings.gps_departure_accuracy_threshold || '25');
 
     // Filter poor accuracy pings globally
@@ -397,6 +398,6 @@
   // Expose haversine for use elsewhere in app
   window.drHaversineMeters = haversineMeters;
 
-  console.log('[gps-engine] loaded v1.3');
+  console.log('[gps-engine] loaded v1.4');
 
 })();
