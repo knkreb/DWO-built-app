@@ -1,5 +1,6 @@
 // gps-engine.js — GPS stop detection for ProMech
-// Version: 1.4 — increased DEPARTURE_CONSEC_REQUIRED default from 3 to 6
+// Version: 1.5 — overlapping geofence hold: don't flush when ping still inside current geofence
+// v1.4 — increased DEPARTURE_CONSEC_REQUIRED default from 3 to 6
 // v1.3 — consecutive good-accuracy departure rule
 // v1.2 — two-condition departure rule (accuracy + movement)
 // v1.1 — accuracy-relative geofence matching + speed sanity filter
@@ -297,9 +298,21 @@
               windowPingCount++;
             }
           } else if (currentLocId !== matchedId) {
-            // Drive-past a different location — flush current, don't start new
-            flushKnownWindow();
-            if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
+            // v1.5 — overlapping geofence check: ping may be closer to a neighbor geofence
+            // but still inside the current one. Only flush if ping is genuinely outside current.
+            var pingStillInCurrent = (function() {
+              if (!currentLocId) return false;
+              var curLoc = locations.filter(function(l) { return l.id === currentLocId; })[0];
+              if (!curLoc || !curLoc.lat || !curLoc.lng) return false;
+              var curRadius = parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
+              return haversineMeters(ping.lat, ping.lng, curLoc.lat, curLoc.lng) <= curRadius;
+            })();
+            if (!pingStillInCurrent) {
+              // Drive-past a different location — flush current, don't start new
+              flushKnownWindow();
+              if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
+            }
+            // else: overlap zone — ping is inside both geofences; hold current window
           }
           // else: moving through geofence with no established window — ignore (drive-past)
         } else {
@@ -311,14 +324,31 @@
             gapStartPing = null;
             consecutiveOutsideCount = 0;
           } else {
-            // New known location
-            flushKnownWindow();
-            if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
-            currentLocId = matchedId;
-            windowFirstPing = ping;
-            windowLastPing = ping;
-            windowPingCount = 1;
-            gapStartPing = null;
+            // v1.5 — overlapping geofence check: matchedId differs because a neighbor geofence
+            // is now marginally closer, but ping may still be inside current geofence.
+            var pingStillInCurrent = (function() {
+              if (!currentLocId) return false;
+              var curLoc = locations.filter(function(l) { return l.id === currentLocId; })[0];
+              if (!curLoc || !curLoc.lat || !curLoc.lng) return false;
+              var curRadius = parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
+              return haversineMeters(ping.lat, ping.lng, curLoc.lat, curLoc.lng) <= curRadius;
+            })();
+            if (pingStillInCurrent) {
+              // Overlap zone — ping is inside both; hold the current window
+              windowLastPing = ping;
+              windowPingCount++;
+              gapStartPing = null;
+              consecutiveOutsideCount = 0;
+            } else {
+              // Genuinely moved to a new location
+              flushKnownWindow();
+              if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
+              currentLocId = matchedId;
+              windowFirstPing = ping;
+              windowLastPing = ping;
+              windowPingCount = 1;
+              gapStartPing = null;
+            }
           }
         }
       } else {
@@ -398,6 +428,6 @@
   // Expose haversine for use elsewhere in app
   window.drHaversineMeters = haversineMeters;
 
-  console.log('[gps-engine] loaded v1.4');
+  console.log('[gps-engine] loaded v1.5');
 
 })();
