@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ProMech">
+<meta name="theme-color" content="#1e2a1e">
+<title>ProMech — Providence Mechanical</title>
+<style>
+:root{
+  --header-bg:#1e2a1e;--header-text:#fff;--amber:#e8a020;--amber-dark:#1a0a00;
+  --bg:#f5f5f2;--surface:#fff;--border:#e0e0dc;--text-primary:#1a1a18;
+  --text-secondary:#666660;--text-muted:#999990;--danger:#c0392b;--success:#27ae60;
+  --shadow:0 1px 3px rgba(0,0,0,.10);--shadow-md:0 2px 8px rgba(0,0,0,.12);
+  --radius:8px;--radius-sm:4px;
+}
+[data-theme="dark"]{
+  --bg:#1a1a18;--surface:#252523;--border:#3a3a38;--text-primary:#f0f0ec;
+  --text-secondary:#aaa;--text-muted:#666660;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text-primary);font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;border:none;background:none;font:inherit}
+input,select,textarea{font:inherit;color:var(--text-primary);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;width:100%;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--amber)}
+textarea{resize:vertical;min-height:80px}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+
+/* APP SHELL */
+#app{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.conn-bar{background:#c0392b;color:#fff;text-align:center;font-size:12px;padding:4px;display:none;flex-shrink:0}
+.conn-bar.offline{display:block}
+.app-header{position:sticky;top:0;background:var(--header-bg);color:var(--header-text);padding:0 12px;height:56px;display:flex;align-items:center;gap:8px;flex-shrink:0;z-index:100}
+.header-btn{background:var(--amber);color:var(--amber-dark);border-radius:var(--radius-sm);padding:6px 12px;font-size:14px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.header-btn:active{opacity:.8}
+.header-title{flex:1;text-align:center;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.header-icon-btn{color:var(--header-text);padding:8px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);flex-shrink:0;font-size:20px}
+.header-icon-btn:active{background:rgba(255,255,255,.15)}
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.screen.hidden{display:none!important}
+#screen-wo-list:not(.hidden){display:flex;flex-direction:column}
+#wo-list-items{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* HAMBURGER MENU */
+.hamburger-overlay{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.5);z-index:300;display:none}
+.hamburger-overlay.open{display:block}
+.hamburger-menu{position:fixed;top:0;left:0;width:260px;height:100%;background:var(--surface);z-index:301;transform:translateX(-100%);transition:transform .25s ease;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+.hamburger-menu.open{transform:translateX(0)}
+.hamburger-header{background:var(--header-bg);padding:16px;color:#fff;flex-shrink:0}
+.hamburger-header h2{font-size:16px;font-weight:700}
+.hamburger-header p{font-size:12px;opacity:.7;margin-top:2px}
+.hamburger-item{display:flex;align-items:center;gap:12px;padding:14px 16px;font-size:15px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text-primary)}
+.hamburger-item:active{background:var(--bg)}
+.hamburger-item-icon{font-size:20px;width:28px;flex-shrink:0}
+.hamburger-footer{margin-top:auto;padding:16px;border-top:1px solid var(--border)}
+
+/* DESKTOP */
+.desktop-layout{display:flex;flex:1;overflow:hidden;height:100%}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);flex-shrink:0;overflow-y:auto;display:flex;flex-direction:column;padding:16px 0}
+@media(max-width:767px){.sidebar{display:none!important}}
+@media(max-width:767px){.header-title-text{font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:120px}}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:11px 16px;color:var(--text-primary);font-size:14px;cursor:pointer;transition:background .12s}
+.sidebar-item:hover{background:var(--bg)}
+.sidebar-item.active{background:var(--amber);color:var(--amber-dark);font-weight:600}
+.sidebar-icon{font-size:18px;flex-shrink:0}
+.sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid var(--border)}
+.desktop-main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+/* LOGIN */
+#screen-login-inner{display:flex;align-items:center;justify-content:center;min-height:100%;padding:24px}
+.login-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-md);padding:32px 24px;width:100%;max-width:360px}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo-mark{width:56px;height:56px;background:var(--header-bg);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px}
+.login-logo h1{font-size:20px;font-weight:700}
+.login-logo p{font-size:13px;color:var(--text-secondary);margin-top:2px}
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+.btn-primary{width:100%;background:var(--header-bg);color:#fff;padding:13px;border-radius:var(--radius);font-size:16px;font-weight:600;margin-top:8px}
+.btn-primary:active,.btn-primary:disabled{opacity:.6}
+.login-error{color:var(--danger);font-size:13px;margin-top:8px;text-align:center;min-height:18px}
+
+/* DEVICE MODE */
+#screen-device-mode-inner{display:flex;align-items:center;justify-content:center;min-height:100%;padding:24px}
+.mode-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-md);padding:32px 24px;width:100%;max-width:400px;text-align:center}
+.mode-card h2{font-size:20px;margin-bottom:8px}
+.mode-card p{color:var(--text-secondary);font-size:14px;margin-bottom:28px}
+.mode-options{display:flex;gap:12px}
+.mode-option{flex:1;border:2px solid var(--border);border-radius:var(--radius);padding:20px 12px;cursor:pointer;transition:border-color .15s,background .15s;background:var(--bg)}
+.mode-option:hover{border-color:var(--amber);background:var(--surface)}
+.mode-option-icon{font-size:32px;margin-bottom:8px}
+.mode-option-label{font-weight:600;font-size:15px}
+.mode-option-sub{font-size:12px;color:var(--text-secondary);margin-top:4px}
+
+/* WO LIST */
+.wo-list{padding:8px 0 80px}
+.wo-card{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .1s}
+.wo-card:active{opacity:.7}
+.wo-card-left{flex:1;min-width:0}
+.wo-number{font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.5px}
+.wo-customer{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wo-title{font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wo-card-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;margin-left:10px}
+.status-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:rgba(0,0,0,.12);white-space:nowrap}
+.wo-age{font-size:11px;color:var(--text-muted)}
+.fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--amber);color:var(--amber-dark);font-size:28px;font-weight:300;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:50;transition:transform .15s}
+.fab:active{transform:scale(.93)}
+.fab.hidden{display:none}
+.empty-state{text-align:center;padding:60px 24px;color:var(--text-secondary)}
+.empty-state-icon{font-size:48px;margin-bottom:12px}
+.empty-state h3{font-size:17px;color:var(--text-primary);margin-bottom:6px}
+
+/* WO DETAIL */
+.detail-body{padding:12px;padding-bottom:100px}
+.wo-header-info{background:var(--surface);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow);display:grid;grid-template-columns:1fr 1fr;gap:0}
+.wo-header-info .full-width{grid-column:1/-1;border-top:1px solid var(--border);padding-top:8px;margin-top:4px}
+.field-group{display:flex;flex-direction:row;align-items:baseline;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)}
+.field-group:nth-last-child(2):not(.full-width),.field-group:last-child:not(.full-width){border-bottom:none}
+.field-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;min-width:56px}
+.field-value{font-size:13px;color:var(--text-primary)}
+.card-section{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.card-section-title{padding:12px 14px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:1px solid var(--border)}
+.subform-row{display:flex;align-items:center;padding:14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.subform-row:last-child{border-bottom:none}
+.subform-row:active{background:var(--bg)}
+.subform-icon{font-size:22px;margin-right:12px;flex-shrink:0}
+.subform-info{flex:1}
+.subform-name{font-size:15px;font-weight:600}
+.subform-meta{font-size:12px;color:var(--text-secondary)}
+.subform-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.subform-amount{font-size:15px;font-weight:700}
+.subform-chevron{color:var(--text-muted);font-size:18px;margin-left:8px}
+.subform-disabled{opacity:.4;cursor:not-allowed}
+.totals-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}
+.totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px}
+.totals-row.total{font-weight:700;font-size:16px;border-top:1px solid var(--border);margin-top:6px;padding-top:10px}
+.completion-banner{background:#d4b8f0;border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;font-size:14px;font-weight:600;color:#4a1a8a}
+.save-btn{width:100%;background:var(--header-bg);color:#fff;padding:15px;border-radius:var(--radius);font-size:16px;font-weight:700}
+.save-btn:active{opacity:.8}
+.save-btn.secondary{background:var(--bg);color:var(--text-primary);border:1px solid var(--border);margin-top:12px}
+
+/* FORMS */
+.form-body{padding:12px;padding-bottom:80px}
+.form-actions{position:fixed;bottom:0;left:0;right:0;background:var(--surface);padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;z-index:50}
+.form-row{margin-bottom:14px}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.form-hint{font-size:12px;color:var(--text-muted);margin-top:4px}
+.form-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}
+.form-error{color:var(--danger);font-size:12px;margin-top:4px;display:none}
+.form-error.show{display:block}
+
+/* SUBFORM LISTS */
+.subform-summary-bar{background:var(--header-bg);color:#fff;padding:10px 14px;display:flex;gap:16px;font-size:13px;flex-shrink:0}
+.subform-summary-stat{display:flex;flex-direction:column;gap:2px}
+.subform-summary-stat span{font-size:11px;opacity:.75}
+.subform-summary-stat strong{font-size:15px}
+.entry-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin:8px 12px;overflow:hidden;position:relative}
+.entry-card.deleted{opacity:.45;border:1.5px dashed var(--border)}
+.entry-card-header{padding:12px 14px 8px;display:flex;justify-content:space-between;align-items:flex-start}
+.entry-card-body{padding:0 14px 8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.entry-card-body.single-col{grid-template-columns:1fr}
+.entry-card-footer{padding:6px 14px 10px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);margin-top:4px;display:flex;justify-content:space-between;align-items:center}
+.entry-date{font-size:13px;font-weight:700}
+.entry-amount{font-size:16px;font-weight:700}
+.entry-detail{font-size:13px}
+.entry-label{font-size:11px;color:var(--text-muted);margin-bottom:1px}
+.deleted-label{font-size:11px;color:var(--danger);font-weight:600;padding:4px 14px;background:rgba(192,57,43,.07)}
+.action-btn{font-size:12px;font-weight:600;padding:4px 0}
+.action-btn.danger{color:var(--danger)}
+.action-btn.restore{color:var(--success)}
+.action-btn.edit{color:#2980b9}
+.entry-type-border-orange{border-left:4px solid #e67e22}
+.entry-type-border-red{border-left:4px solid #c0392b}
+.entry-type-border-green{border-left:4px solid #27ae60}
+.entry-type-border-blue{border-left:4px solid #2980b9}
+
+/* INLINE ADD FORM — sticky save */
+.inline-add-form{background:var(--surface);border-top:2px solid var(--amber);padding:14px 12px 0}
+.inline-add-form h3{font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text-secondary)}
+.form-actions-sticky{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;z-index:50}
+.inline-form-fields{padding-bottom:100px}
+.btn-save-entry{flex:1;background:var(--header-bg);color:#fff;padding:13px;border-radius:var(--radius);font-size:14px;font-weight:600}
+.btn-add-another{flex:1;background:var(--amber);color:var(--amber-dark);padding:13px;border-radius:var(--radius);font-size:14px;font-weight:600}
+.btn-cancel-entry{padding:13px 16px;border-radius:var(--radius);font-size:14px;color:var(--text-secondary);border:1px solid var(--border)}
+.btn-delete-entry{padding:7px 14px;border-radius:var(--radius);font-size:12px;color:var(--danger);background:none;border:1px solid var(--danger);margin-top:8px;display:block}
+.input-with-icon{display:flex;gap:6px}
+.input-with-icon input{flex:1}
+.barcode-btn{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:18px;flex-shrink:0}
+
+/* VENDOR AUTOCOMPLETE */
+.vendor-autocomplete-wrap{position:relative}
+#p-vendor-list,#ts-vendor-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);z-index:200;max-height:200px;overflow-y:auto;display:none}
+.vendor-autocomplete-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px}
+.vendor-autocomplete-item:last-child{border-bottom:none}
+.vendor-autocomplete-item:hover,.vendor-autocomplete-item:active{background:var(--bg)}
+
+/* BOTTOM SHEET */
+.sheet-overlay{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.5);z-index:9999;display:none;align-items:flex-end}
+.sheet-overlay.open{display:flex}
+.bottom-sheet{background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-height:75vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,16px)}
+.sheet-header{padding:14px 16px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+.sheet-header h3{font-size:16px;font-weight:700}
+.sheet-close{font-size:22px;color:var(--text-muted);padding:4px 8px}
+.sheet-body{padding:14px}
+.status-option{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;gap:12px}
+.status-option:active{background:var(--bg)}
+.status-option:last-child{border-bottom:none}
+.status-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.status-num{font-size:12px;color:var(--text-muted);font-weight:600;width:24px;flex-shrink:0}
+.status-name{font-size:15px;flex:1}
+.status-current{color:var(--amber);font-size:12px;font-weight:700}
+
+/* DESKTOP GRID */
+.desktop-filter-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+.btn-amber{background:var(--amber);color:var(--amber-dark);padding:7px 14px;border-radius:var(--radius-sm);font-weight:700;font-size:13px;white-space:nowrap}
+.btn-amber:hover{opacity:.9}
+.btn-dark{background:var(--header-bg);color:#fff;padding:7px 14px;border-radius:var(--radius-sm);font-weight:700;font-size:13px;white-space:nowrap}
+.btn-dark:hover{opacity:.85}
+.btn-outline{background:transparent;color:var(--text-secondary);padding:7px 14px;border-radius:var(--radius-sm);font-weight:600;font-size:13px;white-space:nowrap;border:1px solid var(--border)}
+.btn-outline:hover{background:var(--bg)}
+.batch-bar{background:var(--header-bg);color:#fff;padding:8px 14px;display:flex;align-items:center;gap:10px;font-size:13px;flex-shrink:0}
+.batch-btn{background:rgba(255,255,255,.15);color:#fff;padding:5px 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:600}
+.batch-btn:hover{background:rgba(255,255,255,.25)}
+.batch-btn-primary{background:var(--amber)!important;color:var(--amber-dark)!important;font-weight:700!important}
+.desktop-grid-wrapper{flex:1;overflow:auto}
+.desktop-grid{width:100%;border-collapse:collapse;font-size:13px}
+.desktop-grid th{background:var(--bg);padding:6px 8px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:5}
+.desktop-grid th:hover{background:var(--border)}
+.desktop-grid td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.desktop-grid tr{cursor:pointer;transition:background .1s}
+.desktop-grid tr:hover td{background:var(--bg)}
+.desktop-grid tr.selected td{background:rgba(232,160,32,.08)}
+.desktop-grid .cb-col{width:32px}
+.desktop-grid input[type="checkbox"]{width:14px;height:14px;cursor:pointer}
+.text-right{text-align:right}
+.export-history-panel{border-top:1px solid var(--border);padding:8px 14px;background:var(--surface);max-height:90px;overflow-y:auto;flex-shrink:0}
+.export-history-label{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.export-history-entry{font-size:12px;padding:3px 0;color:var(--text-secondary)}
+
+/* SETTINGS */
+.settings-body{padding-bottom:60px}
+.settings-tab-bar{display:flex;gap:2px;padding:10px 12px 0;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+.settings-tab{padding:7px 14px;font-size:13px;font-weight:600;color:var(--text-muted);border-radius:var(--radius) var(--radius) 0 0;cursor:pointer;white-space:nowrap;border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+.settings-tab:hover{color:var(--text-primary);background:var(--bg)}
+.settings-tab.active{color:var(--header-bg);background:var(--bg);border-color:var(--border);border-bottom-color:var(--bg)}
+.settings-tab-content{display:none;padding:12px;padding-bottom:60px}
+.settings-tab-content.active{display:block}
+.settings-block{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.settings-block-header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.settings-block-title{font-size:15px;font-weight:700}
+.settings-block-chevron{color:var(--text-muted);font-size:18px;transition:transform .2s}
+.settings-block-header.open .settings-block-chevron{transform:rotate(180deg)}
+.settings-block-body{padding:0 16px 16px;display:none}
+.settings-block-body.open{display:block}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:12px}
+.settings-row:last-child{border-bottom:none}
+.settings-row-label{font-size:14px;font-weight:600;flex:1}
+.settings-row-input{width:140px;text-align:right}
+.lookup-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px}
+.lookup-item:last-child{border-bottom:none}
+.lookup-item-name{flex:1;font-size:14px}
+.lookup-item-badge{font-size:11px;color:var(--text-muted);background:var(--bg);padding:2px 6px;border-radius:10px}
+.import-btn{display:block;width:100%;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius);padding:16px;text-align:center;font-size:14px;color:var(--text-secondary);margin-top:10px;cursor:pointer}
+.import-btn:hover{border-color:var(--amber);color:var(--amber)}
+
+/* TIMECARD */
+.timecard-controls{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+.week-nav{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.week-nav button{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:16px;background:var(--bg)}
+.timecard-table-wrap{flex:1;overflow:auto;padding:12px}
+.timecard-table{border-collapse:collapse;font-size:13px;width:100%}
+.timecard-table th{background:var(--bg);padding:8px 10px;border:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;position:sticky;top:0}
+.timecard-table td{padding:8px 10px;border:1px solid var(--border);white-space:nowrap}
+.timecard-table .wo-col{min-width:180px;font-size:12px}
+.timecard-table .hours-cell{text-align:center;min-width:52px}
+.timecard-table .hours-cell.empty{color:var(--text-muted)}
+.timecard-table .hours-cell.gap{background:rgba(192,57,43,.08)}
+.timecard-table .total-row td{font-weight:700;background:var(--bg)}
+
+/* MISC */
+.badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:20px;font-size:11px;font-weight:700}
+.mt-12{margin-top:12px}
+.truck-stock-header{background:#e67e22;color:#fff;padding:10px 14px;font-size:13px;font-weight:600;flex-shrink:0}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;font-weight:600;z-index:500;opacity:0;transition:opacity .2s;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1}
+.barcode-overlay{position:fixed;inset:0;background:#000;z-index:300;display:none;flex-direction:column}
+.barcode-overlay.open{display:flex}
+.barcode-video{flex:1;object-fit:cover;width:100%}
+.barcode-controls{padding:20px;display:flex;justify-content:center}
+.barcode-close{background:rgba(255,255,255,.15);color:#fff;padding:12px 28px;border-radius:30px;font-size:16px;font-weight:600}
+.barcode-target{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:260px;height:100px;border:2px solid var(--amber);border-radius:8px;pointer-events:none}
+.autocomplete-wrap{position:relative}
+#f-customer-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);z-index:200;max-height:240px;overflow-y:auto;display:none}
+.autocomplete-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border)}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:hover{background:var(--bg)}
+.autocomplete-name{font-size:13px;color:var(--text-primary)}
+.autocomplete-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+.dt-section{margin-bottom:12px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.dt-section-hdr{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.dt-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)}
+.dt-section-meta{font-size:12px;color:var(--text-secondary);flex:1}
+.dt-add-btn{font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-secondary);cursor:pointer}
+.dt-add-btn:hover{background:var(--header-bg);color:#fff;border-color:var(--header-bg)}
+.dt-col-hdr{display:grid;padding:4px 8px;gap:6px;background:var(--bg);border-bottom:1px solid var(--border)}
+.dt-col-hdr span{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.dt-hours-grid{grid-template-columns:86px 140px 90px 60px 58px 1fr 72px 24px}
+.dt-parts-grid{grid-template-columns:86px 110px 1fr 46px 72px 58px 72px 24px}
+.dt-read-row{display:grid;padding:5px 8px;gap:6px;border-bottom:1px solid var(--border);align-items:center;cursor:default}
+.dt-read-row:hover{background:var(--bg)}
+.dt-read-row:last-child{border-bottom:none}
+.dt-edit-row{display:grid;padding:3px 8px;gap:4px;border-bottom:1px solid var(--border);align-items:center;background:#e8f5e922;overflow:visible}
+.dt-cell{font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-muted{color:var(--text-muted)!important}
+.dt-right{text-align:right}
+.dt-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-input{font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:3px;background:var(--surface);color:var(--text-primary);width:100%;outline:none}
+.dt-input:focus{border-color:var(--header-bg);background:#fff}
+.dt-input.dt-right{text-align:right}
+.dt-input.dt-notes{width:100%}
+.dt-del-btn{width:20px;height:20px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:0;border-radius:3px}
+.dt-del-btn:hover{color:var(--danger);background:#c0392b11}
+.dt-totals-bar{display:flex;gap:16px;justify-content:flex-end;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px}
+.dt-total-item{font-size:12px;color:var(--text-secondary)}
+.dt-total-item strong{color:var(--text-primary);font-weight:600}
+.dt-total-main strong{font-size:14px}
+.dt-action-bar{display:flex;gap:8px;padding:0 0 8px}
+.tc-add-btn:hover{background:var(--header-bg);color:#fff;border-color:var(--header-bg);}
+.tc-wo-option{padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer;font-size:13px;background:var(--bg);}
+.tc-wo-option:hover{background:var(--surface);border-color:var(--header-bg);}
+.tc-wo-option.selected{background:var(--header-bg);color:#fff;border-color:var(--header-bg);}
+.tc-new-wo{color:var(--header-bg);font-weight:600;border-style:dashed;}
+.tc-wo-option.selected.tc-new-wo{color:#fff;}
+.tc-hrs-val{display:inline-block;width:100%;text-align:center}.hours-cell:not(.empty):hover{background:var(--bg)}
+</style>
+</head>
+<body>
+<div id="dt-tech-global-dropdown" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);z-index:9999;box-shadow:var(--shadow);min-width:200px;max-height:160px;overflow-y:auto"></div>
+
+<div id="app">
+
+<div class="conn-bar" id="conn-bar">📡 Offline — changes will sync when reconnected</div>
+
+<header class="app-header" id="app-header" style="display:none">
+  <button class="header-icon-btn" id="btn-hamburger" onclick="openHamburger()" style="display:none;font-size:22px">☰</button>
+  <button class="header-btn" id="btn-back" style="display:none" onclick="goBack()">← Back</button>
+  <div class="header-title" id="header-title" style="display:flex;align-items:center;gap:8px">
+    <img id="header-logo-img" style="display:none;height:28px;border-radius:4px;object-fit:contain" src="" alt="Logo">
+    <span id="header-title-text" class="header-title-text">ProMech</span>
+  </div>
+  <button class="header-icon-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">☀️</button>
+  <button class="header-icon-btn" id="btn-mode-toggle" onclick="toggleDeviceMode()" title="Switch mode" style="display:none">🖥️</button>
+</header>
+
+<!-- HAMBURGER -->
+<div class="hamburger-overlay" id="hamburger-overlay" onclick="closeHamburger()"></div>
+<div class="hamburger-menu" id="hamburger-menu">
+  <div class="hamburger-header" style="display:flex;align-items:center;justify-content:space-between">
+    <div><h2>ProMech</h2><p id="hamburger-user"></p></div>
+    <button onclick="closeHamburger()" style="background:none;border:none;color:#fff;font-size:28px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+  </div>
+  <div style="font-size:10px;font-weight:600;color:var(--text-muted);padding:8px 16px 4px;letter-spacing:0.06em;text-transform:uppercase">Daily Workflow</div>
+  <div class="hamburger-item" onclick="hamburgerNav('morningbrief')"><span class="hamburger-item-icon">🌅</span> Morning Brief</div>
+  <div class="hamburger-item" onclick="hamburgerNav('wo')"><span class="hamburger-item-icon">📋</span> Work Orders</div>
+  <div class="hamburger-item" onclick="hamburgerNav('dailyreview')"><span class="hamburger-item-icon">🗺️</span> Field Travel Log</div>
+  <div class="hamburger-item" onclick="hamburgerNav('endofday')"><span class="hamburger-item-icon">🌙</span> End of Day</div>
+  <div style="height:1px;background:var(--border);margin:4px 0"></div>
+  <div class="hamburger-item" onclick="hamburgerNav('timecard')"><span class="hamburger-item-icon">⏱️</span> Timecard</div>
+  <div class="hamburger-item" onclick="hamburgerNav('truckstock')"><span class="hamburger-item-icon">🚛</span> Truck Stock</div>
+  <div class="hamburger-item" onclick="hamburgerNav('invoices')"><span class="hamburger-item-icon">🧾</span> Invoices</div>
+  <div class="hamburger-item" onclick="hamburgerNav('locations')"><span class="hamburger-item-icon">📍</span> Locations</div>
+  <div class="hamburger-item" onclick="hamburgerNav('settings')"><span class="hamburger-item-icon">⚙️</span> Settings</div>
+  <div class="hamburger-item" id="hamburger-sort-item" onclick="cycleHamburgerSort()" style="justify-content:space-between">
+    <span><span class="hamburger-item-icon">&#x2195;</span> Sort</span>
+    <span id="hamburger-sort-value" style="font-size:12px;color:var(--text-muted)">Oldest first</span>
+  </div>
+  <div class="hamburger-footer">
+    <button onclick="doLogout();closeHamburger()" style="color:var(--danger);font-size:14px;font-weight:600">Sign out</button>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">ProMech <span id="mobile-version"></span></div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="screen" id="screen-login">
+  <div id="screen-login-inner">
+    <div class="login-card">
+      <div class="login-logo">
+        <img id="login-company-logo" style="display:none;width:80px;height:80px;border-radius:12px;object-fit:contain;margin:0 auto 12px" src="" alt="Logo">
+        <div class="login-logo-mark" id="login-logo-mark">🔧</div>
+        <h1 id="login-company-name">ProMech</h1>
+        <p>Providence Mechanical</p>
+      </div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" id="login-email" name="email" placeholder="you@example.com" autocomplete="email"></div>
+      <div class="form-group"><label class="form-label">Password</label><input type="password" id="login-password" name="password" placeholder="Password" autocomplete="current-password"></div>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()">Sign In</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DEVICE MODE -->
+<div class="screen hidden" id="screen-device-mode">
+  <div id="screen-device-mode-inner">
+    <div class="mode-card">
+      <h2>How are you using this?</h2>
+      <p>Choose your view. You can switch anytime from the header.</p>
+      <div class="mode-options">
+        <div class="mode-option" onclick="setDeviceMode('mobile')"><div class="mode-option-icon">📱</div><div class="mode-option-label">Mobile</div><div class="mode-option-sub">Field entry</div></div>
+        <div class="mode-option" onclick="setDeviceMode('desktop')"><div class="mode-option-icon">🖥️</div><div class="mode-option-label">Desktop</div><div class="mode-option-sub">Review &amp; export</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE WO LIST -->
+<div class="screen hidden" id="screen-wo-list">
+  <div style="background:var(--header-bg);padding:8px 10px;display:flex;gap:8px;align-items:center;flex-shrink:0">
+    <input type="search" id="mobile-wo-search" placeholder="Search WOs..." oninput="filterMobileWOList()" style="flex:1;font-size:14px;padding:7px 10px;border:none;border-radius:var(--radius-sm);background:#ffffff22;color:#fff;outline:none;min-width:0" onfocus="this.style.background='#ffffff33'" onblur="this.style.background='#ffffff22'">
+    <button onclick="refreshWorkOrders()" style="font-size:12px;padding:6px 10px;border:1px solid #ffffff44;border-radius:var(--radius-sm);background:none;color:#fff;white-space:nowrap">↻</button>
+    <button onclick="openNewWO()" style="font-size:13px;padding:6px 12px;border:none;border-radius:var(--radius-sm);background:#ffffff33;color:#fff;font-weight:700;white-space:nowrap">+ New</button>
+  </div>
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:6px 10px;flex-shrink:0;display:flex;gap:8px">
+    <select id="mobile-status-filter" onchange="filterMobileWOList()" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+      <option value="live">Live WOs</option>
+      <option value="all">All WOs</option>
+      <option value="processed">Processed</option>
+    </select>
+    <select id="mobile-mode-filter" onchange="filterMobileWOList()" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+      <option value="">All Modes</option>
+      <option value="time_materials">T&amp;M</option>
+      <option value="quoted">Quoted</option>
+    </select>
+    <select id="mobile-sort-filter" onchange="saveWOSortPref(this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)">
+      <option value="newest">Newest first</option>
+      <option value="oldest">Oldest first</option>
+      <option value="wo_number">WO number</option>
+    </select>
+  </div>
+  <div class="wo-list" id="wo-list-items" style="flex:1;overflow-y:auto"><div style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</div></div>
+  <button class="fab" id="fab-new-wo" onclick="openNewWO()" style="display:none">+</button>
+</div>
+
+<!-- MOBILE TRUCK STOCK -->
+<div class="screen hidden" id="screen-mobile-truckstock">
+  <div class="truck-stock-header" id="mobile-ts-header">🚛 Truck Stock</div>
+  <div id="mobile-ts-wo-info" style="padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--border);font-size:13px;color:var(--text-secondary)">Loading…</div>
+  <div id="mobile-ts-list" style="padding-bottom:80px"></div>
+  <button class="fab" id="fab-ts" onclick="openMobileTSForm()">+</button>
+</div>
+
+<!-- MOBILE TIMECARD -->
+<div class="screen hidden" id="screen-mobile-timecard">
+  <div style="padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+    <select id="timecard-tech-mobile" onchange="renderMobileTimecard()" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);flex:1;background:var(--surface)"></select>
+    <button class="btn-dark" onclick="openTimecardEntryModal(null)" style="font-size:13px;padding:7px 14px;white-space:nowrap">+ Add Entry</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:10px" id="timecard-content-mobile"></div>
+</div>
+
+<!-- MOBILE DAILY REVIEW -->
+<div class="screen hidden" id="screen-mobile-dailyreview" style="display:flex;flex-direction:column;height:100%">
+  <div id="mdr-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
+</div>
+
+<!-- MOBILE MORNING BRIEF -->
+<div class="screen hidden" id="screen-morning-brief" style="display:flex;flex-direction:column;height:100%">
+  <div id="morning-brief-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
+</div>
+
+<!-- MOBILE END OF DAY -->
+<div class="screen hidden" id="screen-end-of-day" style="display:flex;flex-direction:column;height:100%">
+  <div id="end-of-day-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
+</div>
+
+<!-- MOBILE SETTINGS -->
+<div class="screen hidden" id="screen-settings-mobile">
+  <div class="settings-body" id="settings-body-mobile"></div>
+</div>
+
+<!-- DESKTOP -->
+<div class="screen hidden" id="screen-desktop">
+  <div class="desktop-layout">
+    <div class="sidebar">
+      <div style="font-size:10px;font-weight:600;color:var(--text-muted);padding:8px 16px 4px;letter-spacing:0.06em;text-transform:uppercase">Daily Workflow</div>
+      <div class="sidebar-item" id="sidebar-morningbrief" onclick="desktopNav('morningbrief')"><span class="sidebar-icon">🌅</span> Morning Brief</div>
+      <div class="sidebar-item active" id="sidebar-wo" onclick="desktopNav('wo')"><span class="sidebar-icon">📋</span> Work Orders</div>
+      <div class="sidebar-item" id="sidebar-dailyreview" onclick="desktopNav('dailyreview')"><span class="sidebar-icon">🗺️</span> Field Travel Log</div>
+      <div class="sidebar-item" id="sidebar-endofday" onclick="desktopNav('endofday')"><span class="sidebar-icon">🌙</span> End of Day</div>
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="sidebar-item" id="sidebar-timecard" onclick="desktopNav('timecard')"><span class="sidebar-icon">⏱️</span> Timecard</div>
+      <div class="sidebar-item" id="sidebar-truckstock" onclick="desktopNav('truckstock')"><span class="sidebar-icon">🚛</span> Truck Stock</div>
+      <div class="sidebar-item" id="sidebar-customers" onclick="desktopNav('customers')"><span class="sidebar-icon">👥</span> Customers</div>
+      <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')"><span class="sidebar-icon">🏪</span> Vendors</div>
+      <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Locations</div>
+      <div class="sidebar-item" id="sidebar-reconcile" onclick="desktopNav('reconcile')"><span class="sidebar-icon">⚖️</span> Time & Billing Reconciliation</div>
+      <div class="sidebar-item" id="sidebar-invoices" onclick="desktopNav('invoices')"><span class="sidebar-icon">🧾</span> Invoices</div>
+      <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
+      <div class="sidebar-item" id="sidebar-settings" onclick="desktopNav('settings')"><span class="sidebar-icon">⚙️</span> Settings</div>
+      <div class="sidebar-footer">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px" id="sidebar-user"></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px" id="sidebar-last-export"></div>
+        <button onclick="doLogout()" style="font-size:13px;color:var(--danger)">Sign out</button>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;border-top:1px solid var(--border);padding-top:6px">ProMech <span id="desktop-version"></span></div>
+      </div>
+    </div>
+    <div class="desktop-main" id="desktop-main-area">
+
+      <!-- WO Panel -->
+      <div id="desktop-panel-wo" style="display:flex;flex-direction:column;height:100%">
+        <div id="aging-summary-bar"></div>
+        <div class="desktop-filter-bar">
+          <input type="search" id="dt-title-search" placeholder="Search title…" oninput="filterDesktopGrid()" style="max-width:160px">
+          <input type="search" id="dt-cust-search" placeholder="Search customer…" oninput="filterDesktopGrid()" style="max-width:160px">
+          <select id="dt-status-filter" onchange="filterDesktopGrid()" style="max-width:160px">
+            <option value="live">Live</option>
+            <option value="all">All</option>
+            <option value="processed">Processed</option>
+          </select>
+          <select id="dt-mode-filter" onchange="filterDesktopGrid()" style="max-width:110px">
+            <option value="">All Modes</option>
+            <option value="time_materials">T&amp;M</option>
+            <option value="quoted">Quoted</option>
+          </select>
+          <select id="dt-flag-filter" onchange="filterDesktopGrid()" style="max-width:130px">
+            <option value="">All WOs</option>
+            <option value="any">⚑ Any Flag</option>
+            <option value="needs_paperwork">⚑ Paperwork</option>
+            <option value="needs_parts">⚑ Parts</option>
+            <option value="needs_review">⚑ Review</option>
+            <option value="needs_po">⚑ PO</option>
+          </select>
+          <button class="btn-outline" onclick="refreshWOData()" title="Reload latest data from server"><i style="font-style:normal">&#x21BA;</i> Refresh</button>
+          <button class="btn-outline" onclick="exportAllFiltered()" title="Export all WOs matching current filter">📋 Export Filtered</button>
+          <button class="btn-dark" onclick="openNewWO()" style="margin-left:auto">+ New WO</button>
+          <button class="btn-dark" onclick="refreshWorkOrders()" title="Refresh work orders">↻ Refresh</button>
+        </div>
+        <div id="dt-batch-bar" class="batch-bar" style="display:none">
+          <span id="dt-batch-count" style="font-weight:700">0 selected</span>
+          <button class="batch-btn batch-btn-primary" onclick="batchExport()">📤 Export Selected to Zed Axis</button>
+          <button class="batch-btn" onclick="batchChangeStatus()">🔄 Change Status</button>
+          <button class="batch-btn" onclick="clearSelection()">✕ Clear</button>
+        </div>
+        <div class="desktop-grid-wrapper">
+          <table class="desktop-grid">
+            <thead><tr>
+              <th class="cb-col"><input type="checkbox" id="dt-select-all" onchange="toggleSelectAll()"></th>
+              <th onclick="sortDesktopGrid('wo_number')">P# <span id="sort-wo_number">↑</span></th>
+              <th onclick="sortDesktopGrid('customer')">Customer <span id="sort-customer">↕</span></th>
+              <th onclick="sortDesktopGrid('title')">Title <span id="sort-title">↕</span></th>
+              <th onclick="sortDesktopGrid('status')">Status <span id="sort-status">↕</span></th>
+              <th onclick="sortDesktopGrid('form_mode')">Mode <span id="sort-form_mode">↕</span></th>
+              <th onclick="sortDesktopGrid('created_at')">Created <span id="sort-created_at">↕</span></th>
+              <th onclick="sortDesktopGrid('completed_at')">Completed <span id="sort-completed_at">↕</span></th>
+              <th onclick="sortDesktopGrid('modified_at')">Last Edited <span id="sort-modified_at">↕</span></th>
+              <th class="text-right" onclick="sortDesktopGrid('projected')">Projected $ <span id="sort-projected">↕</span></th>
+            </tr></thead>
+            <tbody id="desktop-grid-body"></tbody>
+          </table>
+        </div>
+        <div class="export-history-panel">
+          <div class="export-history-label">Export History</div>
+          <div id="export-history-list" style="color:var(--text-secondary);font-size:12px">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Timecard panel -->
+      <div id="desktop-panel-timecard" style="display:none;flex-direction:column;height:100%">
+        <div class="timecard-controls" style="flex-wrap:nowrap;gap:6px;padding:6px 12px">
+          <select id="timecard-tech" onchange="renderTimecard()" style="width:190px;flex-shrink:0;font-size:13px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)"></select>
+          <div style="display:grid;grid-template-columns:28px 180px 28px;align-items:center;gap:0;flex-shrink:0">
+            <button onclick="timecardNav(-1)" style="width:28px;height:30px;font-size:16px;border:1px solid var(--border);border-radius:var(--radius-sm) 0 0 var(--radius-sm);background:var(--surface);cursor:pointer">‹</button>
+            <span id="timecard-range" style="text-align:center;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;border:1px solid var(--border);border-left:none;border-right:none;height:30px;display:flex;align-items:center;justify-content:center;padding:0 4px">Week</span>
+            <button onclick="timecardNav(1)" style="width:28px;height:30px;font-size:16px;border:1px solid var(--border);border-radius:0 var(--radius-sm) var(--radius-sm) 0;background:var(--surface);cursor:pointer">›</button>
+          </div>
+          <select id="tc-jump-month" onchange="timecardJumpFromSelects()" style="width:80px;flex-shrink:0;font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
+            <option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option><option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option><option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option><option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
+          </select>
+          <select id="tc-jump-year" onchange="timecardJumpFromSelects()" style="width:68px;flex-shrink:0;font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
+          </select>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:12px;color:var(--text-muted);white-space:nowrap">
+            <span>Reviewed: <strong id="timecard-reviewed-date">—</strong></span>
+            <input type="date" id="timecard-reviewed-pick" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);width:120px">
+            <button class="btn-dark" onclick="markTimecardReviewedToday()" style="font-size:11px;padding:4px 8px;white-space:nowrap">Mark reviewed through today</button>
+            <button class="btn-dark" onclick="clearTimecardReviewed()" style="font-size:11px;padding:4px 8px;white-space:nowrap;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border)">Clear</button>
+            <button class="btn-dark" onclick="markTimecardReviewed()" style="font-size:11px;padding:4px 8px;white-space:nowrap">Pick Date</button>
+          </div>
+        </div>
+        <div class="timecard-table-wrap"><div id="timecard-content"></div></div>
+      </div>
+
+      <!-- Truck Stock panel -->
+      <div id="desktop-panel-truckstock" style="display:none;flex-direction:column;height:100%">
+        <div class="truck-stock-header">🚛 Truck Stock — Parts purchased for inventory, not a specific job</div>
+        <div style="flex:1;overflow-y:auto;padding:12px">
+          <div id="truck-stock-list"></div>
+          <button class="btn-dark mt-12" onclick="createTruckStockWO()">+ New Truck Stock Entry</button>
+        </div>
+      </div>
+
+      <!-- Customers panel -->
+      <div id="desktop-panel-customers" style="display:none;flex-direction:column;height:100%;overflow:hidden"></div>
+      <div id="desktop-panel-vendors" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div id="vendors-panel-inner" style="display:flex;flex-direction:column;height:100%"></div>
+      </div>
+
+      <!-- Invoices panel -->
+      <div id="desktop-panel-invoices" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+          <div style="font-size:16px;font-weight:700">Invoices</div>
+        </div>
+        <div id="invoices-panel-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+      </div>
+
+      <!-- Settings panel -->
+      <div id="desktop-panel-exports" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:10px">
+          <span style="font-size:15px;font-weight:700">Export History</span>
+        </div>
+        <div id="export-history-panel-body" style="flex:1;overflow-y:auto;padding:16px"></div>
+      </div>
+      <div id="desktop-panel-locations" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div id="locations-panel-inner" style="display:flex;flex-direction:column;height:100%"></div>
+      </div>
+      <div id="desktop-panel-dailyreview" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div id="dailyreview-panel-inner" style="display:flex;flex-direction:column;height:100%"></div>
+      </div>
+      <div id="desktop-panel-reconcile" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div id="reconcile-panel-inner" style="display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:0"></div>
+      </div>
+      <!-- Time & Billing Modal -->
+      <div id="tb-modal">
+        <div id="tb-modal-bar">
+          <div id="tb-modal-title">Time & Billing</div>
+          <span id="tb-modal-gps"></span>
+          <button id="tb-modal-close" onclick="tbCloseModal()">&times;</button>
+        </div>
+        <div id="tb-modal-body">
+          <div id="tb-modal-main">
+            <div id="tb-bal-bar">
+              <div class="tb-bal-item"><div class="tb-bal-label">GPS total</div><div class="tb-bal-val" id="tb-bal-gps">—</div></div>
+              <div class="tb-bal-item"><div class="tb-bal-label">Allocated</div><div class="tb-bal-val" id="tb-bal-alloc">0.0 hrs</div></div>
+              <div class="tb-bal-item"><div class="tb-bal-label">Still needed</div><div class="tb-bal-val under" id="tb-bal-needed">—</div></div>
+            </div>
+            <div id="tb-segs"></div>
+            <div id="tb-rows"></div>
+          </div>
+          <div id="tb-map-col">
+            <div id="tb-map-inner"></div>
+            <div id="tb-map-expand" onclick="tbExpandMap()"><i class="ti ti-arrows-maximize" aria-hidden="true"></i> Expand map</div>
+          </div>
+        </div>
+      </div>
+      <div id="desktop-panel-morningbrief" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
+        <div id="desktop-morning-brief-body" style="padding:24px;max-width:800px"></div>
+      </div>
+      <div id="desktop-panel-endofday" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
+        <div id="desktop-end-of-day-body" style="padding:24px;max-width:800px"></div>
+      </div>
+      <div id="desktop-panel-settings" style="display:none;overflow-y:auto;flex:1">
+        <div class="settings-body" id="settings-body-desktop"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WO DETAIL -->
+<div class="screen hidden" id="screen-wo-detail">
+  <div class="detail-body" id="wo-detail-body"></div>
+</div>
+
+<!-- WO FORM -->
+<div class="screen hidden" id="screen-wo-form">
+  <div class="form-body">
+    <div class="form-card">
+      <div class="form-row">
+        <label class="form-label">Customer *</label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="f-customer-input" placeholder="Type to search customers…" oninput="onCustomerInput(this)" onfocus="onCustomerInput(this)" onkeydown="customerInputKey(event,this)" autocomplete="off">
+          <input type="hidden" id="f-customer-id">
+          <div id="f-customer-list"></div>
+        </div>
+      </div>
+      <div class="form-row"><label class="form-label">Job Title *</label><input type="text" id="f-title" autocomplete="off" placeholder="Brief description of work"></div>
+      <div class="form-row-2">
+        <div><label class="form-label">Form Mode *</label><select id="f-form-mode"><option value="time_materials">Time &amp; Materials</option><option value="quoted">Quoted</option></select></div>
+        <div><label class="form-label">PO Number</label><input type="text" id="f-po-number" autocomplete="off" placeholder="Optional"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Starting Status</label><select id="f-status"></select></div>
+      <div class="form-row"><label class="form-label">Work Description</label><textarea id="f-work-description" autocomplete="off" placeholder="Internal notes"></textarea></div>
+      <div class="form-row" id="f-wo-number-row" style="display:none"><label class="form-label">WO Number</label><input type="text" id="f-wo-number" readonly style="background:var(--bg);color:var(--text-muted)"></div>
+    </div>
+    <div style="flex-shrink:0;background:var(--surface);padding:12px;border-top:1px solid var(--border);display:flex;gap:8px" id="wo-form-actions">
+      <button class="save-btn" onclick="saveWO('close')" id="wo-save-close-btn">Save &amp; Close</button>
+      <button class="save-btn secondary" onclick="saveWO('stay')" id="wo-save-stay-btn">Save &amp; Stay</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT REVIEW -->
+<div class="screen hidden" id="screen-reconcile" style="display:flex;flex-direction:column;height:100%;overflow:hidden"><div id="reconcile-root" style="flex:1;overflow-y:auto;padding:16px"></div></div>
+
+<div class="screen hidden" id="screen-export-review"></div>
+
+<!-- HOURS LIST -->
+<div class="screen hidden" id="screen-hours-list">
+  <div id="return-banner-hours" style="display:none;background:var(--amber);color:var(--amber-dark);padding:10px 14px;font-size:13px;font-weight:600;text-align:center;cursor:pointer" onclick="returnToExportReview()">&#x2190; Back to Export Review</div>
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 10px;flex-shrink:0">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Add Hours Entry</div>
+    <div id="hours-add-form" class="inline-add-form" style="display:block">
+      <div class="inline-form-fields">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div><label class="form-label">Date *</label><input type="date" id="h-date" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;width:100%;box-sizing:border-box;min-height:44px"></div>
+          <div><label class="form-label">Hours *</label><input type="number" id="h-hours" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" step="0.25" min="0" max="24" inputmode="decimal" placeholder="" style="font-size:16px;padding:10px;width:100%;box-sizing:border-box;min-height:44px" oninvalid="this.style.borderColor='#e24b4a'" oninput="this.style.borderColor=''"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div><label class="form-label">Technician *</label><select id="h-tech" style="font-size:16px;padding:10px;width:100%;min-height:44px"></select></div>
+          <div><label class="form-label">Hours Type *</label><select id="h-type" style="font-size:16px;padding:10px;width:100%;min-height:44px"></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div><label class="form-label">Billable</label><select id="h-billable" style="font-size:16px;padding:10px;width:100%;min-height:44px"><option value="true">Billable</option><option value="false">Not Billable</option></select></div>
+          <div style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn-save-entry" id="h-save-btn" onclick="saveHoursEntry('stay')" style="flex:1;font-size:13px;padding:10px;min-height:44px">Save</button>
+            <button class="btn-add-another" id="h-add-another-btn" onclick="saveHoursEntry('close')" style="flex:1;font-size:13px;padding:10px;min-height:44px">Save &amp; Exit</button>
+          </div>
+        </div>
+        <div class="form-error" id="h-hours-error" style="display:none">Enter a valid number of hours</div>
+      </div>
+      <div id="h-delete-btn" style="display:none"><button class="btn-delete-entry" onclick="softDeleteEditing('hours_entries')">Delete Entry</button></div>
+    </div>
+  </div>
+  <div style="padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;font-weight:600">History</span>
+    <span style="font-size:12px;color:var(--text-muted)"><strong id="hours-count">0</strong> entries · <strong id="hours-total">0.0</strong> hrs · <strong id="hours-value">$0</strong></span>
+  </div>
+  <div id="hours-list-body" style="flex:1;overflow-y:auto;padding-bottom:10px"></div>
+</div>
+
+<!-- PARTS LIST -->
+<div class="screen hidden" id="screen-parts-list">
+  <div id="return-banner-parts" style="display:none;background:var(--amber);color:var(--amber-dark);padding:10px 14px;font-size:13px;font-weight:600;text-align:center;cursor:pointer" onclick="returnToExportReview()">&#x2190; Back to Export Review</div>
+  <div id="parts-wo-banner" style="display:none;background:var(--header-bg);color:#fff;padding:8px 14px;font-size:13px;font-weight:600;text-align:center;letter-spacing:.02em"></div>
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 10px;flex-shrink:0;overflow-y:auto;max-height:55vh">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Add Parts / Services</div>
+  <div id="parts-add-form" class="inline-add-form" style="display:block;padding:8px">
+    <div class="inline-form-fields">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div><label class="form-label">Type *</label><select id="p-type" onchange="onLineItemTypeChange()" style="font-size:16px;padding:10px;min-height:44px"><option value="vendor_bill">Vendor Bill</option><option value="vendor_credit">Credit</option><option value="service">Service</option></select></div>
+        <div><label class="form-label">Date *</label><input type="date" id="p-date" style="font-size:16px;padding:10px;min-height:44px;width:100%;box-sizing:border-box"></div>
+      </div>
+      <div class="form-row" id="p-vendor-row" style="margin-bottom:6px">
+        <label class="form-label">Vendor</label>
+        <div class="vendor-autocomplete-wrap">
+          <input type="text" id="p-vendor-input" placeholder="Type to search vendors…" oninput="onVendorInput('p')" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:12px">
+          <input type="hidden" id="p-vendor">
+          <div id="p-vendor-list"></div>
+        </div>
+      </div>
+      <div class="form-row" id="p-invoice-row" style="margin-bottom:6px"><label class="form-label">Invoice #</label><div class="input-with-icon"><input type="text" id="p-invoice" autocomplete="off" placeholder="Scan or type" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:12px"><button class="barcode-btn" onclick="openBarcode('p-invoice')">📷</button></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div><label class="form-label">QBO Item *</label><select id="p-qbo-item" style="font-size:16px;padding:10px;min-height:44px;width:100%"></select></div>
+        <div><label class="form-label">Qty</label><input type="number" id="p-qty" value="1" step="1" min="1" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
+      </div>
+      <div style="margin-bottom:6px"><label class="form-label">Description *</label><input type="text" id="p-description" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" placeholder="Part or service description" style="font-size:12px;width:100%;box-sizing:border-box"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px" id="p-cost-rows">
+        <div><label class="form-label">Cost</label><input type="number" id="p-cost" step="0.01" placeholder="0.00" autocomplete="off" oninput="calcLineItemTotals()" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
+        <div id="p-margin-row"><label class="form-label">Margin</label><input type="number" id="p-margin" step="0.01" min="0.01" max="1" value="0.50" autocomplete="off" oninput="calcLineItemTotals()" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
+        <div><label class="form-label">Sell Each</label><input type="text" id="p-sell-each" readonly style="background:var(--bg);font-size:16px;padding:10px;min-height:44px;width:100%"></div>
+        <div><label class="form-label">Sell Total</label><input type="text" id="p-sell-total" readonly style="background:var(--bg);font-size:16px;padding:10px;min-height:44px;width:100%"></div>
+      </div>
+      <div style="margin-bottom:6px"><label class="form-label">Billable</label><select id="p-billable" style="font-size:16px;padding:10px;min-height:44px;width:100%"><option value="true">Billable</option><option value="false">Not Billable</option></select></div>
+    </div>
+    <div class="form-actions-sticky">
+      <button class="btn-save-entry" id="p-save-btn" onclick="saveLineItem('close')">Save &amp; Close</button>
+      <button class="btn-add-another" id="p-add-another-btn" onclick="saveLineItem('new')">Save &amp; New</button>
+      <button class="btn-delete-entry" id="p-delete-btn" style="display:none" onclick="softDeleteEditing('line_items')">Delete Entry</button>
+    </div>
+  </div>
+  <div style="padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:12px;font-weight:600">History</span>
+    <span style="font-size:12px;color:var(--text-muted)"><strong id="parts-bills">0</strong> bills · <strong id="parts-credits">$0</strong> credits · <strong id="parts-total">$0</strong></span>
+  </div>
+  <div id="parts-list-body" style="flex:1;overflow-y:auto;padding-bottom:10px"></div>
+</div>
+
+<!-- QUOTED LIST -->
+<div class="screen hidden" id="screen-quoted-list">
+  <div id="return-banner-quoted" style="display:none;background:var(--amber);color:var(--amber-dark);padding:10px 14px;font-size:13px;font-weight:600;text-align:center;cursor:pointer" onclick="returnToExportReview()">&#x2190; Back to Export Review</div>
+  <div class="subform-summary-bar">
+    <div class="subform-summary-stat"><span>Lines</span><strong id="quoted-count">0</strong></div>
+    <div class="subform-summary-stat"><span>Total Quoted</span><strong id="quoted-total">$0</strong></div>
+  </div>
+  <div id="quoted-list-body" style="padding-bottom:10px"></div>
+  <div id="quoted-add-form" class="inline-add-form" style="display:none">
+    <h3 id="q-form-title">New Quoted Line</h3>
+    <div class="inline-form-fields">
+      <div class="form-row"><label class="form-label">Description *</label><textarea id="q-description" placeholder="e.g. RTU 3 Compressor Replacement" style="min-height:60px"></textarea></div>
+      <div class="form-row"><label class="form-label">Quoted Amount *</label><input type="number" id="q-amount" step="0.01" placeholder="0.00"></div>
+      <div class="form-row"><label class="form-label">PO Number</label><input type="text" id="q-po" placeholder="Optional"></div>
+    </div>
+    <div class="form-actions-sticky">
+      <button class="btn-save-entry" id="q-save-btn" onclick="saveQuotedLine()">Save</button>
+      <button class="btn-cancel-entry" onclick="cancelQuotedForm()">Cancel</button>
+    </div>
+  </div>
+  <button class="fab" id="fab-quoted" onclick="showQuotedForm()">+</button>
+</div>
+
+</div>
+<!-- ADD CUSTOMER SHEET -->
+<div class="sheet-overlay" id="add-customer-sheet" onclick="closeAddCustomerSheet(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-header"><h3>Add Customer</h3><button class="sheet-close" onclick="closeAddCustomerSheet()">✕</button></div>
+    <div style="padding:16px">
+      <div><label class="form-label">Full QBO Name *</label><input type="text" id="ac-name" placeholder="Parent:Child format" style="width:100%;box-sizing:border-box"></div>
+      <div style="margin-top:10px"><label class="form-label">Display Name</label><input type="text" id="ac-display" placeholder="Short name for display" style="width:100%;box-sizing:border-box"></div>
+      <div style="margin-top:10px"><label class="form-label">Email</label><input type="email" id="ac-email" style="width:100%;box-sizing:border-box"></div>
+      <div style="margin-top:10px"><label class="form-label">Phone</label><input type="tel" id="ac-phone" style="width:100%;box-sizing:border-box"></div>
+      <button class="save-btn" style="margin-top:16px" onclick="saveNewCustomer()">Save Customer</button>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS SHEET -->
+<div class="sheet-overlay" id="status-sheet" onclick="closeStatusSheet(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-header"><h3>Set Status</h3><button class="sheet-close" onclick="closeStatusSheet()">✕</button></div>
+    <div id="status-options-list"></div>
+  </div>
+</div>
+
+<!-- BARCODE -->
+<div class="barcode-overlay" id="barcode-overlay">
+  <video class="barcode-video" id="barcode-video" playsinline autoplay muted></video>
+  <div class="barcode-target"></div>
+  <div class="barcode-controls"><button class="barcode-close" onclick="closeBarcode()">✕ Close Scanner</button></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<style>
+#dr-shell{display:flex;flex-direction:column;height:100%;overflow:hidden}
+#dr-topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
+#dr-week-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:7px 12px;display:flex;align-items:center;gap:5px;flex-shrink:0;overflow-x:auto}
+#dr-body{display:flex;flex:1;overflow:hidden}
+#dr-timeline-col{width:420px;flex-shrink:0;overflow-y:auto;padding:12px 16px;border-right:1px solid var(--border)}
+#dr-map-col{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+#dr-map{flex:1;min-height:0;transition:flex .2s}
+#dr-alloc-panel{flex-shrink:0;background:var(--surface);border-top:2px solid var(--header-bg);display:none;flex-direction:column;max-height:50%;overflow:hidden}
+#dr-alloc-panel.open{display:flex}
+#dr-alloc-panel-head{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--surface)}
+#dr-alloc-panel-body{flex:1;overflow-y:auto;padding:0}
+#dr-alloc-panel-foot{padding:8px 14px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)}
+.dr-alloc-grid{width:100%;border-collapse:collapse;font-size:12px}
+.dr-alloc-grid th{padding:5px 8px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;text-align:left}
+.dr-alloc-grid td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+.dr-alloc-grid select,.dr-alloc-grid input{font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg);width:100%}
+.dr-alloc-grid select:focus,.dr-alloc-grid input:focus{border-color:var(--header-bg);outline:none}
+#dr-bottom{border-top:1px solid var(--border);background:var(--surface);padding:8px 16px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dr-day-chip{flex-shrink:0;text-align:center;padding:5px 8px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer;min-width:44px}
+.dr-day-chip.green{background:#eaf3de;color:#3b6d11;border-color:#97c459}
+.dr-day-chip.amber{background:#faeeda;color:#854f0b;border-color:#ef9f27}
+.dr-day-chip.red{background:#fcebeb;color:#a32d2d;border-color:#f09595}
+.dr-day-chip.active{border-width:2px;border-color:var(--header-bg)}
+.dr-day-chip.gray{background:var(--surface);color:var(--text-muted)}
+.dr-punch{display:flex;align-items:center;gap:10px;padding:6px 0}
+.dr-punch-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dr-punch-dot.start{background:#27ae60}
+.dr-punch-dot.end{background:#888}
+.dr-vline{width:2px;background:var(--border);margin-left:4px;height:14px}
+.dr-drive{display:flex;align-items:center;gap:6px;padding:3px 0;margin-left:2px}
+.dr-drive-line{flex:1;border-top:1px dashed var(--border)}
+.dr-drive-label{font-size:11px;color:var(--text-muted);white-space:nowrap}
+.dr-stop{border:1px solid var(--border);border-radius:8px;margin-bottom:4px;overflow:hidden;cursor:pointer}
+.dr-stop:hover{border-color:var(--header-bg)}
+.dr-stop.selected{border-color:var(--header-bg);border-width:2px}
+.dr-stop.has-issues{border-color:#ef9f27}
+.dr-stop.has-errors{border-color:#e24b4a}
+.dr-stop-head{padding:8px 10px;display:flex;align-items:center;gap:8px;background:var(--surface)}
+.dr-stop-ic{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.dr-stop-ic.job{background:#e6f1fb;color:#185fa5}
+.dr-stop-ic.vendor{background:#eaf3de;color:#3b6d11}
+.dr-stop-ic.nonbill{background:var(--bg);color:var(--text-muted);border:1px solid var(--border)}
+.dr-stop-ic.untagged{background:#faeeda;color:#854f0b}
+.dr-stop-body{border-top:1px solid var(--border);background:var(--bg);padding:8px 10px}
+.dr-badge{padding:2px 6px;border-radius:99px;font-size:10px;font-weight:600}
+.dr-badge.ok{background:#eaf3de;color:#3b6d11}
+.dr-badge.warn{background:#faeeda;color:#854f0b}
+.dr-badge.err{background:#fcebeb;color:#a32d2d}
+.dr-badge.gray{background:var(--surface);color:var(--text-muted);border:1px solid var(--border)}
+.dr-unreviewed{font-size:11px;color:#854f0b;display:flex;align-items:center;gap:4px;margin-left:auto;white-space:nowrap}
+.dr-alloc-row{display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.dr-alloc-row:last-child{border-bottom:none}
+.dr-place-suggestion{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:12px;background:var(--bg);margin-bottom:4px}
+.dr-place-suggestion:hover{border-color:var(--header-bg);background:var(--surface)}
+.dr-overlay{position:absolute;top:0;right:0;width:320px;height:100%;background:var(--surface);border-left:1px solid var(--border);z-index:10;display:flex;flex-direction:column;overflow:hidden}
+</style>
+<style>
+#loc-shell{display:flex;flex-direction:column;height:100%}
+#loc-topbar{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#loc-filter-bar{padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap}
+#loc-body{display:flex;flex:1;overflow:hidden}
+#loc-list-col{width:340px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#loc-count-bar{padding:5px 12px;font-size:11px;color:var(--text-muted);background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+#loc-list{flex:1;overflow-y:auto}
+#loc-map-col{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#loc-map{flex:1;min-height:0}
+#loc-detail{border-top:1px solid var(--border);background:var(--surface);padding:10px 14px;flex-shrink:0;min-height:110px}
+.loc-row{padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.loc-row:hover{background:var(--bg)}
+.loc-row.selected{background:var(--amber-light,#fdf6e3);border-left:3px solid var(--amber)}
+.loc-ic{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.loc-ic.customer{background:#e6f1fb}
+.loc-ic.vendor{background:#eaf3de}
+.loc-ic.personal{background:#faeeda}
+.loc-ic.untagged{background:var(--surface);border:1px solid var(--border)}
+.loc-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc-addr{font-size:11px;color:var(--text-secondary);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc-badges{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}
+.loc-badge{padding:2px 6px;border-radius:99px;font-size:10px;font-weight:600}
+.loc-badge.customer{background:#e6f1fb;color:#185fa5}
+.loc-badge.vendor{background:#eaf3de;color:#3b6d11}
+.loc-badge.personal{background:#faeeda;color:#854f0b}
+.loc-badge.untagged{background:var(--surface);color:var(--text-muted);border:1px solid var(--border)}
+.loc-badge.verified{background:#eaf3de;color:#3b6d11}
+.loc-badge.geocoded{background:#e6f1fb;color:#185fa5}
+.loc-badge.pending{background:#faeeda;color:#854f0b}
+.loc-badge.failed{background:#fcebeb;color:#a32d2d}
+.loc-pill{padding:5px 12px;border-radius:99px;font-size:12px;border:1px solid var(--border);cursor:pointer;background:var(--surface);color:var(--text-secondary);white-space:nowrap}
+.loc-pill.active{background:var(--amber);color:var(--amber-dark);border-color:var(--amber);font-weight:600}
+.loc-search{flex:1;max-width:220px}
+.loc-search input{width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px;background:var(--bg)}
+#tb-modal{display:none;position:fixed;inset:0;z-index:200;background:var(--bg)}
+#tb-modal.open{display:flex;flex-direction:column}
+#tb-modal-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+#tb-modal-title{font-size:15px;font-weight:700;color:var(--text-primary)}
+#tb-modal-gps{font-size:12px;color:var(--text-muted);margin-left:6px}
+#tb-modal-close{margin-left:auto;font-size:22px;cursor:pointer;background:none;border:none;color:var(--text-muted);padding:0 4px}
+#tb-modal-body{display:flex;flex:1;overflow:hidden}
+#tb-modal-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#tb-bal-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.tb-bal-item{flex:1;padding:8px 14px;border-right:1px solid var(--border);text-align:center}
+.tb-bal-item:last-child{border-right:none}
+.tb-bal-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+.tb-bal-val{font-size:16px;font-weight:700;color:var(--text-primary)}
+.tb-bal-val.under{color:#854f0b}
+.tb-bal-val.met{color:#3b6d11}
+#tb-segs{padding:8px 14px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.tb-seg-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:99px;margin:2px;cursor:pointer;background:var(--bg)}
+.tb-seg-chip.selected{border-color:#534ab7;background:#f1efff;color:#534ab7}
+#tb-rows{flex:1;overflow-y:auto;padding:8px 14px}
+.tb-wo-block{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden}
+.tb-wo-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}
+.tb-wo-body{padding:8px 10px;background:var(--bg)}
+.tb-badge{font-size:10px;padding:2px 6px;border-radius:99px;font-weight:600}
+.tb-badge.tm{background:#e6f1fb;color:#185fa5}
+.tb-badge.qt{background:#eaf3de;color:#3b6d11}
+.tb-ps-item{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border)}
+.tb-ps-item:last-child{border-bottom:none}
+#tb-map-col{width:280px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--surface)}
+#tb-map-inner{flex:1}
+#tb-map-expand{padding:6px;text-align:center;font-size:11px;color:var(--text-accent);cursor:pointer;border-top:1px solid var(--border)}
+#tb-step{padding:12px 14px}
+.tb-step-label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.tb-cust-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;background:var(--surface)}
+.tb-cust-item:hover{border-color:var(--header-bg);background:var(--bg)}
+.tb-cust-badge{width:24px;height:24px;border-radius:5px;background:#e6f1fb;color:#185fa5;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tb-wo-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;background:var(--surface)}
+.tb-wo-item:hover{border-color:var(--header-bg)}
+</style>
+<script src="gps-engine.js?v=4"></script>
+<script src="app-morning-brief.js?v=90"></script>
+<script src="app-core.js?v=90"></script>
+<script src="field-travel-log.js?v=90"></script>
+<script src="app-subforms.js?v=90"></script>
+<script src="app-filters.js?v=90"></script>
+
+<!-- TIMECARD ENTRY MODAL -->
+<div id="tc-entry-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-md);width:100%;max-width:460px;padding:20px 24px;position:relative;max-height:90vh;overflow-y:auto">
+    <button onclick="closeTimecardEntryModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">&times;</button>
+    <h3 style="margin:0 0 16px;font-size:16px">Add Hours Entry</h3>
+    <div id="tc-modal-body"></div>
+  </div>
+</div>
+</body>
+</html>
