@@ -1,5 +1,5 @@
 // app-tasks.js — Task module (Phase A: standalone + location tasks)
-// v4.57 — Aug 2026
+// v4.58 — Aug 2026
 // Depends on: AppState, sb, escHtml, showToast
 // Loads after app-morning-brief.js — overrides mbAddTask, mbToggleTask
 

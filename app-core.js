@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.57';
+const APP_VERSION = '4.58';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -2048,7 +2048,7 @@ function initDesktopStatusFilter() {
 function switchDesktopPanel(panel) { desktopNav(panel); }
 
 function desktopNav(panel) {
-  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','exports','settings','morningbrief','endofday'].forEach(function(p) {
+  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','exports','settings','morningbrief','endofday','tasks'].forEach(function(p) {
     var el = document.getElementById('desktop-panel-'+p);
     // Don't hide dailyreview when navigating to reconcile — they share the same panel
     // But do hide dailyreview when navigating away from reconcile to something else
