@@ -2863,14 +2863,12 @@ function drAllocSave() {
 
   if (!valid) return;
 
-  // Delete existing entries near this stop before re-saving (prevent duplicates)
-  // Uses coordinate proximity not location_id since multiple locations share addresses
-  var nearbyLocIds = DRState.locations.filter(function(l){
-    return l.lat && l.lng && drHaversineMeters(stop.lat, stop.lng, l.lat, l.lng) <= parseInt(AppState.settings.geofence_radius_default||'100') * 3;
-  }).map(function(l){ return l.id; });
-
-  var deletePromise = nearbyLocIds.length
-    ? sb.get('hours_entries', '?tech_id=eq.' + DRState.tech + '&entry_date=eq.' + DRState.selectedDate + '&location_id=in.(' + nearbyLocIds.join(',') + ')&select=id')
+  // Delete ALL existing entries for these work orders on this date before re-saving.
+  // Prior approach deleted by location_id proximity and missed entries without a location_id,
+  // causing duplicate rows to accumulate across multiple unmerged stops at the same site.
+  var saveWoIds = entries.map(function(e){ return e.work_order_id; }).filter(Boolean);
+  var deletePromise = saveWoIds.length
+    ? sb.get('hours_entries', '?tech_id=eq.' + DRState.tech + '&entry_date=eq.' + DRState.selectedDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')&select=id')
       .then(function(r) {
         if (r.ok && r.data && r.data.length) {
           return Promise.all(r.data.map(function(e){ return sb.delete('hours_entries', e.id); }));
