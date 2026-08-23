@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.59';
+const APP_VERSION = '4.60';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -906,6 +906,7 @@ function renderWODetail(wo) {
   var activeQ = AppState.quotedLines.filter(function(e){ return e.active!==false; });
   var hoursTotal = activeH.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
   var hoursVal = activeH.reduce(function(s,e){
+    if (!e.billable) return s;
     var ht = e.hours_types;
     var rate = parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
     return s+parseFloat(e.hours||0)*rate;
@@ -1318,7 +1319,7 @@ function dtHoursReadRow(e) {
   var typeName = (e.hours_types&&e.hours_types.name) || '';
   var ht = e.hours_types;
   var rate = parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
-  var val = parseFloat(e.hours||0)*rate;
+  var val = e.billable ? parseFloat(e.hours||0)*rate : 0;
   var locked = AppState.currentWO && isProcessedStatus(AppState.currentWO.status);
   return '<div class="dt-read-row dt-hours-grid" data-eid="'+e.id+'" data-type="hours"'+(locked?'':' ondblclick="dtEditHoursRow(this)"')+'>'
     + '<span class="dt-cell">'+fmtDate(e.entry_date)+'</span>'
@@ -1735,6 +1736,7 @@ function dtRefreshSectionMeta(type) {
   var activeH = AppState.hoursEntries.filter(function(e){ return e.active!==false; });
   var activeL = AppState.lineItems.filter(function(e){ return e.active!==false; });
   var hoursVal = activeH.reduce(function(s,e){
+    if (!e.billable) return s;
     var ht=e.hours_types; var rate=parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
     return s+parseFloat(e.hours||0)*rate;
   },0);
@@ -2267,7 +2269,7 @@ function showExportReview(wos) {
       } else {
         status='ready'; label='Ready'; icon='ti-circle-check';
       }
-      var hoursVal = hours.reduce(function(s,e){var ht=e.hours_types;var rate=parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);return s+parseFloat(e.hours||0)*rate;},0);
+      var hoursVal = hours.reduce(function(s,e){if(!e.billable)return s;var ht=e.hours_types;var rate=parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);return s+parseFloat(e.hours||0)*rate;},0);
       var partsVal = parts.filter(function(e){return e.transaction_type!=='vendor_credit';}).reduce(function(s,e){return s+parseFloat(e.sell_total||0);},0);
       var creditsVal = parts.filter(function(e){return e.transaction_type==='vendor_credit';}).reduce(function(s,e){return s+parseFloat(e.sell_total||0);},0);
       var quotedVal = quoted.reduce(function(s,e){return s+parseFloat(e.amount||0);},0);
