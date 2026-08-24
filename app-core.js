@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.61';
+const APP_VERSION = '4.62';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -4550,7 +4550,10 @@ function checkURIDuplicatesAndRender(items) {
       var grp = invGroups[invNum];
       // Build display detail from all lines
       var detail = grp.lines.filter(function(l){ return l.part && l.part !== 'FREIGHT'; }).map(function(l){ return l.part + (l.description ? ' - ' + l.description : ''); }).join('; ');
-      var rep = { inv: invNum, po: grp.po, date: grp.date, invoiceTotal: grp.invoiceTotal, detail: detail, _margin: margin, _vendorId: uriVendor ? uriVendor.id : null };
+      var structuredLines = grp.lines.filter(function(l){ return l.part; }).map(function(l){
+        return { part: l.part, description: l.description||'', qty: l.qty||1, unitPrice: l.unitPrice||0, netAmount: l.netAmount||0 };
+      });
+      var rep = { inv: invNum, po: grp.po, date: grp.date, invoiceTotal: grp.invoiceTotal, detail: detail, _lines: structuredLines, _margin: margin, _vendorId: uriVendor ? uriVendor.id : null };
       if (dupSet[invNum]) { dupes.push(rep); return; }
       var po = grp.po.toUpperCase();
       var wo = AppState.workOrders.find(function(w){ return w.wo_number && w.wo_number.toUpperCase()===po; });
@@ -4751,14 +4754,7 @@ function confirmURIImport() {
       invoiceGroups[item.inv] = { inv: item.inv, po: item.po, date: item.date,
         invoiceTotal: parseFloat(item.invoiceTotal||0), _wo: item._wo,
         _margin: item._margin, _vendorId: item._vendorId,
-        parts: [], _lines: [] };
-    }
-    // Descriptor: part number + description
-    var partStr = (item.part||'') + (item.description ? ' — ' + item.description : '');
-    if (partStr.trim()) invoiceGroups[item.inv].parts.push(partStr);
-    // Structured line for history detail
-    if (item.part) {
-      invoiceGroups[item.inv]._lines.push({ part: item.part, description: item.description||'', qty: item.qty||1, unitPrice: item.unitPrice||0, netAmount: item.netAmount||0 });
+        parts: [], _lines: item._lines || [] };
     }
   });
   var invoices = Object.keys(invoiceGroups).map(function(k){ return invoiceGroups[k]; });
@@ -4780,8 +4776,8 @@ function confirmURIImport() {
             wo_id: x._wo.id,
             wo_number: x._wo.wo_number,
             wo_title: x._wo.title || '',
-            customer_name: cust ? cust.name : '',
-            description: x._desc || (x.parts||[]).join('; ') || '',
+            customer_name: cust ? (cust.display_name || cust.name || '') : '',
+            description: x._desc || x.detail || (x.parts||[]).join('; ') || '',
             total: x.invoiceTotal,
             lines: x._lines || []
           };
