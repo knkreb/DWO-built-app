@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.60';
+const APP_VERSION = '4.61';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -153,7 +153,7 @@ var AppState = {
   screenStack: [], currentWO: null, editingWOId: null, batchStatusMode: false,
   workOrders: [], customers: [], technicians: [], hoursTypes: [], qboItems: [], vendors: [], settings: {},
   hoursEntries: [], lineItems: [], quotedLines: [],
-  desktopSortCol: 'created_at', desktopSortDir: 'asc', desktopSelected: {},
+  desktopSortCol: 'created_at', desktopSortDir: 'desc', desktopSelected: {},
   filterTitle: '', filterCustomer: '', filterStatus: 'live',
   statuses: [],
   woFlags: [],
@@ -173,6 +173,7 @@ function selSize() { return Object.keys(AppState.desktopSelected).length; }
 
 // Apply company branding immediately from localStorage — before auth, before window load
 document.addEventListener('DOMContentLoaded', function() {
+  applyFontSize();
   var n = localStorage.getItem('dwo_company_name');
   var l = localStorage.getItem('dwo_company_logo_url');
   if (n || l) applyCompanyBranding(n, l);
@@ -600,6 +601,16 @@ function loadCompanyBranding() {
   }).catch(function(){});
 }
 
+function applyFontSize() {
+  var scale = localStorage.getItem('dwo_font_size') || '1';
+  document.body.style.zoom = scale;
+}
+
+function setFontSize(val) {
+  localStorage.setItem('dwo_font_size', val);
+  document.body.style.zoom = val;
+}
+
 function applyCompanyBranding(name, logo) {
   var titleEl = document.getElementById('login-company-name');
   var logoEl = document.getElementById('login-company-logo');
@@ -809,7 +820,7 @@ function closeHamburger() {
 
 function hamburgerNav(dest) {
   closeHamburger();
-  if (dest==='morningbrief') { initMorningBrief(); pushScreen('screen-morning-brief','Morning Brief'); }
+  if (dest==='morningbrief') { initMorningBrief(); pushScreen('screen-morning-brief','Daily Dashboard'); }
   else if (dest==='wo') { showScreen('screen-wo-list'); showHeader(true,'ProMech',false); if(typeof initMobileFilters==='function') initMobileFilters(); filterWOList(); }
   else if (dest==='dailyreview') { initMobileDailyReview(); pushScreen('screen-mobile-dailyreview','Field Travel Log'); }
   else if (dest==='endofday') { initEndOfDay(); pushScreen('screen-end-of-day','End of Day'); }
@@ -4317,13 +4328,45 @@ function loadAndRenderImportHistory() {
         + '<span style="font-size:12px;color:var(--text-muted)">▸</span>'
         + '</div></div>'
         + '<div id="hist-'+histId+'" style="display:none;border-top:1px solid var(--border);padding:8px 12px">'
-        + invList.map(function(item){
+        + invList.map(function(item, invIdx){
+            var lineDetails = Array.isArray(item.lines) && item.lines.length ? item.lines : null;
+            var invDetailId = 'hist-'+histId+'-inv-'+invIdx;
+            var contextLine = (item.customer_name || item.wo_title)
+              ? (item.customer_name ? escHtml(item.customer_name) : '') + (item.wo_title ? ' — ' + escHtml(item.wo_title) : '')
+              : '';
+            var totalStr = item.total != null ? ' <strong>$'+(parseFloat(item.total||0)).toFixed(2)+'</strong>' : '';
             return '<div style="padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">'
-              + '<div style="display:flex;align-items:center;justify-content:space-between">'
-              + '<span><strong>'+escHtml(item.inv)+'</strong> → <span style="color:var(--header-bg)">'+escHtml(item.wo_number||'')+'</span></span>'
-              + (isActive ? '<button style="font-size:10px;padding:2px 7px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="undoSingleHistoryItem(\''+item.inv+'\',\''+item.wo_id+'\',\''+histId+'\')">Undo</button>' : '')
+              + '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">'
+              + '<div style="flex:1;min-width:0;line-height:1.5">'
+              + '<strong>'+escHtml(item.inv)+'</strong> → <span style="color:var(--header-bg)">'+escHtml(item.wo_number||'')+'</span>'
+              + (contextLine ? ' <span style="color:var(--text-muted);font-size:11px">| '+contextLine+'</span>' : '')
+              + totalStr
               + '</div>'
-              + (item.description ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+escHtml(item.description)+'</div>' : '')
+              + '<div style="display:flex;gap:4px;align-items:center;flex-shrink:0">'
+              + (isActive ? '<button style="font-size:10px;padding:2px 7px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="undoSingleHistoryItem(\''+item.inv+'\',\''+item.wo_id+'\',\''+histId+'\')">Undo</button>' : '')
+              + (lineDetails ? '<span style="font-size:11px;color:var(--text-muted);cursor:pointer;padding:0 4px" onclick="toggleHistoryExpand(\''+invDetailId+'\')">&#9658;</span>' : '')
+              + '</div></div>'
+              + (lineDetails
+                ? '<div id="'+invDetailId+'" style="display:none;margin:4px 0 2px 0;background:var(--bg);border:1px solid var(--border);border-radius:4px;overflow-x:auto">'
+                  + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+                  + '<tr style="color:var(--text-muted);background:var(--surface)">'
+                  + '<th style="text-align:left;padding:3px 6px;font-weight:600">Part</th>'
+                  + '<th style="text-align:left;padding:3px 6px;font-weight:600">Description</th>'
+                  + '<th style="text-align:right;padding:3px 6px;font-weight:600">Qty</th>'
+                  + '<th style="text-align:right;padding:3px 6px;font-weight:600">Unit</th>'
+                  + '<th style="text-align:right;padding:3px 6px;font-weight:600">Total</th>'
+                  + '</tr>'
+                  + lineDetails.map(function(l){
+                      return '<tr style="border-top:0.5px solid var(--border)">'
+                        + '<td style="padding:3px 6px;white-space:nowrap;font-family:monospace">'+escHtml(l.part||'')+'</td>'
+                        + '<td style="padding:3px 6px">'+escHtml(l.description||'')+'</td>'
+                        + '<td style="padding:3px 6px;text-align:right">'+escHtml(String(l.qty||''))+'</td>'
+                        + '<td style="padding:3px 6px;text-align:right">$'+(parseFloat(l.unitPrice||0)).toFixed(2)+'</td>'
+                        + '<td style="padding:3px 6px;text-align:right;font-weight:600">$'+(parseFloat(l.netAmount||0)).toFixed(2)+'</td>'
+                        + '</tr>';
+                    }).join('')
+                  + '</table></div>'
+                : '')
               + '</div>';
           }).join('')
         + '</div>'
@@ -4708,11 +4751,15 @@ function confirmURIImport() {
       invoiceGroups[item.inv] = { inv: item.inv, po: item.po, date: item.date,
         invoiceTotal: parseFloat(item.invoiceTotal||0), _wo: item._wo,
         _margin: item._margin, _vendorId: item._vendorId,
-        parts: [] };
+        parts: [], _lines: [] };
     }
     // Descriptor: part number + description
     var partStr = (item.part||'') + (item.description ? ' — ' + item.description : '');
     if (partStr.trim()) invoiceGroups[item.inv].parts.push(partStr);
+    // Structured line for history detail
+    if (item.part) {
+      invoiceGroups[item.inv]._lines.push({ part: item.part, description: item.description||'', qty: item.qty||1, unitPrice: item.unitPrice||0, netAmount: item.netAmount||0 });
+    }
   });
   var invoices = Object.keys(invoiceGroups).map(function(k){ return invoiceGroups[k]; });
 
@@ -4720,13 +4767,26 @@ function confirmURIImport() {
     if (i >= invoices.length) {
       showToast('Imported ' + imported + ' invoice' + (imported===1?'':'s'));
       // Save import history
+      var totalCost = invoices.reduce(function(s,x){ return s + (x.invoiceTotal||0); }, 0);
       var historyRecord = {
         imported_by: AppState.userEmail,
         vendor_name: uriVendor ? uriVendor.name : 'United Refrigeration',
         invoice_count: imported,
-        invoices: JSON.stringify(invoices.map(function(x){ return {inv:x.inv, wo_id:x._wo.id, wo_number:x._wo.wo_number, description:(x._desc||(x.parts||[]).join('; ')||'')}; }))
+        total_cost: totalCost,
+        invoices: JSON.stringify(invoices.map(function(x){
+          var cust = AppState.customers && AppState.customers.find(function(c){ return c.id === x._wo.customer_id; });
+          return {
+            inv: x.inv,
+            wo_id: x._wo.id,
+            wo_number: x._wo.wo_number,
+            wo_title: x._wo.title || '',
+            customer_name: cust ? cust.name : '',
+            description: x._desc || (x.parts||[]).join('; ') || '',
+            total: x.invoiceTotal,
+            lines: x._lines || []
+          };
+        }))
       };
-        invoices: JSON.stringify(invoices.map(function(x){ return {inv:x.inv, wo_id:x._wo.id, wo_number:x._wo.wo_number, description:(x._desc||x.parts.join('; ')||'')}; }))
       sb.post('vendor_import_history', historyRecord).then(function(){});
       AppState._uriMatched = []; AppState._uriUnmatched = []; AppState._uriDupes = [];
       // Show undo screen
@@ -4868,6 +4928,16 @@ function renderSettings(containerId) {
   tzOptions.forEach(function(tz){ html += '<option value="'+tz[0]+'"'+(currentTZ===tz[0]?' selected':'')+'>'+tz[1]+'</option>'; });
   html += '</select></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Used for GPS timestamp display and daily review boundaries.</div>';
+  html += '</div></div>';
+  var currentFontSize = localStorage.getItem('dwo_font_size') || '1';
+  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Display</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
+  html += '<div class="settings-row"><div class="settings-row-label">Font Size</div>';
+  html += '<select onchange="setFontSize(this.value)" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)">';
+  [['0.85','Small (85%)'],['1','Normal (100%)'],['1.15','Large (115%)'],['1.30','X-Large (130%)']].forEach(function(opt){
+    html += '<option value="'+opt[0]+'"'+(currentFontSize===opt[0]?' selected':'')+'>'+opt[1]+'</option>';
+  });
+  html += '</select></div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Takes effect immediately. Saved to this device only.</div>';
   html += '</div></div>';
   html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Technicians</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   AppState.technicians.forEach(function(t){

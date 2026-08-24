@@ -59,7 +59,8 @@ function renderDailyReviewPanel() {
   var el = document.getElementById('dailyreview-panel-inner');
   if (!el) return;
   DRState.mode = 'travel';
-  DRState.weekStart = drGetMonday(new Date());
+  var savedFtlWeek = localStorage.getItem('dwo_ftl_week_start');
+  DRState.weekStart = savedFtlWeek ? drGetMonday(new Date(savedFtlWeek + 'T12:00:00')) : drGetMonday(new Date());
   DRState.selectedDate = DRState.selectedDate || drTodayStr();
   DRState.tech = drGetDefaultTech();
   DRState.locations = LocState.locations.length ? LocState.locations : [];
@@ -201,6 +202,7 @@ function drElapsedMin(stop) {
 // ── Week navigation ───────────────────────────────────────────
 function drNavWeek(dir) {
   DRState.weekStart = drAddDays(DRState.weekStart, dir * 7);
+  localStorage.setItem('dwo_ftl_week_start', drDateStr(DRState.weekStart));
   drLoadWeek();
 }
 
@@ -239,8 +241,14 @@ function drRenderWeekBar() {
   if (!el) return;
   var days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var weekEnd = drAddDays(DRState.weekStart, 6);
+  var isCurrentWeek = drDateStr(DRState.weekStart) === drDateStr(drGetMonday(new Date()));
+  el.style.background = isCurrentWeek ? '' : 'rgba(230,152,0,0.13)';
+  el.style.borderBottom = isCurrentWeek ? '' : '2px solid #e69800';
   var html = '<button onclick="drNavWeek(-1)" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:13px;flex-shrink:0">&#8249;</button>';
-  html += '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;margin:0 4px">' + drDateStr(DRState.weekStart) + ' &ndash; ' + drDateStr(weekEnd) + '</div>';
+  html += '<div style="font-size:11px;white-space:nowrap;margin:0 4px;color:'+(isCurrentWeek?'var(--text-muted)':'#b87000')+';font-weight:'+(isCurrentWeek?'normal':'600')+'">'
+    + drDateStr(DRState.weekStart) + ' &ndash; ' + drDateStr(weekEnd)
+    + (isCurrentWeek ? '' : ' <span style="font-size:10px;background:#e6980022;border:1px solid #e69800;border-radius:3px;padding:0 4px;color:#b87000;vertical-align:middle">HISTORICAL</span>')
+    + '</div>';
   for (var i = 0; i < 7; i++) {
     var d = drAddDays(DRState.weekStart, i);
     var ds = drDateStr(d);
@@ -1223,6 +1231,87 @@ function drRenderTimeline() {
   if (DRState.mode === 'reconcile') drLoadBillingCol();
 }
 
+// ── Time picker (shared desktop + mobile) ─────────────────────
+var _drTpCallback = null;
+var _drTpNowStr = null;
+
+function drTo12hr(hhmm) {
+  var parts = (hhmm||'').split(':');
+  var h = parseInt(parts[0]||0);
+  var m = parseInt(parts[1]||0);
+  return { h: h%12||12, m: m, ampm: h<12?'AM':'PM' };
+}
+
+function drTo24hr(h, m, ampm) {
+  h = parseInt(h); m = parseInt(m);
+  if (ampm==='AM') h = (h===12)?0:h;
+  else h = (h===12)?12:h+12;
+  return h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0');
+}
+
+function drTpAmPmStyle(active) {
+  return active
+    ? 'padding:8px 14px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--header-bg);color:#fff'
+    : 'padding:8px 14px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text)';
+}
+
+function drTpSetAmPm(val) {
+  document.getElementById('dr-tp-am').style.cssText = drTpAmPmStyle(val==='AM');
+  document.getElementById('dr-tp-pm').style.cssText = drTpAmPmStyle(val==='PM');
+  document.getElementById('dr-tp-am').setAttribute('data-active', val==='AM'?'1':'0');
+  document.getElementById('dr-tp-pm').setAttribute('data-active', val==='PM'?'1':'0');
+}
+
+function drShowTimePicker(label, defaultTime24, callback) {
+  var existing = document.getElementById('dr-time-picker-overlay');
+  if (existing) existing.remove();
+  var t = drTo12hr(defaultTime24);
+  _drTpCallback = callback;
+  var now = new Date();
+  _drTpNowStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  var ov = document.createElement('div');
+  ov.id = 'dr-time-picker-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML =
+    '<div style="background:var(--surface);border-radius:14px;padding:28px 24px;min-width:280px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.25)">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:24px">'+escHtml(label)+'</div>'
+    + '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:24px">'
+    + '<input type="text" inputmode="numeric" id="dr-tp-hour" value="'+t.h+'" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)" oninput="if(this.value.length>=2){document.getElementById(\'dr-tp-min\').focus();document.getElementById(\'dr-tp-min\').select();}">'
+    + '<span style="font-size:32px;font-weight:700;margin:0 2px">:</span>'
+    + '<input type="text" inputmode="numeric" id="dr-tp-min" value="'+String(t.m).padStart(2,'0')+'" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)">'
+    + '<div style="display:flex;flex-direction:column;gap:5px;margin-left:10px">'
+    + '<button id="dr-tp-am" onclick="drTpSetAmPm(\'AM\')" style="'+drTpAmPmStyle(t.ampm==='AM')+'" data-active="'+(t.ampm==='AM'?'1':'0')+'">AM</button>'
+    + '<button id="dr-tp-pm" onclick="drTpSetAmPm(\'PM\')" style="'+drTpAmPmStyle(t.ampm==='PM')+'" data-active="'+(t.ampm==='PM'?'1':'0')+'">PM</button>'
+    + '</div></div>'
+    + '<div style="display:flex;gap:10px">'
+    + '<button onclick="drTpCancel()" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>'
+    + '<button onclick="drTpConfirm()" style="flex:1;padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Confirm</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ var el=document.getElementById('dr-tp-hour');if(el){el.focus();el.select();} }, 80);
+}
+
+function drTpCancel() {
+  var ov = document.getElementById('dr-time-picker-overlay');
+  if (ov) ov.remove();
+  _drTpCallback = null;
+}
+
+function drTpConfirm() {
+  var hEl = document.getElementById('dr-tp-hour');
+  var mEl = document.getElementById('dr-tp-min');
+  var amBtn = document.getElementById('dr-tp-am');
+  if (!hEl||!mEl) return;
+  var h = parseInt(hEl.value)||12;
+  var m = parseInt(mEl.value)||0;
+  var ampm = (amBtn && amBtn.getAttribute('data-active')==='1') ? 'AM' : 'PM';
+  if (h<1||h>12||m<0||m>59) { showToast('Invalid time — enter hour 1-12 and minute 0-59'); return; }
+  var time24 = drTo24hr(h, m, ampm);
+  var ov = document.getElementById('dr-time-picker-overlay');
+  if (ov) ov.remove();
+  if (_drTpCallback) { var cb=_drTpCallback; _drTpCallback=null; cb(time24); }
+}
+
 // ── Bottom strip ──────────────────────────────────────────────
 function drEditClockIn() {
   var dayReview = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate; });
@@ -1234,13 +1323,14 @@ function drEditClockIn() {
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
   var defaultVal = existing || schedStr || nowStr;
-  var time = prompt('Clock-in time' + (schedStr ? ' (scheduled: ' + schedStr + ')' : '') + ':', defaultVal);
-  if (!time) return;
-  var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
-  drUpsertDayReview({
-    clock_in: dt.toISOString(),
-    clock_in_backdated: time !== nowStr,
-    clock_in_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
+  drShowTimePicker('Clock-in time' + (schedStr ? ' (scheduled: ' + schedStr + ')' : ''), defaultVal, function(time) {
+    if (!time) return;
+    var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
+    drUpsertDayReview({
+      clock_in: dt.toISOString(),
+      clock_in_backdated: time !== nowStr,
+      clock_in_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
+    });
   });
 }
 
@@ -1250,13 +1340,14 @@ function drEditClockOut() {
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
   var defaultVal = existing || nowStr;
-  var time = prompt('Clock-out time:', defaultVal);
-  if (!time) return;
-  var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
-  drUpsertDayReview({
-    clock_out: dt.toISOString(),
-    clock_out_backdated: time !== nowStr,
-    clock_out_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
+  drShowTimePicker('Clock-out time', defaultVal, function(time) {
+    if (!time) return;
+    var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
+    drUpsertDayReview({
+      clock_out: dt.toISOString(),
+      clock_out_backdated: time !== nowStr,
+      clock_out_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
+    });
   });
 }
 
@@ -3876,31 +3967,22 @@ function mdrSaveTagLocation() {
 
 // ── Day submission ────────────────────────────────────────────
 function mdrClockIn() {
-  // Check if today is a scheduled workday
   var today = new Date();
   var dow = today.getDay();
   var techSchedule = AppState._techSchedules ? (AppState._techSchedules[MDRState.tech] || []) : [];
   var sched = techSchedule.find(function(s){ return s.day_of_week === dow; });
-  var expectedStart = sched ? sched.expected_start : null;
-
-  // Build time picker dialog
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  var schedStr = expectedStart ? expectedStart.substring(0,5) : nowStr;
-
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end';
-  overlay.innerHTML =
-    '<div style="width:100%;background:var(--surface);border-radius:16px 16px 0 0;padding:20px">' +
-    '<div style="font-size:15px;font-weight:700;margin-bottom:16px">Clock In</div>' +
-    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Clock-in time:</div>' +
-    '<input type="time" id="mdr-clockin-time" value="' + nowStr + '" style="width:100%;font-size:18px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-bottom:8px">' +
-    (expectedStart ? '<div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Scheduled start: ' + schedStr + ' &nbsp;<a href="#" onclick="document.getElementById(\'mdr-clockin-time\').value=\'' + schedStr + '\';return false" style="color:var(--header-bg)">Use scheduled time</a></div>' : '<div style="margin-bottom:16px"></div>') +
-    '<div style="display:flex;gap:8px">' +
-    '<button onclick="this.closest(\'div[style*=inset]\').remove()" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>' +
-    '<button onclick="mdrConfirmClockIn()" style="flex:1;padding:12px;background:#27ae60;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Clock In</button>' +
-    '</div></div>';
-  document.body.appendChild(overlay);
+  var defaultVal = sched ? (sched.expected_start||'').substring(0,5)||nowStr : nowStr;
+  drShowTimePicker('Clock In', defaultVal, function(time) {
+    if (!time) return;
+    var dt = new Date(MDRState.selectedDate + 'T' + time + ':00');
+    var isBackdated = dt < new Date(new Date() - 60000);
+    if (!MDRState.currentDayReview) MDRState.currentDayReview = {};
+    MDRState.currentDayReview.clock_in = dt.toISOString();
+    mdrUpsertDayReview({ clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending' });
+    setTimeout(function() { initMorningBrief(); pushScreen('screen-morning-brief', 'Daily Dashboard'); }, 400);
+  });
 }
 
 function mdrEditPunch() {
@@ -3909,90 +3991,36 @@ function mdrEditPunch() {
   var clockOut = dayReview ? dayReview.clock_out : null;
   var ciStr = clockIn ? new Date(clockIn).toTimeString().substring(0,5) : '';
   var coStr = clockOut ? new Date(clockOut).toTimeString().substring(0,5) : '';
-
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end';
-  overlay.innerHTML =
-    '<div style="width:100%;background:var(--surface);border-radius:16px 16px 0 0;padding:20px">' +
-    '<div style="font-size:15px;font-weight:700;margin-bottom:16px">Edit Punch</div>' +
-    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Clock in:</div>' +
-    '<input type="time" id="mdr-edit-ci" value="' + ciStr + '" style="width:100%;font-size:16px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-bottom:12px">' +
-    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Clock out:</div>' +
-    '<input type="time" id="mdr-edit-co" value="' + coStr + '" style="width:100%;font-size:16px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-bottom:16px">' +
-    '<div style="display:flex;gap:8px">' +
-    '<button onclick="this.closest(\'div[style*=inset]\').remove()" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>' +
-    '<button onclick="mdrSaveEditPunch()" style="flex:1;padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Save</button>' +
-    '</div></div>';
-  document.body.appendChild(overlay);
-}
-
-function mdrSaveEditPunch() {
-  var ciEl = document.getElementById('mdr-edit-ci');
-  var coEl = document.getElementById('mdr-edit-co');
-  var overlay = ciEl ? ciEl.closest('div[style*="inset"]') : null;
-  if (overlay) overlay.remove();
+  var now = new Date();
+  var nowStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   var updates = {};
-  if (ciEl && ciEl.value) {
-    var ciDt = new Date(MDRState.selectedDate + 'T' + ciEl.value + ':00');
-    updates.clock_in = ciDt.toISOString();
-    updates.clock_in_backdated = true;
-    updates.clock_in_source = 'manual';
-  }
-  if (coEl && coEl.value) {
-    var coDt = new Date(MDRState.selectedDate + 'T' + coEl.value + ':00');
-    updates.clock_out = coDt.toISOString();
-    updates.clock_out_backdated = true;
-    updates.clock_out_source = 'manual';
-  }
-  if (Object.keys(updates).length) mdrUpsertDayReview(updates);
-}
-
-function mdrConfirmClockIn() {
-  var timeEl = document.getElementById('mdr-clockin-time');
-  if (!timeEl) return;
-  var timeVal = timeEl.value;
-  var overlay = timeEl.closest('div[style*="inset"]');
-  if (overlay) overlay.remove();
-  var dt = new Date(MDRState.selectedDate + 'T' + timeVal + ':00');
-  var isBackdated = dt < new Date(new Date() - 60000);
-  // Optimistically update currentDayReview so Morning Brief sees clock_in immediately
-  if (!MDRState.currentDayReview) MDRState.currentDayReview = {};
-  MDRState.currentDayReview.clock_in = dt.toISOString();
-  mdrUpsertDayReview({clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending'});
-  // Navigate to Morning Brief after clock in
-  setTimeout(function() {
-    initMorningBrief();
-    pushScreen('screen-morning-brief', 'Morning Brief');
-  }, 400);
+  // Ask CI first, then CO
+  drShowTimePicker('Edit Clock-in', ciStr || nowStr, function(ciTime) {
+    if (ciTime) {
+      updates.clock_in = new Date(MDRState.selectedDate + 'T' + ciTime + ':00').toISOString();
+      updates.clock_in_backdated = true;
+      updates.clock_in_source = 'manual';
+    }
+    drShowTimePicker('Edit Clock-out', coStr || nowStr, function(coTime) {
+      if (coTime) {
+        updates.clock_out = new Date(MDRState.selectedDate + 'T' + coTime + ':00').toISOString();
+        updates.clock_out_backdated = true;
+        updates.clock_out_source = 'manual';
+      }
+      if (Object.keys(updates).length) mdrUpsertDayReview(updates);
+    });
+  });
 }
 
 function mdrClockOut() {
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end';
-  overlay.innerHTML =
-    '<div style="width:100%;background:var(--surface);border-radius:16px 16px 0 0;padding:20px">' +
-    '<div style="font-size:15px;font-weight:700;margin-bottom:16px">Clock Out</div>' +
-    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Clock-out time:</div>' +
-    '<input type="time" id="mdr-clockout-time" value="' + nowStr + '" style="width:100%;font-size:18px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-bottom:16px">' +
-    '<div style="display:flex;gap:8px">' +
-    '<button onclick="this.closest(\'div[style*=inset]\').remove()" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>' +
-    '<button onclick="mdrConfirmClockOut()" style="flex:1;padding:12px;background:#a32d2d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Clock Out</button>' +
-    '</div></div>';
-  document.body.appendChild(overlay);
-}
-
-function mdrConfirmClockOut() {
-  var timeEl = document.getElementById('mdr-clockout-time');
-  if (!timeEl) return;
-  var timeVal = timeEl.value;
-  var overlay = timeEl.closest('div[style*="inset"]');
-  if (overlay) overlay.remove();
-  var dt = new Date(MDRState.selectedDate + 'T' + timeVal + ':00');
-  var isBackdated = dt < new Date(new Date() - 60000);
-  mdrUpsertDayReview({clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual'});
+  drShowTimePicker('Clock Out', nowStr, function(time) {
+    if (!time) return;
+    var dt = new Date(MDRState.selectedDate + 'T' + time + ':00');
+    var isBackdated = dt < new Date(new Date() - 60000);
+    mdrUpsertDayReview({ clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual' });
+  });
 }
 
 function mdrSubmitDay() {

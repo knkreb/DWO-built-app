@@ -4,6 +4,18 @@
 //             isProcessedStatus, mdrUpsertDayReview, mdrClockIn,
 //             initMobileDailyReview, openWODetail, drFormatTime
 
+function mbGoToFTLDate(dateStr) {
+  // Navigate desktop FTL to a specific historical date
+  var monday = new Date(dateStr + 'T12:00:00');
+  var day = monday.getDay();
+  var diff = day === 0 ? -6 : 1 - day;
+  monday.setDate(monday.getDate() + diff);
+  DRState.weekStart = monday;
+  DRState.selectedDate = dateStr;
+  localStorage.setItem('dwo_ftl_week_start', dateStr.substring(0,4) + '-' + String(monday.getMonth()+1).padStart(2,'0') + '-' + String(monday.getDate()).padStart(2,'0'));
+  desktopNav('dailyreview');
+}
+
 // ── Tech identity resolution ──────────────────────────────────
 // Called once from showMainScreen after loadAllData completes.
 // Sets AppState.userTechId by matching authenticated email to technicians table.
@@ -152,22 +164,42 @@ function initMorningBriefDesktop() {
   Promise.all([
     sb.get('dispatch_assignments', '?scheduled_date=eq.' + today + '&order=sort_order.asc&select=*,work_orders(wo_number,title,status,form_mode,customer_id,customers(name,display_name)),technicians(name)'),
     sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
-    sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)')
+    sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)'),
+    sb.get('day_review', '?clock_in=not.is.null&clock_out=is.null&review_date=lt.' + today + '&select=id,tech_id,review_date,clock_in&order=review_date.desc&limit=20')
   ]).then(function(results) {
-    var dispatches = (results[0].ok ? results[0].data : []) || [];
-    var dateTasks  = (results[1].ok ? results[1].data : []) || [];
-    var locTasks   = (results[2].ok ? results[2].data : []) || [];
-    renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today);
+    var dispatches      = (results[0].ok ? results[0].data : []) || [];
+    var dateTasks       = (results[1].ok ? results[1].data : []) || [];
+    var locTasks        = (results[2].ok ? results[2].data : []) || [];
+    var missingClockOut = (results[3].ok ? results[3].data : []) || [];
+    renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut);
   }).catch(function() {
     body.innerHTML = '<div style="color:var(--text-muted)">Could not load morning brief</div>';
   });
 }
 
-function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today) {
+function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut) {
+  missingClockOut = missingClockOut || [];
   var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
   var html = '<div style="max-width:700px">';
-  html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Morning Brief</div>';
+  html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Daily Dashboard</div>';
   html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:24px">' + dateStr + '</div>';
+
+  // Payroll alert — missing clock-outs
+  if (missingClockOut.length) {
+    html += '<div style="background:#fff0e6;border:1.5px solid #e67e22;border-radius:var(--radius);padding:12px 16px;margin-bottom:20px">';
+    html += '<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">&#9888; Payroll Alert — Missing Clock-out</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">'+missingClockOut.length+' day'+(missingClockOut.length===1?'':'s')+' clocked in with no clock-out recorded:</div>';
+    missingClockOut.forEach(function(r) {
+      var tech = AppState.technicians && AppState.technicians.find(function(t){ return t.id === r.tech_id; });
+      var techName = tech ? tech.name : 'Unknown tech';
+      var ciTime = r.clock_in ? new Date(r.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true}) : '';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:0.5px solid #e67e2244">';
+      html += '<span style="font-size:12px"><strong>'+escHtml(r.review_date)+'</strong> &mdash; '+escHtml(techName)+' (in: '+escHtml(ciTime)+')</span>';
+      html += '<a href="#" onclick="mbGoToFTLDate(\''+r.review_date+'\');return false" style="font-size:11px;color:#c0392b;text-decoration:underline">Fix in FTL</a>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
 
   var byTech = {};
   dispatches.forEach(function(d) {
