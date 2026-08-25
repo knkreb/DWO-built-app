@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.62';
+const APP_VERSION = '4.63';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -4312,7 +4312,7 @@ function loadAndRenderImportHistory() {
     var html = '';
     r.data.forEach(function(h) {
       var invList = [];
-      try { invList = JSON.parse(h.invoices||'[]'); } catch(e){}
+      try { invList = Array.isArray(h.invoices) ? h.invoices : JSON.parse(h.invoices||'[]'); } catch(e){}
       var isActive = h.active !== false;
       var histId = h.id;
       html += '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;'+(isActive?'':'opacity:0.5;background:var(--bg)')+'">'
