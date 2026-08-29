@@ -206,6 +206,12 @@ function drNavWeek(dir) {
   drLoadWeek();
 }
 
+function drGoToToday() {
+  DRState.weekStart = drGetMonday(new Date());
+  localStorage.setItem('dwo_ftl_week_start', drDateStr(DRState.weekStart));
+  drLoadWeek();
+}
+
 function drLoadWeek() {
   if (!DRState.tech) return;
   var weekEnd = drAddDays(DRState.weekStart, 6);
@@ -244,7 +250,8 @@ function drRenderWeekBar() {
   var isCurrentWeek = drDateStr(DRState.weekStart) === drDateStr(drGetMonday(new Date()));
   el.style.background = isCurrentWeek ? '' : 'rgba(230,152,0,0.13)';
   el.style.borderBottom = isCurrentWeek ? '' : '2px solid #e69800';
-  var html = '<button onclick="drNavWeek(-1)" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:13px;flex-shrink:0">&#8249;</button>';
+  var html = '<button onclick="drNavWeek(-1)" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:13px;flex-shrink:0">&#8249;</button>'
+    + '<button onclick="drGoToToday()" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:'+(isCurrentWeek?'var(--surface)':'var(--header-bg)')+';color:'+(isCurrentWeek?'var(--text-muted)':'#fff')+';cursor:pointer;font-size:11px;flex-shrink:0;font-weight:'+(isCurrentWeek?'normal':'600')+'">Today</button>';
   html += '<div style="font-size:11px;white-space:nowrap;margin:0 4px;color:'+(isCurrentWeek?'var(--text-muted)':'#b87000')+';font-weight:'+(isCurrentWeek?'normal':'600')+'">'
     + drDateStr(DRState.weekStart) + ' &ndash; ' + drDateStr(weekEnd)
     + (isCurrentWeek ? '' : ' <span style="font-size:10px;background:#e6980022;border:1px solid #e69800;border-radius:3px;padding:0 4px;color:#b87000;vertical-align:middle">HISTORICAL</span>')
@@ -909,6 +916,14 @@ function drRenderTimeline() {
   }
   html += '</div>';
 
+  // Punch history (audit log)
+  if (dayReview && dayReview.id) {
+    html += '<div style="padding:4px 14px;border-bottom:1px solid var(--border);background:var(--bg)">'
+      + '<span onclick="drTogglePunchHistory(\''+dayReview.id+'\')" style="font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none">&#9656; Punch history</span>'
+      + '<div id="dr-punch-history-'+dayReview.id+'" style="display:none;margin-top:4px"></div>'
+      + '</div>';
+  }
+
   // Merge selected bar — visible when 2+ stops are checked
   var mergeCount = DRState.mergeSelected ? DRState.mergeSelected.length : 0;
   html += '<div style="padding:6px 14px;border-bottom:1px solid var(--border);background:#f1efff;align-items:center;gap:8px;display:' + (mergeCount >= 2 ? 'flex' : 'none') + '">';
@@ -1262,7 +1277,7 @@ function drTpSetAmPm(val) {
   document.getElementById('dr-tp-pm').setAttribute('data-active', val==='PM'?'1':'0');
 }
 
-function drShowTimePicker(label, defaultTime24, callback) {
+function drShowTimePicker(label, defaultTime24, callback, allowClear) {
   var existing = document.getElementById('dr-time-picker-overlay');
   if (existing) existing.remove();
   var t = drTo12hr(defaultTime24);
@@ -1283,9 +1298,10 @@ function drShowTimePicker(label, defaultTime24, callback) {
     + '<button id="dr-tp-am" onclick="drTpSetAmPm(\'AM\')" style="'+drTpAmPmStyle(t.ampm==='AM')+'" data-active="'+(t.ampm==='AM'?'1':'0')+'">AM</button>'
     + '<button id="dr-tp-pm" onclick="drTpSetAmPm(\'PM\')" style="'+drTpAmPmStyle(t.ampm==='PM')+'" data-active="'+(t.ampm==='PM'?'1':'0')+'">PM</button>'
     + '</div></div>'
-    + '<div style="display:flex;gap:10px">'
-    + '<button onclick="drTpCancel()" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>'
-    + '<button onclick="drTpConfirm()" style="flex:1;padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Confirm</button>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    + (allowClear ? '<button onclick="drTpClear()" style="flex:1;min-width:80px;padding:12px;border:1px solid var(--danger);border-radius:8px;background:none;color:var(--danger);font-size:14px;cursor:pointer">Clear</button>' : '')
+    + '<button onclick="drTpCancel()" style="flex:1;min-width:80px;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>'
+    + '<button onclick="drTpConfirm()" style="flex:1;min-width:80px;padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Confirm</button>'
     + '</div></div>';
   document.body.appendChild(ov);
   setTimeout(function(){ var el=document.getElementById('dr-tp-hour');if(el){el.focus();el.select();} }, 80);
@@ -1295,6 +1311,12 @@ function drTpCancel() {
   var ov = document.getElementById('dr-time-picker-overlay');
   if (ov) ov.remove();
   _drTpCallback = null;
+}
+
+function drTpClear() {
+  var ov = document.getElementById('dr-time-picker-overlay');
+  if (ov) ov.remove();
+  if (_drTpCallback) { var cb=_drTpCallback; _drTpCallback=null; cb('CLEAR'); }
 }
 
 function drTpConfirm() {
@@ -1323,7 +1345,13 @@ function drEditClockIn() {
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
   var defaultVal = existing || schedStr || nowStr;
+  var hasPunch = !!(dayReview && dayReview.clock_in);
   drShowTimePicker('Clock-in time' + (schedStr ? ' (scheduled: ' + schedStr + ')' : ''), defaultVal, function(time) {
+    if (time === 'CLEAR') {
+      if (!confirm('Clear this clock-in punch?')) return;
+      drUpsertDayReview({ clock_in: null, clock_in_backdated: null, clock_in_source: null });
+      return;
+    }
     if (!time) return;
     var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
     drUpsertDayReview({
@@ -1331,7 +1359,7 @@ function drEditClockIn() {
       clock_in_backdated: time !== nowStr,
       clock_in_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
     });
-  });
+  }, hasPunch);
 }
 
 function drEditClockOut() {
@@ -1340,7 +1368,13 @@ function drEditClockOut() {
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
   var defaultVal = existing || nowStr;
+  var hasPunch = !!(dayReview && dayReview.clock_out);
   drShowTimePicker('Clock-out time', defaultVal, function(time) {
+    if (time === 'CLEAR') {
+      if (!confirm('Clear this clock-out punch?')) return;
+      drUpsertDayReview({ clock_out: null, clock_out_backdated: null, clock_out_source: null });
+      return;
+    }
     if (!time) return;
     var dt = new Date(DRState.selectedDate + 'T' + time + ':00');
     drUpsertDayReview({
@@ -1348,7 +1382,7 @@ function drEditClockOut() {
       clock_out_backdated: time !== nowStr,
       clock_out_source: AppState.userRole === 'admin' && DRState.tech !== AppState.userId ? 'admin' : 'manual'
     });
-  });
+  }, hasPunch);
 }
 
 function drUpsertDayReview(updates) {
@@ -1375,6 +1409,38 @@ function drUpsertDayReview(updates) {
       } else showToast('Error saving punch');
     });
   }
+}
+
+function drTogglePunchHistory(dayReviewId) {
+  var container = document.getElementById('dr-punch-history-' + dayReviewId);
+  var toggle = container ? container.previousElementSibling : null;
+  if (!container) return;
+  if (container.style.display !== 'none') {
+    container.style.display = 'none';
+    if (toggle) toggle.innerHTML = '&#9656; Punch history';
+    return;
+  }
+  if (toggle) toggle.innerHTML = '&#9662; Punch history';
+  container.style.display = '';
+  container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:2px 0">Loading...</div>';
+  sb.get('audit_log', '?table_name=eq.day_review&record_id=eq.' + dayReviewId + '&order=changed_at.desc&limit=20').then(function(r) {
+    if (!r.ok || !r.data || !r.data.length) {
+      container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:2px 0">No changes recorded.</div>';
+      return;
+    }
+    var html = r.data.map(function(entry) {
+      var fieldLabel = entry.field_name === 'clock_in' ? 'Clock in' : entry.field_name === 'clock_out' ? 'Clock out' : entry.field_name;
+      var oldVal = entry.old_value ? drFormatTime(entry.old_value) : '—';
+      var newVal = entry.new_value ? drFormatTime(entry.new_value) : '<span style="color:var(--danger)">Cleared</span>';
+      var when = entry.changed_at ? new Date(entry.changed_at).toLocaleString() : '';
+      return '<div style="font-size:11px;padding:3px 0;border-bottom:0.5px solid var(--border)">'
+        + '<span style="color:var(--text-muted)">' + escHtml(fieldLabel) + ':</span> '
+        + oldVal + ' &rarr; ' + newVal
+        + ' &nbsp;<span style="color:var(--text-muted)">by ' + escHtml(entry.changed_by || '') + ', ' + escHtml(when) + '</span>'
+        + '</div>';
+    }).join('');
+    container.innerHTML = html;
+  });
 }
 
 function drRenderBottomStrip(dayReview) {
