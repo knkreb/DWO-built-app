@@ -1147,6 +1147,31 @@ function drRenderTimeline() {
         html += '<span style="font-size:11px;color:#3b6d11;font-weight:600">&#10003; ' + stop.confirmedAccounts.map(function(a){ return escHtml(a.name); }).join(' &amp; ') + '</span>';
         html += '<button onclick="event.stopPropagation();drClearStopAccounts(' + origIdx + ')" style="margin-left:auto;font-size:11px;padding:3px 8px;background:none;border:1px solid #7eb85a;border-radius:var(--radius);color:#3b6d11;cursor:pointer">Change</button>';
         html += '</div>';
+        if (stop.allocations.length) {
+          var totalAllocM = stop.allocations.reduce(function(s,a){return s+parseFloat(a.hours||0);},0);
+          var gpsHM = (elapsedMin/60);
+          var minBillingM = parseFloat(AppState.settings.billing_minimum_hours || 2);
+          html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px">Billing breakdown:</div>';
+          html += '<table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:6px">';
+          html += '<tr><th style="text-align:left;padding:3px 0;color:var(--text-muted);border-bottom:1px solid var(--border)">Customer</th><th style="text-align:left;padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border)">WO</th><th style="padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border);text-align:right">Hours</th></tr>';
+          stop.allocations.forEach(function(a) {
+            var effH = parseFloat(a.hours||0);
+            var belowM = effH > 0 && effH < minBillingM;
+            var isQ = a.formMode === 'quoted';
+            var badge = isQ ? '<span style="font-size:9px;padding:1px 5px;background:#eaf3de;color:#3b6d11;border-radius:99px;margin-left:4px;font-weight:600">Quoted</span>' : '<span style="font-size:9px;padding:1px 5px;background:#e6f1fb;color:#185fa5;border-radius:99px;margin-left:4px;font-weight:600">T&M</span>';
+            html += '<tr><td style="padding:3px 0;font-weight:600">' + escHtml(a.customerName||'—') + '</td>';
+            html += '<td style="padding:3px 4px;font-size:10px;color:var(--text-muted)">' + escHtml(a.woNumber||'') + badge + '</td>';
+            html += '<td style="padding:3px 4px;text-align:right;font-weight:600">' + effH.toFixed(2) + 'h' + (belowM ? ' <span style="color:#854f0b;font-size:9px">(min ' + minBillingM + 'h)</span>' : '') + '</td></tr>';
+          });
+          html += '</table>';
+          var diffM = totalAllocM - gpsHM;
+          if (Math.abs(diffM) > 0.08) {
+            html += '<div style="font-size:11px;margin-bottom:6px">' + (diffM < 0 ? '<span style="color:#a32d2d">&#9888; ' + Math.abs(diffM).toFixed(2) + 'h under GPS time</span>' : '<span style="color:#854f0b">&#9888; ' + diffM.toFixed(2) + 'h over GPS time</span>') + '</div>';
+          }
+        }
+        html += '<button onclick="event.stopPropagation();drStartAllocate(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer">';
+        html += stop.allocations.length ? 'Edit allocation' : 'Allocate time';
+        html += '</button>';
       } else {
         var addr = [stop.location.address_street, stop.location.city, stop.location.state].filter(Boolean).join(', ');
         if (addr) html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">' + escHtml(addr) + '</div>';
