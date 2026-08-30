@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.64';
+const APP_VERSION = '4.65';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1069,6 +1069,16 @@ function renderWODetail(wo) {
     }
     out += '</div>';
 
+    // Multi-bill toggle (admin only)
+    if (isAdmin) {
+      var mbOn=wo.multi_bill;
+      out += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">'
+        + '<span style="font-size:13px;font-weight:600">Multi-Bill Job</span>'
+        + '<button style="font-size:12px;padding:4px 14px;border-radius:var(--radius-sm);border:1px solid '+(mbOn?'#2980b9':'var(--border)')+';background:'+(mbOn?'#2980b9':'none')+';color:'+(mbOn?'#fff':'var(--text-muted)')+';cursor:pointer" onclick="toggleMultiBill()">'
+        + (mbOn?'ON — reopens after export':'OFF — locks after export')
+        + '</button>'
+        + '</div>';
+    }
     // Action buttons
     out += '<button class="save-btn" style="min-height:48px;font-size:15px;margin-top:8px" onclick="AppState.batchStatusMode=false;openStatusSheet()">Save / Change Status</button>';
     if (isAdmin) out += '<button class="save-btn secondary" style="min-height:44px;font-size:14px" onclick="openEditWO()">Edit WO Details</button>';
@@ -1808,6 +1818,18 @@ function unlockWO() {
       if (idx>=0) { AppState.workOrders[idx].status=completedNum; AppState.workOrders[idx].exported_at=null; }
       renderWODetail(wo); renderDesktopGrid(); showToast(wo.wo_number+' unlocked — ready to re-export');
     } else showToast('Error unlocking WO');
+  });
+}
+
+function toggleMultiBill() {
+  var wo=AppState.currentWO; if(!wo)return;
+  var newVal=!wo.multi_bill;
+  sb.patch('work_orders',wo.id,{multi_bill:newVal,modified_by:AppState.userEmail}).then(function(r){
+    if(r.ok){
+      wo.multi_bill=newVal;
+      var idx=AppState.workOrders.findIndex(function(w){return w.id===wo.id;}); if(idx>=0)AppState.workOrders[idx].multi_bill=newVal;
+      renderWODetail(wo); showToast('Multi-bill '+(newVal?'enabled — WO will reopen after export':'disabled — WO will lock after export'));
+    } else showToast('Error updating');
   });
 }
 

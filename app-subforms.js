@@ -454,25 +454,39 @@ function runExport(wos) {
     var cN=function(wo){var f=AppState.customers.find(function(c){return c.id===wo.customer_id;});return(wo.customers&&wo.customers.name)||(f&&f.name)||'';};
     var fD=function(d){if(!d)return'';var s=String(d).split('T')[0];var p=s.split('-');if(p.length===3){var dt=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));return(dt.getMonth()+1).toString().padStart(2,'0')+'/'+dt.getDate().toString().padStart(2,'0')+'/'+dt.getFullYear();}var dt2=new Date(d);return(dt2.getMonth()+1).toString().padStart(2,'0')+'/'+dt2.getDate().toString().padStart(2,'0')+'/'+dt2.getFullYear();};
     var decToHHMM=function(dec){var h=Math.floor(parseFloat(dec)||0);var m=Math.round(((parseFloat(dec)||0)%1)*60);return h+':'+(m<10?'0':'')+m;};
-    var s1=[['ID','Name','Team Member','Status','Customer Billed','Date','Form Mode','PO Number','Work Description','Exported By','Export Date']];
-    wos.forEach(function(wo){s1.push([wo.id,woN(wo),teamMember,stLabel(wo),cN(wo),fD(wo.created_at),wo.form_mode==='quoted'?'Quoted':'Time Materials',wo.po_number||'','',AppState.userEmail,fD(now.toISOString())]);});
-    var s2=[['ID','Name','Team Member','Status','Customer Billed','Date','Service Tech','Hours Type','Hours','Billable','Work Order Descriptor','Job Class']];
-    hours.forEach(function(e){var wo=wos.find(function(w){return w.id===e.work_order_id;});if(!wo)return;var ht=e.hours_types;s2.push([wo.id,woN(wo),teamMember,stLabel(wo),cN(wo),fD(e.entry_date),(e.technicians&&e.technicians.name)||'',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',decToHHMM(e.hours),e.billable?'Billable':'NotBillable',e.descriptor||'','']);});
-    var s3=[['ID','Name','Team Member','Status','Purchased Parts','Transaction Date','Supplier','Invoice','Part EDP','Part Description','Qty','Cost','Margin Level','Sell Each','Sell Total','Customer Charged','WO Number','Test WO','PO Number','Class Type','Descriptor']];
+    var sfx={};wos.forEach(function(wo){sfx[wo.id]='-'+(wo.invoice_suffix_count||0).toString().padStart(2,'0');});
+    var s1=[['ID','Name','Team Member','Status','Customer Billed','Date','Form Mode','PO Number','Work Description','Exported By','Export Date','Billing #']];
+    wos.forEach(function(wo){s1.push([wo.id,woN(wo),teamMember,stLabel(wo),cN(wo),fD(wo.created_at),wo.form_mode==='quoted'?'Quoted':'Time Materials',wo.po_number||'','',AppState.userEmail,fD(now.toISOString()),sfx[wo.id]]);});
+    var s2=[['ID','Name','Team Member','Status','Customer Billed','Date','Service Tech','Hours Type','Hours','Billable','Work Order Descriptor','Job Class','Billing #']];
+    hours.forEach(function(e){var wo=wos.find(function(w){return w.id===e.work_order_id;});if(!wo)return;var ht=e.hours_types;s2.push([wo.id,woN(wo),teamMember,stLabel(wo),cN(wo),fD(e.entry_date),(e.technicians&&e.technicians.name)||'',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',decToHHMM(e.hours),e.billable?'Billable':'NotBillable',e.descriptor||'','',sfx[wo.id]]);});
+    var s3=[['ID','Name','Team Member','Status','Purchased Parts','Transaction Date','Supplier','Invoice','Part EDP','Part Description','Qty','Cost','Margin Level','Sell Each','Sell Total','Customer Charged','WO Number','Test WO','PO Number','Class Type','Descriptor','Billing #']];
     parts.filter(function(e){return e.transaction_type!=='vendor_credit';}).forEach(function(e){
       var wo=wos.find(function(w){return w.id===e.work_order_id;});
       var isTruck=e.transaction_type==='truck_stock';
       var qi=e.qbo_items;
       var edpName=e.transaction_type==='service'?'Services':((qi&&qi.zed_axis_name)||(qi&&qi.name)||'Parts');
-      s3.push([isTruck?'':(wo&&wo.id||''),isTruck?'':(wo?woN(wo):''),teamMember,isTruck?'':(wo?stLabel(wo):''),'Yes',fD(e.transaction_date),(e.vendors&&e.vendors.name)||'',e.invoice_number||'',edpName,e.description,e.qty,e.cost||0,e.margin,e.sell_each||0,e.sell_total||0,isTruck?'':cN(wo),isTruck?'':(wo?woNum(wo):''),'',wo&&wo.po_number||'','',e.descriptor||'']);
+      s3.push([isTruck?'':(wo&&wo.id||''),isTruck?'':(wo?woN(wo):''),teamMember,isTruck?'':(wo?stLabel(wo):''),'Yes',fD(e.transaction_date),(e.vendors&&e.vendors.name)||'',e.invoice_number||'',edpName,e.description,e.qty,e.cost||0,e.margin,e.sell_each||0,e.sell_total||0,isTruck?'':cN(wo),isTruck?'':(wo?woNum(wo):''),'',wo&&wo.po_number||'','',e.descriptor||'',isTruck?'':(wo?sfx[wo.id]:'')]);
     });
-    var s4=[['ID','Name','Team Member','Status','Date','Customer Billed','Quoted Amount','PO Number','Work Description','Lead Time','Class_1']];
-    quoted.forEach(function(e){var wo=wos.find(function(w){return w.id===e.work_order_id;});if(!wo)return;s4.push([wo.id,woN(wo),teamMember,stLabel(wo),fD(e.created_at),cN(wo),e.amount,e.po_number||wo.po_number||'',e.description,'','']);});
-    var s5=[['ID','Name','Team Member','Status']];
+    var s4=[['ID','Name','Team Member','Status','Date','Customer Billed','Quoted Amount','PO Number','Work Description','Lead Time','Class_1','Billing #']];
+    quoted.forEach(function(e){var wo=wos.find(function(w){return w.id===e.work_order_id;});if(!wo)return;s4.push([wo.id,woN(wo),teamMember,stLabel(wo),fD(e.created_at),cN(wo),e.amount,e.po_number||wo.po_number||'',e.description,'','',sfx[wo.id]]);});
+    var s5=[['ID','Name','Team Member','Status','Billing #']];
     var creditWOs={};
     parts.filter(function(e){return e.transaction_type==='vendor_credit';}).forEach(function(e){creditWOs[e.work_order_id]=true;});
-    Object.keys(creditWOs).forEach(function(woId){var wo=wos.find(function(w){return w.id===woId;});if(!wo)return;s5.push([wo.id,woN(wo),teamMember,stLabel(wo)]);});
-    var doExport=function(){_buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5);};
+    Object.keys(creditWOs).forEach(function(woId){var wo=wos.find(function(w){return w.id===woId;});if(!wo)return;s5.push([wo.id,woN(wo),teamMember,stLabel(wo),sfx[wo.id]]);});
+    var s6rows=[];
+    hours.filter(function(e){return e.billable;}).forEach(function(e){
+      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
+      var ht=e.hours_types;
+      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(e.entry_date),'Labor',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',e.descriptor||'',(e.technicians&&e.technicians.name)||'',parseFloat(e.hours)||0,'','']);
+    });
+    parts.filter(function(e){return e.transaction_type!=='vendor_credit';}).forEach(function(e){
+      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
+      var qi=e.qbo_items; var isTruck=e.transaction_type==='truck_stock';
+      s6rows.push([isTruck?'':woNum(wo),isTruck?'':(wo?sfx[wo.id]:''),isTruck?'':cN(wo),wo.po_number||'',fD(e.transaction_date),'Material',(qi&&qi.name)||'Parts',e.description||'',(e.vendors&&e.vendors.name)||'',e.qty||0,e.sell_each||0,e.sell_total||0]);
+    });
+    s6rows.sort(function(a,b){if(a[0]<b[0])return -1;if(a[0]>b[0])return 1;if(a[5]==='Labor'&&b[5]==='Material')return -1;if(a[5]==='Material'&&b[5]==='Labor')return 1;return 0;});
+    var s6=[['WO Number','Billing #','Customer','PO Number','Date','Type','Product / Service','Description','Tech / Vendor','Qty / Hrs','Sell Each','Sell Total']].concat(s6rows);
+    var doExport=function(){_buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6);};
     if(typeof XLSX==='undefined'){
       var script=document.createElement('script');
       script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
@@ -482,13 +496,14 @@ function runExport(wos) {
   });
 }
 
-function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5){
+function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6){
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s1),'QBWO Form');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s2),'QBWO Form-Hours Entry');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s3),'QBWO Form-All Parts Services');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s4),'QBWO Form-Quoted Invoice Form');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s5),'QBWO Form-Vendor Credit Form E');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s6),'QBO Invoice Summary');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['QBWO Form-Approval Information']]),'QBWO Form-Approval Information');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['QBWO Form-Site Check-In Check']]),'QBWO Form-Site Check-In Check');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['QBWO Form-Admin Hour Entry']]),'QBWO Form-Admin Hour Entry');
@@ -496,15 +511,24 @@ function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5){
   XLSX.writeFile(wb,filename);
   sb.post('export_history',{exported_by:AppState.userEmail,wo_count:wos.length,wo_ids:woIds,filename:filename});
   var updates=wos.map(function(wo){
-    var _exportSt = getStatusByKey('batch_invoice') || getStatusByKey('invoiced');
-    var _sList = (AppState.statuses&&AppState.statuses.length)?AppState.statuses:[];
-    if (!_exportSt) _exportSt = _sList.filter(function(s){return s.category==='processed';}).sort(function(a,b){return a.sort_order-b.sort_order;})[0];
-    var _procNum = _exportSt ? _exportSt.num : 11;
-    return sb.patch('work_orders',wo.id,{status:_procNum,exported_at:now.toISOString(),exported_by:AppState.userEmail,modified_by:AppState.userEmail}).then(function(){
-      wo.status=_procNum; wo.exported_at=now.toISOString();
-      var idx=AppState.workOrders.findIndex(function(w){return w.id===wo.id;});
-      if(idx>=0) AppState.workOrders[idx]=wo;
-    });
+    var newCount=(wo.invoice_suffix_count||0)+1;
+    if(wo.multi_bill){
+      return sb.patch('work_orders',wo.id,{status:7,invoice_suffix_count:newCount,exported_at:null,exported_by:null,modified_by:AppState.userEmail}).then(function(){
+        wo.status=7;wo.invoice_suffix_count=newCount;wo.exported_at=null;wo.exported_by=null;
+        var idx=AppState.workOrders.findIndex(function(w){return w.id===wo.id;});
+        if(idx>=0)AppState.workOrders[idx]=wo;
+      });
+    } else {
+      var _exportSt = getStatusByKey('batch_invoice') || getStatusByKey('invoiced');
+      var _sList = (AppState.statuses&&AppState.statuses.length)?AppState.statuses:[];
+      if (!_exportSt) _exportSt = _sList.filter(function(s){return s.category==='processed';}).sort(function(a,b){return a.sort_order-b.sort_order;})[0];
+      var _procNum = _exportSt ? _exportSt.num : 11;
+      return sb.patch('work_orders',wo.id,{status:_procNum,invoice_suffix_count:newCount,exported_at:now.toISOString(),exported_by:AppState.userEmail,modified_by:AppState.userEmail}).then(function(){
+        wo.status=_procNum;wo.invoice_suffix_count=newCount;wo.exported_at=now.toISOString();
+        var idx=AppState.workOrders.findIndex(function(w){return w.id===wo.id;});
+        if(idx>=0)AppState.workOrders[idx]=wo;
+      });
+    }
   });
   Promise.all(updates).then(function(){
     clearSelection(); renderDesktopGrid(); loadExportHistory();
