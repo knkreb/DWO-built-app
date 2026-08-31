@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.72';
+const APP_VERSION = '4.73';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -151,7 +151,7 @@ var sb = {
 var AppState = {
   session: null, userRole: null, userEmail: null, userTechId: null, deviceMode: null, theme: 'light',
   screenStack: [], currentWO: null, editingWOId: null, batchStatusMode: false,
-  workOrders: [], customers: [], technicians: [], hoursTypes: [], qboItems: [], vendors: [], settings: {},
+  workOrders: [], customers: [], technicians: [], hoursTypes: [], qboItems: [], vendors: [], settings: {}, contactRoleTypes: [],
   hoursEntries: [], lineItems: [], quotedLines: [],
   desktopSortCol: 'created_at', desktopSortDir: 'desc', desktopSelected: {},
   filterTitle: '', filterCustomer: '', filterStatus: 'live',
@@ -431,7 +431,7 @@ function loadAllData() {
       } else {
         // Cache invalid — fetch everything fresh
         lookupPromises = Promise.all([
-          loadStatuses(), loadWoFlags(), loadTechnicians(), loadHoursTypes(), loadQBOItems(), loadSettings()
+          loadStatuses(), loadWoFlags(), loadTechnicians(), loadHoursTypes(), loadQBOItems(), loadSettings(), loadContactRoleTypes()
         ]).then(function() {
           saveCache('statuses', AppState.statuses);
           saveCache('wo_flags', AppState.woFlags);
@@ -1082,6 +1082,7 @@ function renderWODetail(wo) {
     // Action buttons
     out += '<button class="save-btn" style="min-height:48px;font-size:15px;margin-top:8px" onclick="AppState.batchStatusMode=false;openStatusSheet()">Save / Change Status</button>';
     if (isAdmin) out += '<button class="save-btn secondary" style="min-height:44px;font-size:14px" onclick="openEditWO()">Edit WO Details</button>';
+    if (wo.customer_id) out += '<button class="save-btn secondary" style="min-height:44px;font-size:14px" onclick="openReportSheet()">Send Report</button>';
   }
   document.getElementById('wo-detail-body').innerHTML = out;
   if (AppState.deviceMode === 'desktop') {
@@ -1331,6 +1332,7 @@ function renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTot
   out += '<div class="dt-action-bar">';
   out += '<button class="save-btn" onclick="AppState.batchStatusMode=false;openStatusSheet()">Save / Change Status</button>';
   if (isAdmin) out += '<button class="save-btn secondary" onclick="openEditWO()">Edit WO Details</button>';
+  if (wo.customer_id) out += '<button class="save-btn secondary" onclick="openReportSheet()">Send Report</button>';
   out += '</div>';
   return out;
 }
@@ -3870,7 +3872,8 @@ function filterCustomerRows() {
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.email||'---')+'</td>'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.phone||'---')+'</td>'
       +'<td style="padding:6px 10px"><button style="background:'+porBg+';color:'+porColor+';border:1px solid '+porColor+';border-radius:4px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer" onclick="cyclePORequired(this.getAttribute(\'data-cid\'),this.getAttribute(\'data-por\'))" data-cid="'+c.id+'" data-por="'+por+'">'+porLabel+'</button></td>'
-      +'<td style="padding:6px 8px"><button style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer" data-cid2="'+c.id+'" onclick="editCustomerRow(this.getAttribute(\'data-cid2\'))">✎ Edit</button></td>'
+      +'<td style="padding:6px 8px;display:flex;gap:4px"><button style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer" data-cid2="'+c.id+'" onclick="editCustomerRow(this.getAttribute(\'data-cid2\'))">✎ Edit</button>'
+      +'<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-ccid="'+c.id+'" onclick="openCustomerContactsSheet(this.getAttribute(\'data-ccid\'))">Contacts</button></td>'
       +'</tr>';
   }).join('');
 }
@@ -4928,11 +4931,28 @@ function renderSettings(containerId) {
     html += '<div class="form-row"><label class="form-label">Logo</label>';
     if(AppState.settings.company_logo_url){ html += '<div style="display:flex;align-items:center;gap:12px"><img src="'+escHtml(AppState.settings.company_logo_url)+'" style="height:48px;border-radius:6px;border:1px solid var(--border)"><button style="font-size:12px;padding:4px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm);color:var(--danger);background:none;cursor:pointer" onclick="saveCompanySetting(\'company_logo_url\',\'\')">Remove</button></div><br>'; }
     html += '<label style="display:inline-flex;align-items:center;gap:6px;background:var(--header-bg);color:#fff;padding:7px 14px;border-radius:var(--radius);cursor:pointer;font-size:13px;margin-top:6px">Upload Logo<input type="file" accept="image/*" style="display:none" onchange="uploadCompanyLogo(this)"></label></div>';
+    html += '<div class="form-row"><label class="form-label">Address</label><input type="text" value="'+escHtml(AppState.settings.company_address||'')+'" placeholder="123 Main St" style="max-width:300px" onblur="saveCompanySetting(\'company_address\',this.value)"></div>';
+    html += '<div class="form-row"><label class="form-label">City / State / Zip</label><input type="text" value="'+escHtml(AppState.settings.company_city_state_zip||'')+'" placeholder="City, ST 00000" style="max-width:300px" onblur="saveCompanySetting(\'company_city_state_zip\',this.value)"></div>';
+    html += '<div class="form-row"><label class="form-label">Phone</label><input type="text" value="'+escHtml(AppState.settings.company_phone||'')+'" placeholder="(555) 555-5555" style="max-width:220px" onblur="saveCompanySetting(\'company_phone\',this.value)"></div>';
+    html += '<div class="form-row"><label class="form-label">Email</label><input type="email" value="'+escHtml(AppState.settings.company_email||'')+'" placeholder="info@company.com" style="max-width:300px" onblur="saveCompanySetting(\'company_email\',this.value)"></div>';
     html += '<div class="form-row"><label class="form-label">Customer Display</label>'
       +'<select onchange="saveCompanySetting(\'customer_display_preference\',this.value)" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px">'
       +'<option value="display_name"'+((AppState.settings.customer_display_preference||'display_name')==='display_name'?' selected':'')+'>Display Name (QBO short name)</option>'
       +'<option value="name"'+((AppState.settings.customer_display_preference)==='name'?' selected':'')+'>Account Name (QBO full name)</option>'
-      +'</select></div></div></div>';
+      +'</select></div></div>';
+    html += '<div class="settings-block"><div class="settings-block-header" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Contact Roles</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body">';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Role categories assigned to customer contacts. Used to filter recipients when sending reports.</div>';
+    AppState.contactRoleTypes.forEach(function(rt){
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+        +'<input type="text" value="'+escHtml(rt.name)+'" style="font-size:13px;border:1px solid transparent;border-radius:3px;padding:2px 5px;background:transparent;flex:1" onfocus="this.style.border=\'1px solid var(--header-bg)\';this.style.background=\'var(--bg)\'" onblur="this.style.border=\'1px solid transparent\';this.style.background=\'transparent\';saveContactRoleTypeName(\''+rt.id+'\',this.value)">'
+        +'<button style="font-size:11px;padding:2px 8px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="deactivateContactRoleType(\''+rt.id+'\',\''+escHtml(rt.name)+'\')">x</button>'
+        +'</div>';
+    });
+    html += '<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
+      +'<input type="text" id="new-role-type-name" placeholder="New role (e.g. Billing)" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;flex:1">'
+      +'<button class="btn-dark" onclick="addContactRoleType()">+ Add</button>'
+      +'</div>';
+    html += '</div></div></div>';
   }
   // Timezone block
   var tzOptions = [
@@ -5528,6 +5548,124 @@ function btnDone(btn) {
   btn.style.opacity = '';
 }
 function runExport(wos){ showToast('Export engine loading...'); }
+
+// =============================================================
+// CONTACT ROLE TYPES
+// =============================================================
+function loadContactRoleTypes() {
+  return sb.get('contact_role_types','?active=eq.true&order=sort_order.asc').then(function(r){
+    if(r.ok) AppState.contactRoleTypes = r.data||[];
+  });
+}
+function saveContactRoleTypeName(id, name) {
+  if(!name.trim()) return;
+  sb.patch('contact_role_types',id,{name:name.trim(),modified_at:new Date().toISOString()}).then(function(r){
+    if(r.ok){ var rt=AppState.contactRoleTypes.find(function(x){return x.id===id;}); if(rt) rt.name=name.trim(); }
+  });
+}
+function deactivateContactRoleType(id, name) {
+  if(!confirm('Deactivate "'+name+'"?')) return;
+  sb.patch('contact_role_types',id,{active:false}).then(function(r){
+    if(r.ok){
+      AppState.contactRoleTypes=AppState.contactRoleTypes.filter(function(x){return x.id!==id;});
+      renderSettings('settings-body-desktop'); renderSettings('settings-body-mobile');
+    } else showToast('Error deactivating');
+  });
+}
+function addContactRoleType() {
+  var name=(document.getElementById('new-role-type-name')||{}).value||'';
+  if(!name.trim()){showToast('Name required');return;}
+  var sortOrder=AppState.contactRoleTypes.length+1;
+  sb.post('contact_role_types',{name:name.trim(),sort_order:sortOrder,active:true}).then(function(r){
+    if(r.ok&&r.data&&r.data.length){
+      AppState.contactRoleTypes.push(r.data[0]);
+      renderSettings('settings-body-desktop'); showToast('Role added');
+    } else showToast('Error adding role');
+  });
+}
+
+// =============================================================
+// CUSTOMER CONTACTS SHEET
+// =============================================================
+var _ccSheetCustomerId = null;
+
+function openCustomerContactsSheet(custId) {
+  _ccSheetCustomerId = custId;
+  var c = AppState.customers.find(function(x){return x.id===custId;});
+  var title = document.getElementById('cc-sheet-title');
+  if(title) title.textContent = (c?(c.display_name||c.name):'Customer')+' — Contacts';
+  var body = document.getElementById('cc-sheet-body');
+  if(body) body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px">Loading...</div>';
+  document.getElementById('customer-contacts-sheet').style.display = 'flex';
+  sb.get('customer_contacts','?customer_id=eq.'+custId+'&active=eq.true&select=*,customer_contact_roles(role_type_id)&order=name.asc').then(function(r){
+    renderCustomerContactsSheet(r.ok?(r.data||[]):[]);
+  });
+}
+function closeCustomerContactsSheet(e) {
+  if(e&&e.target!==document.getElementById('customer-contacts-sheet')) return;
+  document.getElementById('customer-contacts-sheet').style.display='none';
+  _ccSheetCustomerId=null;
+}
+function renderCustomerContactsSheet(contacts) {
+  var body=document.getElementById('cc-sheet-body'); if(!body) return;
+  var html='';
+  if(contacts.length){
+    contacts.forEach(function(ct){
+      var assignedIds=(ct.customer_contact_roles||[]).map(function(r){return r.role_type_id;});
+      html+='<div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+      html+='<div><div style="font-weight:600;font-size:14px">'+escHtml(ct.name)+'</div>';
+      html+='<div style="font-size:12px;color:var(--text-muted)">'+escHtml(ct.email)+'</div></div>';
+      html+='<button style="font-size:11px;padding:2px 8px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" data-ctid="'+ct.id+'" onclick="deactivateContact(this.getAttribute(\'data-ctid\'))">Remove</button>';
+      html+='</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+      AppState.contactRoleTypes.forEach(function(rt){
+        var on=assignedIds.indexOf(rt.id)>=0;
+        html+='<button style="font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid '+(on?'var(--header-bg)':'var(--border)')+';background:'+(on?'var(--header-bg)':'none')+';color:'+(on?'#fff':'var(--text-muted)')+';cursor:pointer" '
+          +'data-cid="'+ct.id+'" data-rid="'+rt.id+'" data-on="'+(on?'1':'0')+'" onclick="toggleContactRole(this.getAttribute(\'data-cid\'),this.getAttribute(\'data-rid\'),this.getAttribute(\'data-on\')===\'1\')">'+escHtml(rt.name)+'</button>';
+      });
+      html+='</div></div>';
+    });
+  } else {
+    html+='<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">No contacts yet — add one below</div>';
+  }
+  html+='<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">';
+  html+='<div style="font-size:13px;font-weight:600;margin-bottom:8px">Add Contact</div>';
+  html+='<input type="text" id="cc-new-name" placeholder="Name" style="width:100%;box-sizing:border-box;font-size:13px;padding:7px 8px;border:1px solid var(--border);border-radius:3px;margin-bottom:6px;background:var(--bg);color:var(--text-primary)">';
+  html+='<input type="email" id="cc-new-email" placeholder="Email address" style="width:100%;box-sizing:border-box;font-size:13px;padding:7px 8px;border:1px solid var(--border);border-radius:3px;margin-bottom:8px;background:var(--bg);color:var(--text-primary)">';
+  html+='<button class="btn-dark" style="width:100%" onclick="saveNewContact()">+ Add Contact</button>';
+  html+='</div>';
+  body.innerHTML=html;
+}
+function saveNewContact() {
+  var name=((document.getElementById('cc-new-name')||{}).value||'').trim();
+  var email=((document.getElementById('cc-new-email')||{}).value||'').trim();
+  if(!name||!email){showToast('Name and email required');return;}
+  if(!_ccSheetCustomerId) return;
+  sb.post('customer_contacts',{customer_id:_ccSheetCustomerId,name:name,email:email,active:true,created_by:AppState.userEmail,modified_by:AppState.userEmail}).then(function(r){
+    if(r.ok){showToast('Contact added');openCustomerContactsSheet(_ccSheetCustomerId);}
+    else showToast('Error saving contact');
+  });
+}
+function toggleContactRole(contactId, roleTypeId, isAssigned) {
+  if(isAssigned){
+    sb.deleteWhere('customer_contact_roles','contact_id=eq.'+contactId+'&role_type_id=eq.'+roleTypeId).then(function(r){
+      if(r.ok) openCustomerContactsSheet(_ccSheetCustomerId);
+      else showToast('Error removing role');
+    });
+  } else {
+    sb.post('customer_contact_roles',{contact_id:contactId,role_type_id:roleTypeId}).then(function(r){
+      if(r.ok) openCustomerContactsSheet(_ccSheetCustomerId);
+      else showToast('Error adding role');
+    });
+  }
+}
+function deactivateContact(contactId) {
+  if(!confirm('Remove this contact?')) return;
+  sb.patch('customer_contacts',contactId,{active:false,modified_by:AppState.userEmail}).then(function(r){
+    if(r.ok) openCustomerContactsSheet(_ccSheetCustomerId);
+    else showToast('Error removing contact');
+  });
+}
 
 // =============================================================
 // LOCATIONS PANEL
