@@ -166,7 +166,7 @@ function generateAndSendReport() {
       var parts = res[1].ok ? (res[1].data||[]) : [];
       var toAddrs = recipients.map(function(r){return r.email;});
       if (manualEmail) toAddrs.push(manualEmail);
-      var html = _buildReportHTML(wo, hours, parts, ReportState.currentType);
+      var html = _buildReportHTML(wo, hours, parts, ReportState.currentType, toAddrs);
       _openReportWindow(html, wo, toAddrs);
     });
   };
@@ -189,7 +189,7 @@ function generateAndSendReport() {
   proceed();
 }
 
-function _buildReportHTML(wo, hours, parts, type) {
+function _buildReportHTML(wo, hours, parts, type, toAddrs) {
   var s = AppState.settings;
   var logoUrl = s.company_logo_url || '';
   var companyName = escHtml(s.company_name || '');
@@ -227,7 +227,8 @@ function _buildReportHTML(wo, hours, parts, type) {
     '.tot td{font-weight:700;font-size:15px;border-top:3px solid #333;background:#efefef}',
     '.note{padding:6px 0;border-bottom:1px solid #eee;font-size:12px}',
     '.footer{margin-top:32px;padding-top:10px;border-top:1px solid #ddd;font-size:11px;color:#999;text-align:center}',
-    '@media print{@page{margin:0.6in}body{padding:0}}'
+    '.no-print{display:block}',
+    '@media print{@page{margin:0.6in}body{padding:0}.no-print{display:none!important}}'
   ].join('');
 
   var out = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+companyName+' — '+titleText+'</title><style>'+css+'</style></head><body>';
@@ -254,6 +255,9 @@ function _buildReportHTML(wo, hours, parts, type) {
   out += '<div class="meta-row"><span class="meta-label">Customer</span> '+custName+'</div>';
   if (wo.po_number) out += '<div class="meta-row"><span class="meta-label">PO Number</span> '+escHtml(wo.po_number)+'</div>';
   out += '<div class="meta-row"><span class="meta-label">Report Date</span> '+today+'</div>';
+  if (toAddrs && toAddrs.length) {
+    out += '<div class="meta-row"><span class="meta-label">To</span> '+toAddrs.map(function(a){return escHtml(a);}).join(', ')+'</div>';
+  }
   out += '</div>';
 
   if (type === 'pricing') {
@@ -340,7 +344,21 @@ function _openReportWindow(html, wo, toAddrs) {
   document.getElementById('report-sheet').style.display = 'none';
   var win = window.open('', '_blank');
   if (!win) { showToast('Allow popups to open reports'); return; }
-  win.document.write(html);
+
+  var subject = encodeURIComponent('Work Order ' + (wo.wo_number||'') + (wo.title ? ' — ' + wo.title : ''));
+  var mailtoHref = 'mailto:' + (toAddrs||[]).map(encodeURIComponent).join(',') + '?subject=' + subject;
+
+  // Inject an action bar (hidden from print) before </body>
+  var bar = '<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1e2a1e;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px;z-index:999;font-family:Arial,sans-serif;font-size:13px">'
+    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+    + (toAddrs&&toAddrs.length ? 'To: '+toAddrs.join(', ') : 'No recipients selected')
+    + '</span>'
+    + (toAddrs&&toAddrs.length ? '<a href="'+mailtoHref+'" style="background:#fff;color:#1e2a1e;padding:6px 14px;border-radius:4px;font-weight:700;text-decoration:none;white-space:nowrap">Open in Email</a>' : '')
+    + '<button onclick="window.print()" style="background:transparent;border:1px solid #fff;color:#fff;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap">Print / Save PDF</button>'
+    + '</div>'
+    + '<div class="no-print" style="height:52px"></div>';
+
+  var injected = html.replace('</body>', bar + '</body>');
+  win.document.write(injected);
   win.document.close();
-  setTimeout(function(){ win.print(); }, 600);
 }
