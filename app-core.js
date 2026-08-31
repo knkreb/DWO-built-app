@@ -3717,11 +3717,13 @@ function undoExportBatch(histId, woIds) {
   var done = 0;
   if (!woIds.length) { showToast('Nothing to undo'); return; }
   woIds.forEach(function(woId) {
-    sb.patch('work_orders', woId, {status: completedNum, exported_at: null, exported_by: null, modified_by: AppState.userEmail}).then(function(){
+    var _w = AppState.workOrders.find(function(x){return x.id===woId;});
+    var _newCount = Math.max(0, ((_w && _w.invoice_suffix_count) || 0) - 1);
+    sb.patch('work_orders', woId, {status: completedNum, exported_at: null, exported_by: null, invoice_suffix_count: _newCount, modified_by: AppState.userEmail}).then(function(){
       done++;
       if (done === woIds.length) {
         sb.patch('export_history', histId, {active: false, undone_at: new Date().toISOString(), undone_by: AppState.userEmail}).then(function(){
-          woIds.forEach(function(id){ var w=AppState.workOrders.find(function(x){return x.id===id;}); if(w){w.status=completedNum;w.exported_at=null;} });
+          woIds.forEach(function(id){ var w=AppState.workOrders.find(function(x){return x.id===id;}); if(w){w.status=completedNum;w.exported_at=null;w.invoice_suffix_count=Math.max(0,((w.invoice_suffix_count)||0)-1);} });
           renderDesktopGrid(); loadExportHistory();
           showToast('Export undone — '+woIds.length+' WOs moved back to Completed');
         });
