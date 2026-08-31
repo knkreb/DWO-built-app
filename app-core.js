@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.65';
+const APP_VERSION = '4.66';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -2335,6 +2335,7 @@ function renderExportReviewGrid() {
   html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
   html += '<thead><tr>';
   html += '<th style="text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:0 10px 8px;border-bottom:1px solid var(--border)">WO</th>';
+  html += '<th style="text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:0 10px 8px;border-bottom:1px solid var(--border)">Customer</th>';
   html += '<th style="text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:0 10px 8px;border-bottom:1px solid var(--border)">Description</th>';
   html += '<th style="text-align:left;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:0 10px 8px;border-bottom:1px solid var(--border)">Status</th>';
   html += '<th style="padding:0 10px 8px;border-bottom:1px solid var(--border)"></th>';
@@ -2348,6 +2349,7 @@ function renderExportReviewGrid() {
     var pillColor = r.status==='ready' ? 'var(--success)' : r.status==='caution' ? '#e67e22' : 'var(--danger)';
     html += '<tr style="border-bottom:1px solid var(--border)">';
     html += '<td style="padding:9px 10px;font-weight:600;white-space:nowrap">'+wo.wo_number+'</td>';
+    html += '<td style="padding:9px 10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(custName(wo))+'</td>';
     html += '<td style="padding:9px 10px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(wo.title)+'</td>';
     html += '<td style="padding:9px 10px"><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:'+pillBg+';color:'+pillColor+'">'+r.label+'</span></td>';
     html += '<td id="er-action-'+wo.id+'" style="padding:9px 10px">';
@@ -2379,7 +2381,7 @@ function renderExportReviewGrid() {
     html += '<td style="padding:9px 10px;text-align:right;font-weight:600">$'+r.total.toFixed(2)+'</td>';
     html += '<td style="padding:9px 10px;text-align:center"><button style="width:28px;height:28px;border-radius:4px;border:1px solid var(--border);background:var(--surface);cursor:pointer" onclick="toggleInvoicePreview('+idx+')">&#x1F441;</button></td>';
     html += '</tr>';
-    html += '<tr id="preview-row-'+idx+'" style="display:none"><td colspan="6" style="padding:0;border-bottom:1px solid var(--border)">'+buildInvoicePreview(r,custName)+'</td></tr>';
+    html += '<tr id="preview-row-'+idx+'" style="display:none"><td colspan="7" style="padding:0;border-bottom:1px solid var(--border)">'+buildInvoicePreview(r,custName)+'</td></tr>';
   });
 
   html += '</tbody></table>';
