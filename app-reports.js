@@ -346,7 +346,10 @@ function _openReportWindow(html, wo, toAddrs) {
   if (!win) { showToast('Allow popups to open reports'); return; }
 
   var subject = encodeURIComponent('Work Order ' + (wo.wo_number||'') + (wo.title ? ' — ' + wo.title : ''));
-  var mailtoHref = 'mailto:' + (toAddrs||[]).map(encodeURIComponent).join(',') + '?subject=' + subject;
+  var custObj = AppState.customers.find(function(c){return c.id===wo.customer_id;});
+  var custName = (wo.customers&&wo.customers.name)||(custObj&&(custObj.display_name||custObj.name))||'';
+  var bodyText = 'Please find the attached report for Work Order '+(wo.wo_number||'')+(custName?' ('+custName+')':'')+'.\r\n\r\nThank you,\r\n'+(AppState.settings.company_name||'');
+  var mailtoHref = 'mailto:' + (toAddrs||[]).join(',') + '?subject=' + subject + '&body=' + encodeURIComponent(bodyText);
 
   // Inject an action bar (hidden from print) before </body>
   var bar = '<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1e2a1e;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px;z-index:999;font-family:Arial,sans-serif;font-size:13px">'
