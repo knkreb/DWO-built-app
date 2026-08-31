@@ -477,12 +477,12 @@ function runExport(wos) {
     hours.filter(function(e){return e.billable;}).forEach(function(e){
       var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
       var ht=e.hours_types;
-      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(wo.completed_at),'Labor',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',e.descriptor||'',(e.technicians&&e.technicians.name)||'',parseFloat(e.hours)||0,'','']);
+      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(wo.completed_at||wo.modified_at),'Labor',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',e.descriptor||'',(e.technicians&&e.technicians.name)||'',parseFloat(e.hours)||0,'','']);
     });
     parts.filter(function(e){return e.transaction_type!=='vendor_credit';}).forEach(function(e){
       var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
       var qi=e.qbo_items; var isTruck=e.transaction_type==='truck_stock';
-      s6rows.push([isTruck?'':woNum(wo),isTruck?'':(wo?sfx[wo.id]:''),isTruck?'':cN(wo),wo.po_number||'',fD(wo.completed_at),'Material',(qi&&qi.name)||'Parts',e.description||'',(e.vendors&&e.vendors.name)||'',e.qty||0,e.sell_each||0,e.sell_total||0]);
+      s6rows.push([isTruck?'':woNum(wo),isTruck?'':(wo?sfx[wo.id]:''),isTruck?'':cN(wo),wo.po_number||'',fD(wo.completed_at||wo.modified_at),'Material',(qi&&qi.name)||'Parts',e.description||'',(e.vendors&&e.vendors.name)||'',e.qty||0,e.sell_each||0,e.sell_total||0]);
     });
     s6rows.sort(function(a,b){if(a[0]<b[0])return -1;if(a[0]>b[0])return 1;if(a[5]==='Labor'&&b[5]==='Material')return -1;if(a[5]==='Material'&&b[5]==='Labor')return 1;return 0;});
     var s6=[['WO Number','Billing #','Customer','PO Number','Date','Type','Product / Service','Description','Tech / Vendor','Qty / Hrs','Sell Each','Sell Total']].concat(s6rows);
