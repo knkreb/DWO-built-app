@@ -438,7 +438,7 @@ function runExport(wos) {
   var idList=woIds.join(',');
   var inFilter='?work_order_id=in.('+idList+')';
   Promise.all([
-    sb.get('hours_entries',  inFilter+'&active=eq.true&select=*,technicians(name),hours_types(name,zed_axis_name)'),
+    sb.get('hours_entries',  inFilter+'&active=eq.true&select=*,technicians(name),hours_types(name,zed_axis_name,internal_rate_key)'),
     sb.get('line_items',     inFilter+'&active=eq.true&select=*,vendors(name),qbo_items(name,zed_axis_name)'),
     sb.get('quoted_invoices',inFilter+'&active=eq.true&select=*'),
   ]).then(function(results){
@@ -475,16 +475,17 @@ function runExport(wos) {
     Object.keys(creditWOs).forEach(function(woId){var wo=wos.find(function(w){return w.id===woId;});if(!wo)return;s5.push([wo.id,woN(wo),teamMember,stLabel(wo),sfx[wo.id]]);});
     var s6rows=[];
     hours.filter(function(e){return e.billable;}).forEach(function(e){
-      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
+      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo||!wo.customer_id)return;
       var ht=e.hours_types;
-      var _sellEach=parseFloat(e.internal_rate)||0;
+      var _sellEach=parseFloat(e.internal_rate)||parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
       var _sellTotal=parseFloat(e.line_total)||(parseFloat(e.hours||0)*_sellEach);
-      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(e.entry_date),fD(wo.completed_at||wo.modified_at),'Labor',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',e.descriptor||'',(e.technicians&&e.technicians.name)||'',parseFloat(e.hours)||0,_sellEach,_sellTotal]);
+      var _desc=e.descriptor||(woNum(wo)+' - '+((e.technicians&&e.technicians.name)||''));
+      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(e.entry_date),fD(wo.completed_at||wo.modified_at),'Labor',(ht&&ht.zed_axis_name)||(ht&&ht.name)||'',_desc,(e.technicians&&e.technicians.name)||'',parseFloat(e.hours)||0,_sellEach,_sellTotal]);
     });
     parts.filter(function(e){return e.transaction_type!=='vendor_credit';}).forEach(function(e){
-      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo)return;
-      var qi=e.qbo_items; var isTruck=e.transaction_type==='truck_stock';
-      s6rows.push([isTruck?'':woNum(wo),isTruck?'':(wo?sfx[wo.id]:''),isTruck?'':cN(wo),wo.po_number||'',fD(e.transaction_date),fD(wo.completed_at||wo.modified_at),'Material',(qi&&qi.name)||'Parts',e.description||'',(e.vendors&&e.vendors.name)||'',e.qty||0,e.sell_each||0,e.sell_total||0]);
+      var wo=wos.find(function(w){return w.id===e.work_order_id;}); if(!wo||!wo.customer_id)return;
+      var qi=e.qbo_items;
+      s6rows.push([woNum(wo),sfx[wo.id],cN(wo),wo.po_number||'',fD(e.transaction_date),fD(wo.completed_at||wo.modified_at),'Material',(qi&&qi.name)||'Parts',e.description||'',(e.vendors&&e.vendors.name)||'',e.qty||0,e.sell_each||0,e.sell_total||0]);
     });
     s6rows.sort(function(a,b){if(a[0]<b[0])return -1;if(a[0]>b[0])return 1;if(a[6]==='Labor'&&b[6]==='Material')return -1;if(a[6]==='Material'&&b[6]==='Labor')return 1;return 0;});
     var s6=[['WO Number','Billing #','Customer','PO Number','Date','Completed Date','Type','Product / Service','Description','Tech / Vendor','Qty / Hrs','Sell Each','Sell Total']].concat(s6rows);
