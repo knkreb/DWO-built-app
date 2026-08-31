@@ -1022,9 +1022,8 @@ function drRenderTimeline() {
     }
     var hasEntries = stop.hoursEntries.length > 0 || stop.allocations.length > 0;
     var totalAllocMin = stop.allocations.reduce(function(s,a){return s+(parseFloat(a.hours||0)*60);},0);
-    // For billing comparison on a primary merged stop, use total merged duration so the
-    // under/over-billed badge reflects all segments, not just the first one.
-    var elapsedMin = (isMerged && stop.durationMin) ? stop.durationMin : drElapsedMin(stop);
+    // drElapsedMin reads totalDurationMin from the merge record — always correct for merged stops.
+    var elapsedMin = drElapsedMin(stop);
     var underBilled = stop.location && locType === 'customer' && totalAllocMin > 0 && totalAllocMin < elapsedMin - 5;
     var overBilled = totalAllocMin > elapsedMin + 5;
 
@@ -1474,7 +1473,8 @@ function drRenderBottomStrip(dayReview) {
   var dayStatus = dayReview ? dayReview.status : 'none';
   var totalGPSMin = DRState.stops.reduce(function(s,st){return s+drElapsedMin(st);},0);
   var totalBilledH = DRState.hoursEntries.reduce(function(s,e){return s+parseFloat(e.hours||0);},0);
-  var openItems = DRState.stops.filter(function(s){return !s.location;}).length;
+  var _sf = DRState.stopFlags || {};
+  var openItems = DRState.stops.filter(function(s){return !s.location && !_sf[s.arrivedAt];}).length;
   var minBilling = parseFloat(AppState.settings.billing_minimum_hours || 2);
 
   var html = '';
@@ -3452,7 +3452,9 @@ function mdrRenderDay(dayReview) {
   var totalGPSMin = MDRState.stops.reduce(function(s,st){return s+drElapsedMin(st);},0);
   var totalPaidH = MDRState.stops.filter(function(s){return s.isPaid!==false && s.location;}).reduce(function(s,st){return s+(drElapsedMin(st)/60);},0);
   var totalBilledH = MDRState.stops.filter(function(s){return s.isBillable&&s.location;}).reduce(function(s,st){return s+(drElapsedMin(st)/60);},0);
-  var untagged = MDRState.stops.filter(function(s){return !s.location;}).length;
+  var _mdrSf = (MDRState.currentDayReview && MDRState.currentDayReview.stop_flags) || {};
+  if (typeof _mdrSf === 'string') { try { _mdrSf = JSON.parse(_mdrSf); } catch(e) { _mdrSf = {}; } }
+  var untagged = MDRState.stops.filter(function(s){return !s.location && !_mdrSf[s.arrivedAt];}).length;
 
   var html = '';
 
@@ -3603,7 +3605,9 @@ function mdrRenderDayBottom(dayReview) {
   var dayStatus = dayReview ? dayReview.status : 'none';
   var clockIn = dayReview ? dayReview.clock_in : null;
   var clockOut = dayReview ? dayReview.clock_out : null;
-  var untagged = MDRState.stops.filter(function(s){return !s.location;}).length;
+  var _mdrSfB = (MDRState.currentDayReview && MDRState.currentDayReview.stop_flags) || {};
+  if (typeof _mdrSfB === 'string') { try { _mdrSfB = JSON.parse(_mdrSfB); } catch(e) { _mdrSfB = {}; } }
+  var untagged = MDRState.stops.filter(function(s){return !s.location && !_mdrSfB[s.arrivedAt];}).length;
   var canSubmit = untagged === 0 && dayStatus !== 'accepted' && dayStatus !== 'submitted';
   var html = '';
 
@@ -3930,37 +3934,54 @@ function mdrSaveAllocations(idx) {
   var locationId = stop.location ? stop.location.id : null;
   var descriptor = stop.location ? stop.location.name : 'GPS stop';
 
-  var saves = allocations.map(function(alloc) {
-    var ht = AppState.hoursTypes.find(function(t){return t.id===alloc.htId;});
-    var internalRate = ht ? (ht.internal_rate_key ? parseFloat(ht.internal_rate_key) : 0) : 0;
-    return sb.post('hours_entries', {
-      work_order_id: alloc.woId,
-      tech_id: tech,
-      entry_date: entryDate,
-      hours_type_id: alloc.htId || null,
-      hours: alloc.hours,
-      billable: true,
-      location_id: locationId,
-      descriptor: descriptor,
-      internal_rate: internalRate || null,
-      line_total: null,
-      created_by: AppState.userEmail || 'field',
-      modified_by: AppState.userEmail || 'field'
-    });
-  });
+  // Delete existing entries for these WO IDs on this date/tech before re-saving (prevents duplicates on edit)
+  var saveWoIds = allocations.map(function(a){ return a.woId; }).filter(Boolean);
+  var deletePromise = saveWoIds.length
+    ? sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + entryDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')&select=id')
+      .then(function(r) {
+        if (r.ok && r.data && r.data.length) {
+          return Promise.all(r.data.map(function(e){ return sb.delete('hours_entries', e.id); }));
+        }
+      })
+    : Promise.resolve();
 
-  Promise.all(saves).then(function(results) {
-    var failed = results.filter(function(r){ return !r.ok; });
-    if (failed.length) {
-      showToast('Error saving ' + failed.length + ' allocation(s)');
-      return;
-    }
-    stop.allocations = allocations;
-    mdrCloseTagSheet();
-    mdrRenderDay(null);
-    showToast('Allocations saved to work order');
-  }).catch(function(err) {
-    showToast('Save failed — check connection');
+  deletePromise.then(function() {
+    var saves = allocations.map(function(alloc) {
+      var ht = AppState.hoursTypes.find(function(t){return t.id===alloc.htId;});
+      var internalRate = ht ? (ht.internal_rate_key ? parseFloat(ht.internal_rate_key) : 0) : 0;
+      return sb.post('hours_entries', {
+        work_order_id: alloc.woId,
+        tech_id: tech,
+        entry_date: entryDate,
+        hours_type_id: alloc.htId || null,
+        hours: alloc.hours,
+        billable: true,
+        location_id: locationId,
+        descriptor: descriptor,
+        internal_rate: internalRate || null,
+        line_total: null,
+        created_by: AppState.userEmail || 'field',
+        modified_by: AppState.userEmail || 'field'
+      });
+    });
+
+    Promise.all(saves).then(function(results) {
+      var failed = results.filter(function(r){ return !r.ok; });
+      if (failed.length) {
+        showToast('Error saving ' + failed.length + ' allocation(s)');
+        return;
+      }
+      mdrCloseTagSheet();
+      showToast('Allocations saved to work order');
+      // Reload hours entries then re-render so allocations appear immediately
+      sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + entryDate + '&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc')
+        .then(function(r) {
+          MDRState.hoursEntries = (r.ok && r.data) ? r.data : [];
+          mdrRenderDay(null);
+        });
+    }).catch(function(err) {
+      showToast('Save failed — check connection');
+    });
   });
 }
 
