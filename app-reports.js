@@ -231,7 +231,7 @@ function _buildReportHTML(wo, hours, parts, type, toAddrs) {
     '@media print{@page{margin:0.6in}body{padding:0}.no-print{display:none!important}}'
   ].join('');
 
-  var out = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+companyName+' — '+titleText+'</title><style>'+css+'</style></head><body>';
+  var out = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+companyName+' — '+titleText+'</title><style>'+css+'</style></head><body><div id="rpt-body">';
 
   // Header
   out += '<div class="hdr">';
@@ -336,7 +336,7 @@ function _buildReportHTML(wo, hours, parts, type, toAddrs) {
   }
 
   out += '<div class="footer">'+companyName+' &nbsp;·&nbsp; Generated '+today+'</div>';
-  out += '</body></html>';
+  out += '</div></body></html>';
   return out;
 }
 
@@ -352,16 +352,26 @@ function _openReportWindow(html, wo, toAddrs) {
   var mailtoHref = 'mailto:' + (toAddrs||[]).join(',') + '?subject=' + subject + '&body=' + encodeURIComponent(bodyText);
 
   // Inject an action bar (hidden from print) before </body>
-  var bar = '<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1e2a1e;color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px;z-index:999;font-family:Arial,sans-serif;font-size:13px">'
-    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+  var copyScript = '<script>function _copyReport(){'
+    + 'var sel=window.getSelection();sel.removeAllRanges();'
+    + 'var r=document.createRange();r.selectNodeContents(document.getElementById("rpt-body"));sel.addRange(r);'
+    + 'var ok=document.execCommand("copy");sel.removeAllRanges();'
+    + 'var btn=document.getElementById("copy-btn");'
+    + 'btn.textContent=ok?"Copied!":"Select All then Ctrl+C";'
+    + 'setTimeout(function(){btn.textContent="Copy Report";},2200);'
+    + '}<\/script>';
+
+  var bar = '<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1e2a1e;color:#fff;display:flex;align-items:center;gap:8px;padding:10px 16px;z-index:999;font-family:Arial,sans-serif;font-size:13px">'
+    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">'
     + (toAddrs&&toAddrs.length ? 'To: '+toAddrs.join(', ') : 'No recipients selected')
     + '</span>'
-    + (toAddrs&&toAddrs.length ? '<a href="'+mailtoHref+'" style="background:#fff;color:#1e2a1e;padding:6px 14px;border-radius:4px;font-weight:700;text-decoration:none;white-space:nowrap">Open in Email</a>' : '')
-    + '<button onclick="window.print()" style="background:transparent;border:1px solid #fff;color:#fff;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap">Print / Save PDF</button>'
+    + '<button id="copy-btn" onclick="_copyReport()" style="background:#fff;color:#1e2a1e;padding:6px 14px;border-radius:4px;font-weight:700;border:none;cursor:pointer;font-size:13px;white-space:nowrap">Copy Report</button>'
+    + (toAddrs&&toAddrs.length ? '<a href="'+mailtoHref+'" style="background:transparent;border:1px solid #fff;color:#fff;padding:6px 14px;border-radius:4px;font-weight:600;text-decoration:none;white-space:nowrap;font-size:13px">Open Email</a>' : '')
+    + '<button onclick="window.print()" style="background:transparent;border:1px solid #fff;color:#fff;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap">Print / PDF</button>'
     + '</div>'
     + '<div class="no-print" style="height:52px"></div>';
 
-  var injected = html.replace('</body>', bar + '</body>');
+  var injected = html.replace('</body>', copyScript + bar + '</body>');
   win.document.write(injected);
   win.document.close();
 }
