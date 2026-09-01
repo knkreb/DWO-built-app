@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.74';
+const APP_VERSION = '4.75';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -766,11 +766,11 @@ function _goBackImpl() {
   // Top-level screens reached via hamburger/sidebar nav - no further back, header shows app title only
   var topLevel = ['screen-wo-list','screen-desktop','screen-mobile-truckstock','screen-mobile-timecard','screen-mobile-dailyreview','screen-settings-mobile'];
   if (prev === 'screen-wo-list') { showHeader(true,'ProMech',false); filterWOList(); }
-  else if (prev === 'screen-desktop') { showHeader(true,'ProMech',false); }
+  else if (prev === 'screen-desktop') { showHeader(true,'ProMech',false); if (typeof drRefreshHours === 'function') drRefreshHours(); }
   else if (prev === 'screen-wo-detail') { showHeader(true, (AppState.currentWO && AppState.currentWO.wo_number) || 'WO', true); renderWODetail(AppState.currentWO); }
   else if (prev === 'screen-mobile-truckstock') { showHeader(true,'Truck Stock',true); renderMobileTSList(); }
   else if (prev === 'screen-mobile-timecard') { showHeader(true,'Timecard',true); renderMobileTimecard(); }
-  else if (prev === 'screen-mobile-dailyreview') { showHeader(true,'Field Travel Log',true); }
+  else if (prev === 'screen-mobile-dailyreview') { showHeader(true,'Field Travel Log',true); if (typeof mdrRefreshHours === 'function') mdrRefreshHours(); }
   else if (prev === 'screen-settings-mobile') { showHeader(true,'Settings',true); }
   else { showHeader(true,'ProMech', AppState.screenStack.length>0); }
 }

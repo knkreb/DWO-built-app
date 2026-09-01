@@ -3063,18 +3063,22 @@ function drAllocSave() {
 
   if (!valid) return;
 
-  // Delete ALL existing entries for these work orders on this date before re-saving.
-  // Prior approach deleted by location_id proximity and missed entries without a location_id,
-  // causing duplicate rows to accumulate across multiple unmerged stops at the same site.
+  // Delete only entries previously saved by this stop (tracked IDs), or by location+WO on first save.
   var saveWoIds = entries.map(function(e){ return e.work_order_id; }).filter(Boolean);
-  var deletePromise = saveWoIds.length
-    ? sb.get('hours_entries', '?tech_id=eq.' + DRState.tech + '&entry_date=eq.' + DRState.selectedDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')&select=id')
+  var deletePromise;
+  if (stop._savedEntryIds && stop._savedEntryIds.length) {
+    deletePromise = Promise.all(stop._savedEntryIds.map(function(id){ return sb.delete('hours_entries', id); }));
+  } else if (saveWoIds.length) {
+    var locFilter = stop.location ? '&location_id=eq.' + stop.location.id : '&location_id=is.null';
+    deletePromise = sb.get('hours_entries', '?tech_id=eq.' + DRState.tech + '&entry_date=eq.' + DRState.selectedDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')' + locFilter + '&select=id')
       .then(function(r) {
         if (r.ok && r.data && r.data.length) {
           return Promise.all(r.data.map(function(e){ return sb.delete('hours_entries', e.id); }));
         }
-      })
-    : Promise.resolve();
+      });
+  } else {
+    deletePromise = Promise.resolve();
+  }
 
   deletePromise.then(function() {
     // Save all rows to hours_entries
@@ -3093,6 +3097,7 @@ function drAllocSave() {
     Promise.all(promises).then(function(results) {
       var allOk = results.every(function(r){ return r.ok; });
       if (allOk) {
+        stop._savedEntryIds = results.map(function(r){ return r.ok && r.data && r.data[0] ? r.data[0].id : null; }).filter(Boolean);
         stop.allocations = entries.map(function(e){
           return { custId: e._custId, customerName: e._custName, woId: e.work_order_id,
             woNumber: e._woNumber, hours: e.hours, htId: e.hours_type_id,
@@ -3133,6 +3138,26 @@ function drAllocSave() {
 function drUpdateAllocSummaryByIdx(idx) {}
 function drUpdateAllocSummary(stop) {}
 function drSaveAllocations(idx) { drAllocSave(); }
+
+function drRefreshHours() {
+  if (!DRState.selectedDate || !DRState.tech) return;
+  sb.get('hours_entries', '?tech_id=eq.' + DRState.tech + '&entry_date=eq.' + DRState.selectedDate + '&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc')
+    .then(function(r) {
+      DRState.hoursEntries = (r.ok && r.data) ? r.data : [];
+      drRenderTimeline();
+    });
+}
+
+function mdrRefreshHours() {
+  var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  var date = MDRState.selectedDate;
+  if (!tech || !date) return;
+  sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + date + '&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc')
+    .then(function(r) {
+      MDRState.hoursEntries = (r.ok && r.data) ? r.data : [];
+      mdrRenderDay(null);
+    });
+}
 
 
 function drFetchNearbyPlaces(lat, lng) {
@@ -3952,16 +3977,22 @@ function mdrSaveAllocations(idx) {
   var locationId = stop.location ? stop.location.id : null;
   var descriptor = stop.location ? stop.location.name : 'GPS stop';
 
-  // Delete existing entries for these WO IDs on this date/tech before re-saving (prevents duplicates on edit)
+  // Delete only entries previously saved by this stop (tracked IDs), or by location+WO on first save.
   var saveWoIds = allocations.map(function(a){ return a.woId; }).filter(Boolean);
-  var deletePromise = saveWoIds.length
-    ? sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + entryDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')&select=id')
+  var deletePromise;
+  if (stop._savedEntryIds && stop._savedEntryIds.length) {
+    deletePromise = Promise.all(stop._savedEntryIds.map(function(id){ return sb.delete('hours_entries', id); }));
+  } else if (saveWoIds.length) {
+    var locFilter = locationId ? '&location_id=eq.' + locationId : '&location_id=is.null';
+    deletePromise = sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + entryDate + '&work_order_id=in.(' + saveWoIds.join(',') + ')' + locFilter + '&select=id')
       .then(function(r) {
         if (r.ok && r.data && r.data.length) {
           return Promise.all(r.data.map(function(e){ return sb.delete('hours_entries', e.id); }));
         }
-      })
-    : Promise.resolve();
+      });
+  } else {
+    deletePromise = Promise.resolve();
+  }
 
   deletePromise.then(function() {
     var saves = allocations.map(function(alloc) {
@@ -3989,6 +4020,7 @@ function mdrSaveAllocations(idx) {
         showToast('Error saving ' + failed.length + ' allocation(s)');
         return;
       }
+      stop._savedEntryIds = results.map(function(r){ return r.ok && r.data && r.data[0] ? r.data[0].id : null; }).filter(Boolean);
       mdrCloseTagSheet();
       showToast('Allocations saved to work order');
       // Reload hours entries then re-render so allocations appear immediately
