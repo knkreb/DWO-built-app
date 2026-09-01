@@ -479,7 +479,7 @@ function mbToggleTask(id, done) {
   });
 }
 
-// ── End of Day ────────────────────────────────────────────────
+// ── End of Day / Exception Queue ─────────────────────────────
 function mdrGoToEndOfDay() {
   initEndOfDay();
   pushScreen('screen-end-of-day', 'End of Day');
@@ -489,115 +489,145 @@ function initEndOfDay() {
   var shell = document.getElementById('end-of-day-shell');
   if (!shell) return;
   shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">Loading...</div>';
-  var today = new Date().toISOString().slice(0,10);
-  var tech = AppState.userTechId || AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
-  var dayReview = MDRState.currentDayReview || null;
-  sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + today + '&select=hours,work_order_id,work_orders(wo_number,title)').then(function(r) {
-    var entries = (r.ok ? r.data : []) || [];
-    renderEndOfDay(shell, dayReview, entries, today, tech);
-  }).catch(function() {
-    renderEndOfDay(shell, dayReview, [], today, tech);
-  });
-}
-
-function renderEndOfDay(shell, dayReview, entries, today, tech) {
-  var clockIn = dayReview ? dayReview.clock_in : null;
-  var clockOut = dayReview ? dayReview.clock_out : null;
-  var now = new Date();
-  var onClockMin = 0;
-  if (clockIn) {
-    var ciTime = new Date(clockIn);
-    var coTime = clockOut ? new Date(clockOut) : now;
-    onClockMin = Math.round((coTime - ciTime) / 60000);
-  }
-  var billedMin = 0;
-  var woTotals = {};
-  entries.forEach(function(e) {
-    billedMin += (parseFloat(e.hours) || 0) * 60;
-    var woNum = e.work_orders ? e.work_orders.wo_number : e.work_order_id;
-    var woTitle = e.work_orders ? e.work_orders.title : '';
-    if (!woTotals[woNum]) woTotals[woNum] = { title: woTitle, min: 0 };
-    woTotals[woNum].min += (parseFloat(e.hours) || 0) * 60;
-  });
-  var gapMin = Math.max(0, onClockMin - billedMin);
-  var onClockH = (onClockMin / 60).toFixed(1);
-  var billedH = (billedMin / 60).toFixed(1);
-  var gapH = (gapMin / 60).toFixed(1);
-  var html = '<div style="padding:16px">';
-  html += '<div style="font-size:20px;font-weight:700;margin-bottom:4px">End of Day</div>';
-  html += '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">' + new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'}) + '</div>';
-  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px">';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">';
-  html += '<div><div style="font-size:22px;font-weight:700;color:var(--text-primary)">' + onClockH + 'h</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">On Clock</div></div>';
-  html += '<div><div style="font-size:22px;font-weight:700;color:#27ae60">' + billedH + 'h</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Billed</div></div>';
-  html += '<div><div style="font-size:22px;font-weight:700;color:' + (gapMin > 30 ? '#a32d2d' : 'var(--text-primary)') + '">' + gapH + 'h</div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Gap</div></div>';
-  html += '</div>';
-  if (!clockIn) html += '<div style="margin-top:10px;font-size:12px;color:#b45309;text-align:center">&#9888; No clock-in recorded today</div>';
-  html += '</div>';
-  if (Object.keys(woTotals).length) {
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">Billed today</div>';
-    Object.keys(woTotals).forEach(function(woNum) {
-      var wo = woTotals[woNum];
-      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
-      html += '<div><div style="font-size:13px;font-weight:600">' + escHtml(woNum) + (wo.title ? ' \u2014 ' + escHtml(wo.title) : '') + '</div></div>';
-      html += '<div style="font-size:14px;font-weight:700;color:#27ae60">' + (wo.min/60).toFixed(1) + 'h</div>';
-      html += '</div>';
-    });
-  } else {
-    html += '<div style="font-size:13px;color:var(--text-muted);padding:12px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center;margin-bottom:16px">No hours billed today</div>';
-  }
-  if (gapMin > 30) {
-    html += '<div style="background:#fcebeb;border:1px solid #a32d2d;border-radius:var(--radius);padding:12px 14px;margin-top:8px;margin-bottom:16px">';
-    html += '<div style="font-size:13px;font-weight:600;color:#a32d2d;margin-bottom:4px">&#9888; ' + gapH + 'h unaccounted</div>';
-    html += '<div style="font-size:12px;color:var(--text-secondary)">Review the Field Travel Log to check for unallocated GPS stops.</div>';
-    html += '<button onclick="mdrGoToFieldLog()" style="margin-top:8px;width:100%;padding:8px;border:1px solid #a32d2d;border-radius:var(--radius);color:#a32d2d;background:none;font-size:13px;font-weight:600;cursor:pointer">Review Field Travel Log</button>';
-    html += '</div>';
-  }
-  html += '<div style="margin-top:24px">';
-  if (!clockOut) {
-    html += '<button onclick="eodClockOut()" style="width:100%;padding:14px;background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);font-size:15px;font-weight:700;cursor:pointer">Clock Out &amp; Close Day</button>';
-  } else {
-    html += '<div style="text-align:center;padding:14px;background:#fcebeb;border-radius:var(--radius);font-size:14px;font-weight:600;color:#a32d2d">Clocked out at ' + drFormatTime(clockOut) + '</div>';
-  }
-  html += '</div>';
-  html += '</div>';
-  shell.innerHTML = html;
+  var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  _eodLoadQueue(shell, tech, false);
 }
 
 function initEndOfDayDesktop() {
   var body = document.getElementById('desktop-end-of-day-body');
   if (!body) return;
   body.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-muted)">Loading...</div>';
-  var today = new Date().toISOString().slice(0,10);
-  sb.get('hours_entries', '?entry_date=eq.' + today + '&select=hours,tech_id,work_order_id,work_orders(wo_number,title),technicians(name)').then(function(r) {
-    var entries = (r.ok ? r.data : []) || [];
-    var html = '<div style="max-width:700px">';
-    html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">End of Day</div>';
-    html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:24px">' + new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'}) + '</div>';
-    if (!entries.length) {
-      html += '<div style="font-size:13px;color:var(--text-muted)">No hours entries recorded today.</div>';
-    } else {
-      var byTech = {};
-      entries.forEach(function(e) {
-        var name = e.technicians ? e.technicians.name : 'Unknown';
-        if (!byTech[name]) byTech[name] = { total: 0, entries: [] };
-        byTech[name].total += parseFloat(e.hours) || 0;
-        byTech[name].entries.push(e);
-      });
-      Object.keys(byTech).forEach(function(name) {
-        html += '<div style="font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">' + escHtml(name) + ' \u2014 ' + byTech[name].total.toFixed(1) + 'h billed</div>';
-        byTech[name].entries.forEach(function(e) {
-          var wo = e.work_orders || {};
-          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between">';
-          html += '<div style="font-size:13px">' + escHtml(wo.wo_number||'') + (wo.title?' \u2014 '+escHtml(wo.title):'') + '</div>';
-          html += '<div style="font-size:13px;font-weight:600;color:#27ae60">' + parseFloat(e.hours).toFixed(1) + 'h</div>';
-          html += '</div>';
-        });
-      });
-    }
-    html += '</div>';
-    body.innerHTML = html;
+  var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  _eodLoadQueue(body, tech, true);
+}
+
+function _eodLoadQueue(container, tech, isDesktop) {
+  var today = new Date().toISOString().slice(0, 10);
+  var systemStart = AppState.settings.system_start_date || '2024-01-01';
+  Promise.all([
+    sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=lte.' + today + '&review_date=gte.' + systemStart + '&order=review_date.desc&select=*'),
+    sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=gte.' + systemStart + '&entry_date=lte.' + today + '&active=eq.true&select=hours,entry_date')
+  ]).then(function(res) {
+    var reviews = res[0].ok ? (res[0].data || []) : [];
+    var entries = res[1].ok ? (res[1].data || []) : [];
+    var billedByDate = {};
+    entries.forEach(function(e) {
+      billedByDate[e.entry_date] = (billedByDate[e.entry_date] || 0) + parseFloat(e.hours || 0);
+    });
+    var exceptions = [];
+    var weekStart = _eodWeekStart(today);
+    var weekOnClockMin = 0, weekBilledH = 0;
+
+    reviews.forEach(function(r) {
+      var date = r.review_date;
+      var status = r.status || 'none';
+      var billedH = billedByDate[date] || 0;
+      var onClockMin = 0;
+      if (r.clock_in) {
+        var ci = new Date(r.clock_in);
+        var co = r.clock_out ? new Date(r.clock_out) : (date === today ? new Date() : null);
+        if (co) onClockMin = Math.max(0, Math.round((co - ci) / 60000));
+      }
+      var onClockH = onClockMin / 60;
+      var pct = onClockH > 0 ? Math.round((billedH / onClockH) * 100) : null;
+      var gapH = Math.max(0, onClockH - billedH);
+      if (date >= weekStart && date <= today) { weekOnClockMin += onClockMin; weekBilledH += billedH; }
+      if (date === today) {
+        exceptions.push({ date: date, status: status, billedH: billedH, onClockH: onClockH, gapH: gapH, pct: pct, clockOut: r.clock_out, clockIn: r.clock_in, isToday: true });
+        return;
+      }
+      var flags = [];
+      if (!r.clock_out) flags.push('unclosed');
+      if (status === 'kicked_back') flags.push('kicked_back');
+      if (status !== 'accepted') flags.push('unreviewed');
+      if (gapH > 0.5) flags.push('gap');
+      if (flags.length) exceptions.push({ date: date, status: status, billedH: billedH, onClockH: onClockH, gapH: gapH, pct: pct, clockOut: r.clock_out, clockIn: r.clock_in, flags: flags });
+    });
+
+    Object.keys(billedByDate).forEach(function(date) {
+      if (date === today) return;
+      var hasReview = reviews.some(function(r){ return r.review_date === date; });
+      if (!hasReview && billedByDate[date] > 0) {
+        exceptions.push({ date: date, status: 'no_record', billedH: billedByDate[date], onClockH: 0, gapH: 0, pct: null, flags: ['no_record'] });
+      }
+    });
+
+    exceptions.sort(function(a, b) {
+      if (a.isToday) return -1; if (b.isToday) return 1;
+      return b.date < a.date ? -1 : b.date > a.date ? 1 : 0;
+    });
+
+    _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isDesktop);
   });
+}
+
+function _eodWeekStart(today) {
+  var d = new Date(today + 'T12:00:00');
+  var day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return d.toISOString().slice(0, 10);
+}
+
+function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isDesktop) {
+  var weekOnClockH = weekOnClockMin / 60;
+  var weekPct = weekOnClockH > 0 ? Math.round((weekBilledH / weekOnClockH) * 100) : null;
+  var pctColor = function(p) { return p >= 80 ? '#27ae60' : p >= 60 ? '#854f0b' : '#a32d2d'; };
+  var fmtDate = function(d) {
+    var p = d.split('-');
+    var dt = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+    return dt.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+  };
+
+  var html = '<div style="padding:16px' + (isDesktop ? ';max-width:700px' : '') + '">';
+  html += '<div style="font-size:20px;font-weight:700;margin-bottom:12px">Exceptions Queue</div>';
+
+  // Weekly summary bar
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:16px">';
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:.05em;white-space:nowrap">This Week</div>';
+  html += '<div style="display:flex;gap:16px;flex:1">';
+  html += '<div style="text-align:center"><div style="font-size:15px;font-weight:700">' + weekOnClockH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">On Clock</div></div>';
+  html += '<div style="text-align:center"><div style="font-size:15px;font-weight:700;color:#27ae60">' + weekBilledH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Billed</div></div>';
+  if (weekPct !== null) html += '<div style="text-align:center"><div style="font-size:15px;font-weight:700;color:' + pctColor(weekPct) + '">' + weekPct + '%</div><div style="font-size:10px;color:var(--text-muted)">Efficiency</div></div>';
+  html += '</div></div>';
+
+  if (!exceptions.length) {
+    html += '<div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:14px">&#10003; All caught up</div>';
+    html += '</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  exceptions.forEach(function(ex) {
+    var flags = ex.flags || [];
+    var isRed = flags.indexOf('kicked_back') >= 0 || flags.indexOf('unclosed') >= 0;
+    var isAmber = !isRed && flags.length > 0;
+    var borderColor = isRed ? '#e24b4a' : isAmber ? '#ef9f27' : 'var(--border)';
+    var headBg = isRed ? '#fcebeb' : isAmber ? '#faeeda' : 'var(--surface)';
+
+    html += '<div style="border:1px solid ' + borderColor + ';border-radius:var(--radius);margin-bottom:10px;overflow:hidden">';
+    html += '<div style="padding:10px 12px;background:' + headBg + ';display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+    html += '<div style="font-size:13px;font-weight:700;flex-shrink:0;margin-right:4px">' + (ex.isToday ? 'Today' : fmtDate(ex.date)) + '</div>';
+    if (flags.indexOf('kicked_back') >= 0)  html += '<span style="font-size:10px;padding:2px 7px;background:#fcebeb;color:#a32d2d;border-radius:99px;font-weight:700">Kicked Back</span>';
+    if (flags.indexOf('unclosed') >= 0)     html += '<span style="font-size:10px;padding:2px 7px;background:#fcebeb;color:#a32d2d;border-radius:99px;font-weight:700">Unclosed</span>';
+    if (flags.indexOf('unreviewed') >= 0 && flags.indexOf('kicked_back') < 0) html += '<span style="font-size:10px;padding:2px 7px;background:#faeeda;color:#854f0b;border-radius:99px;font-weight:700">Unreviewed</span>';
+    if (flags.indexOf('gap') >= 0)          html += '<span style="font-size:10px;padding:2px 7px;background:#faeeda;color:#854f0b;border-radius:99px;font-weight:700">Gap</span>';
+    if (flags.indexOf('no_record') >= 0)    html += '<span style="font-size:10px;padding:2px 7px;background:#faeeda;color:#854f0b;border-radius:99px;font-weight:700">No Record</span>';
+    if (ex.status === 'accepted')           html += '<span style="font-size:10px;padding:2px 7px;background:#eaf3de;color:#3b6d11;border-radius:99px;font-weight:700">&#10003; Accepted</span>';
+    html += '</div>';
+
+    html += '<div style="padding:8px 12px;display:flex;gap:12px;align-items:center;border-top:1px solid ' + borderColor + '">';
+    html += '<div style="text-align:center"><div style="font-size:14px;font-weight:700">' + ex.onClockH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">On Clock</div></div>';
+    html += '<div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#27ae60">' + ex.billedH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Billed</div></div>';
+    if (ex.pct !== null) html += '<div style="text-align:center"><div style="font-size:14px;font-weight:700;color:' + pctColor(ex.pct) + '">' + ex.pct + '%</div><div style="font-size:10px;color:var(--text-muted)">Billed %</div></div>';
+    if (ex.gapH > 0.5)  html += '<div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#854f0b">' + ex.gapH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Gap</div></div>';
+    html += '<div style="flex:1"></div>';
+    if (ex.isToday && !ex.clockOut) html += '<button onclick="eodClockOut()" style="font-size:12px;padding:5px 12px;background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Clock Out</button>';
+    html += '<button data-eod-date="' + ex.date + '" onclick="mdrGoToFTLDate(this.getAttribute(\'data-eod-date\'))" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);cursor:pointer">&#8594; FTL</button>';
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function eodClockOut() {

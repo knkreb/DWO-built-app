@@ -1470,9 +1470,19 @@ function drTogglePunchHistory(dayReviewId) {
 function drRenderBottomStrip(dayReview) {
   var el = document.getElementById('dr-bottom');
   if (!el) return;
-  var dayStatus = dayReview ? dayReview.status : 'none';
-  var totalGPSMin = DRState.stops.reduce(function(s,st){return s+drElapsedMin(st);},0);
+  var dayStatus = dayReview ? (dayReview.status || 'none') : 'none';
+
+  // Elapsed from clock-in/clock-out; fall back to GPS stop sum
+  var onClockMin = 0;
+  if (dayReview && dayReview.clock_in) {
+    var ciMs = new Date(dayReview.clock_in);
+    var coMs = dayReview.clock_out ? new Date(dayReview.clock_out) : new Date();
+    onClockMin = Math.round((coMs - ciMs) / 60000);
+  } else {
+    onClockMin = DRState.stops.reduce(function(s,st){return s+drElapsedMin(st);},0);
+  }
   var totalBilledH = DRState.hoursEntries.reduce(function(s,e){return s+parseFloat(e.hours||0);},0);
+  var billingPct = onClockMin > 0 ? Math.round((totalBilledH / (onClockMin/60)) * 100) : null;
   var _sf = DRState.stopFlags || {};
   var openItems = DRState.stops.filter(function(s){return !s.location && !_sf[s.arrivedAt];}).length;
   var minBilling = parseFloat(AppState.settings.billing_minimum_hours || 2);
@@ -1481,8 +1491,12 @@ function drRenderBottomStrip(dayReview) {
 
   // Stats
   html += '<div style="display:flex;gap:16px;flex:1">';
-  html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700">' + drFormatDuration(totalGPSMin) + '</div><div style="font-size:10px;color:var(--text-muted)">Elapsed</div></div>';
+  html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700">' + drFormatDuration(onClockMin) + '</div><div style="font-size:10px;color:var(--text-muted)">On Clock</div></div>';
   html += '<div style="text-align:center;border-left:1px solid var(--border);padding-left:16px"><div style="font-size:16px;font-weight:700">' + totalBilledH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Billed</div></div>';
+  if (billingPct !== null) {
+    var pctColor = billingPct >= 80 ? '#27ae60' : billingPct >= 60 ? '#854f0b' : '#a32d2d';
+    html += '<div style="text-align:center;border-left:1px solid var(--border);padding-left:16px"><div style="font-size:16px;font-weight:700;color:'+pctColor+'">' + billingPct + '%</div><div style="font-size:10px;color:var(--text-muted)">Billed %</div></div>';
+  }
   html += '<div style="text-align:center;border-left:1px solid var(--border);padding-left:16px"><div style="font-size:16px;font-weight:700' + (openItems>0?';color:#854f0b':'') + '">' + openItems + '</div><div style="font-size:10px;color:var(--text-muted)">Untagged</div></div>';
   html += '<div style="text-align:center;border-left:1px solid var(--border);padding-left:16px"><div style="font-size:16px;font-weight:700">' + DRState.stops.length + '</div><div style="font-size:10px;color:var(--text-muted)">Stops</div></div>';
   html += '</div>';
@@ -1506,8 +1520,12 @@ function drRenderBottomStrip(dayReview) {
         html += '<button onclick="drKickBack()" style="padding:7px 14px;border:1px solid #e24b4a;border-radius:var(--radius);background:var(--surface);color:#a32d2d;cursor:pointer;font-size:12px">Kick back to ' + escHtml(techName.split(' ')[0]) + '</button>';
       }
     }
-    if (!canAccept && openItems > 0) {
-      html += '<div style="font-size:11px;color:#854f0b">&#9888; ' + openItems + ' untagged stop' + (openItems>1?'s':'') + '</div>';
+    if (!canAccept) {
+      if (openItems > 0) {
+        html += '<div style="font-size:11px;color:#854f0b">&#9888; ' + openItems + ' untagged stop' + (openItems>1?'s':'') + ' — tag all stops to accept</div>';
+      } else if (dayStatus !== 'none' && dayStatus !== 'ready' && dayStatus !== 'submitted') {
+        html += '<div style="font-size:11px;color:#854f0b">&#9888; Status is "' + dayStatus + '" — cannot accept from this state</div>';
+      }
     }
   }
 
