@@ -1,37 +1,36 @@
 // gps-engine.js — GPS stop detection for ProMech
-// Version: 1.5 — overlapping geofence hold: don't flush when ping still inside current geofence
+// v1.6 — centroid-based detection: rolling window average replaces per-ping accuracy filter.
+//         Solves indoor GPS degradation (metal roofs, building interference).
+//         Departure uses centroid consistency, not per-ping accuracy gates.
+//         Unknown stop pool still uses accuracy filter to prevent noise from breaking clusters.
+// v1.5 — overlapping geofence hold
 // v1.4 — increased DEPARTURE_CONSEC_REQUIRED default from 3 to 6
 // v1.3 — consecutive good-accuracy departure rule
 // v1.2 — two-condition departure rule (accuracy + movement)
 // v1.1 — accuracy-relative geofence matching + speed sanity filter
 // v1.0 — simplified speed-based detection
-// Replaces the drDetectStops function in app-core.js
-// See app-core.js for deprecated original implementation
 
 (function() {
 
-  // ── Constants ──────────────────────────────────────────────
-  var WALKING_SPEED_MPH = 5;      // above this = moving vehicle
+  var WALKING_SPEED_MPH = 5;
   var METERS_PER_MILE = 1609.34;
   var SECONDS_PER_HOUR = 3600;
-
-  // ── Helpers ────────────────────────────────────────────────
 
   function haversineMeters(lat1, lng1, lat2, lng2) {
     var R = 6371000;
     var dLat = (lat2 - lat1) * Math.PI / 180;
     var dLng = (lng2 - lng1) * Math.PI / 180;
-    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng/2) * Math.sin(dLng/2);
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+      Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+      Math.sin(dLng/2)*Math.sin(dLng/2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
   function speedMph(ping1, ping2) {
-    var distMeters = haversineMeters(ping1.lat, ping1.lng, ping2.lat, ping2.lng);
+    var dist = haversineMeters(ping1.lat, ping1.lng, ping2.lat, ping2.lng);
     var timeSec = (new Date(ping2.timestamp) - new Date(ping1.timestamp)) / 1000;
     if (timeSec <= 0) return 0;
-    return (distMeters / METERS_PER_MILE) / (timeSec / SECONDS_PER_HOUR);
+    return (dist / METERS_PER_MILE) / (timeSec / SECONDS_PER_HOUR);
   }
 
   function isMoving(ping1, ping2) {
@@ -39,33 +38,30 @@
     return speedMph(ping1, ping2) > WALKING_SPEED_MPH;
   }
 
-  function getMatchingLoc(ping, locations, geofenceDefault) {
-    var bestMatch = null;
-    var bestDist = Infinity;
-    var pingAcc = ping.acc ? parseInt(ping.acc) : 0;
+  function computeCentroid(pings) {
+    if (!pings.length) return { lat: 0, lng: 0 };
+    var lat = 0, lng = 0;
+    pings.forEach(function(p) { lat += p.lat; lng += p.lng; });
+    return { lat: lat / pings.length, lng: lng / pings.length };
+  }
+
+  // Geofence match on a lat/lng point (no accuracy skip — used with centroids)
+  function getMatchingLoc(lat, lng, locations, geofenceDefault) {
+    var bestMatch = null, bestDist = Infinity;
     locations.forEach(function(loc) {
       if (!loc.lat || !loc.lng) return;
       var radius = parseInt(loc.geofence_radius || geofenceDefault);
-      // v1.1 — if ping accuracy is worse than geofence radius, this ping cannot
-      // reliably determine inside/outside for this location — skip it
-      if (pingAcc > radius) return;
-      var dist = haversineMeters(ping.lat, ping.lng, loc.lat, loc.lng);
-      if (dist <= radius && dist < bestDist) {
-        bestDist = dist;
-        bestMatch = loc;
-      }
+      var dist = haversineMeters(lat, lng, loc.lat, loc.lng);
+      if (dist <= radius && dist < bestDist) { bestDist = dist; bestMatch = loc; }
     });
     return bestMatch;
   }
 
-  function getAllMatchesAt(lat, lng, locations, geofenceDefault, pingAcc) {
-    var acc = pingAcc || 0;
+  function getAllMatchesAt(lat, lng, locations, geofenceDefault) {
     var matches = [];
     locations.forEach(function(loc) {
       if (!loc.lat || !loc.lng) return;
       var radius = parseInt(loc.geofence_radius || geofenceDefault);
-      // v1.1 — skip if ping accuracy worse than geofence radius
-      if (acc > radius) return;
       var dist = haversineMeters(lat, lng, loc.lat, loc.lng);
       if (dist <= radius) matches.push({ loc: loc, dist: dist });
     });
@@ -73,89 +69,65 @@
     return matches;
   }
 
-  function makeStop(firstPing, lastPing, allMatches) {
+  function makeStop(firstPing, lastPing, allMatches, centLat, centLng) {
     var bestMatch = allMatches.length ? allMatches[0].loc : null;
-    var durationMin = Math.round(
-      (new Date(lastPing.timestamp) - new Date(firstPing.timestamp)) / 60000
-    );
+    var durationMin = Math.round((new Date(lastPing.timestamp) - new Date(firstPing.timestamp)) / 60000);
     return {
       arrivedAt: firstPing.timestamp,
       leftAt: lastPing.timestamp,
-      lat: firstPing.lat,
-      lng: firstPing.lng,
+      lat: centLat,
+      lng: centLng,
       durationMin: durationMin,
-      pingCount: 1, // updated by caller
+      pingCount: 1,
       location: allMatches.length > 1 ? null : bestMatch,
-      locationMatches: allMatches.length > 1
-        ? allMatches.map(function(m) { return m.loc; })
-        : null,
+      locationMatches: allMatches.length > 1 ? allMatches.map(function(m) { return m.loc; }) : null,
       allocations: [],
       hoursEntries: [],
       isPaid: allMatches.length === 1 && bestMatch ? true : false,
-      isBillable: allMatches.length === 1 && bestMatch
-        ? (bestMatch.billable_default !== false)
-        : false
+      isBillable: allMatches.length === 1 && bestMatch ? (bestMatch.billable_default !== false) : false
     };
   }
 
-  // ── Main detection function ────────────────────────────────
+  // ── Main detection ─────────────────────────────────────────
 
   window.drDetectStops = function(pings, locations) {
     if (!pings || !pings.length) return [];
 
     var settings = (typeof AppState !== 'undefined' && AppState.settings) || {};
-    var ACC_THRESHOLD = parseInt(settings.gps_accuracy_threshold || '100');
-    var GEOFENCE_DEFAULT = parseInt(settings.geofence_radius_default || '100');
-    var KNOWN_MIN_MINUTES = parseInt(settings.gps_known_stop_min_duration || '5');
+    var ACC_THRESHOLD       = parseInt(settings.gps_accuracy_threshold       || '100');
+    var GEOFENCE_DEFAULT    = parseInt(settings.geofence_radius_default       || '100');
+    var KNOWN_MIN_MINUTES   = parseInt(settings.gps_known_stop_min_duration   || '5');
     var UNKNOWN_MIN_MINUTES = parseInt(settings.gps_unknown_stop_min_duration || '10');
-    var UNKNOWN_CLUSTER_RADIUS = 100; // meters — fixed
-    // Personal location type gets higher gap tolerance
+    var UNKNOWN_CLUSTER_RADIUS = 100;
     var PERSONAL_GAP_TOLERANCE = parseInt(settings.gps_personal_gap_tolerance || '120');
-    var KNOWN_GAP_TOLERANCE = parseInt(settings.gps_known_gap_tolerance || '30');
-    // v1.3 — consecutive good-accuracy departure rule
-    // Physical reality: accuracy is good outside buildings, poor inside (metal roofs etc)
-    // Arrival: good accuracy (outside, just drove in)
-    // On site: accuracy degrades (inside building, signal blocked)
-    // Departure: accuracy improves again (outside, clear sky)
-    // Rule: require N consecutive good-accuracy pings all outside geofence to confirm departure
-    // One or two outside pings = noise/brief wander = stay on site
-    var DEPARTURE_CONSEC_REQUIRED = parseInt(settings.gps_departure_consecutive || '6');
-    var DEPARTURE_ACC_THRESHOLD = parseInt(settings.gps_departure_accuracy_threshold || '25');
+    var KNOWN_GAP_TOLERANCE    = parseInt(settings.gps_known_gap_tolerance    || '30');
+    // v1.6 — centroid window size and departure confirmation threshold
+    var WINDOW_SIZE           = parseInt(settings.gps_centroid_window   || '5');
+    var DEPARTURE_WINDOW_COUNT = parseInt(settings.gps_departure_windows || '4');
 
-    // Filter poor accuracy pings globally
-    var goodPings = pings.filter(function(p) {
-      return !(p.acc && parseInt(p.acc) > ACC_THRESHOLD);
-    });
-    if (!goodPings.length) return [];
-
-    // v1.1 — speed sanity check: remove pings implying impossible speed (>120 mph)
-    // These are cellular/wifi position jumps, not real movement
-    var MAX_SPEED_MPH = 120;
-    goodPings = goodPings.filter(function(p, idx) {
+    // Sanity filter: remove physically impossible positions (>120 mph between consecutive pings).
+    // All remaining pings feed the centroid window for known-location matching.
+    var allPings = pings.filter(function(p, idx) {
       if (idx === 0) return true;
-      var prev = goodPings[idx - 1];
+      var prev = pings[idx - 1];
       var dist = haversineMeters(p.lat, p.lng, prev.lat, prev.lng);
       var timeSec = (new Date(p.timestamp) - new Date(prev.timestamp)) / 1000;
       if (timeSec <= 0) return true;
-      var mph = (dist / 1609.34) / (timeSec / 3600);
-      return mph <= MAX_SPEED_MPH;
+      return (dist / METERS_PER_MILE) / (timeSec / SECONDS_PER_HOUR) <= 120;
     });
+    if (!allPings.length) return [];
 
     var stops = [];
-
-    // ── PASS 1: Walk pings in time order ──────────────────────
-    // For each ping determine if moving or stationary
-    // Known geofence + stationary = stop
-    // Unknown + stationary long enough = unknown stop
-    // Moving = driving
-
     var currentLocId = null;
     var windowFirstPing = null;
     var windowLastPing = null;
     var windowPingCount = 0;
+    var windowLatSum = 0;
+    var windowLngSum = 0;
     var gapStartPing = null;
-    var unknownPings = [];
-    var consecutiveOutsideCount = 0; // v1.3 — tracks consecutive good-accuracy outside pings
+    var unknownPings = [];          // accuracy-filtered pool for unknown stop detection
+    var consecutiveOutsideCount = 0;
+    var recentPings = [];           // sliding window for centroid computation
 
     function getGapTolerance(locId) {
       var loc = locations.find(function(l) { return l.id === locId; });
@@ -170,11 +142,10 @@
         (new Date(windowLastPing.timestamp) - new Date(windowFirstPing.timestamp)) / 60000
       );
       if (durationMin >= KNOWN_MIN_MINUTES) {
-        var pingAcc = windowFirstPing.acc ? parseInt(windowFirstPing.acc) : 0;
-        var allMatches = getAllMatchesAt(
-          windowFirstPing.lat, windowFirstPing.lng, locations, GEOFENCE_DEFAULT, pingAcc
-        );
-        var stop = makeStop(windowFirstPing, windowLastPing, allMatches);
+        var cLat = windowPingCount > 0 ? windowLatSum / windowPingCount : windowFirstPing.lat;
+        var cLng = windowPingCount > 0 ? windowLngSum / windowPingCount : windowFirstPing.lng;
+        var allMatches = getAllMatchesAt(cLat, cLng, locations, GEOFENCE_DEFAULT);
+        var stop = makeStop(windowFirstPing, windowLastPing, allMatches, cLat, cLng);
         stop.pingCount = windowPingCount;
         stops.push(stop);
       }
@@ -182,8 +153,17 @@
       windowFirstPing = null;
       windowLastPing = null;
       windowPingCount = 0;
+      windowLatSum = 0;
+      windowLngSum = 0;
       gapStartPing = null;
       consecutiveOutsideCount = 0;
+    }
+
+    function addToWindow(ping) {
+      windowLastPing = ping;
+      windowPingCount++;
+      windowLatSum += ping.lat;
+      windowLngSum += ping.lng;
     }
 
     function flushUnknownPings(pingArr) {
@@ -197,15 +177,15 @@
         if (cPings.length < 2) return;
         var first = cPings[0];
         var last = cPings[cPings.length - 1];
-        var dur = Math.round(
-          (new Date(last.timestamp) - new Date(first.timestamp)) / 60000
-        );
+        var dur = Math.round((new Date(last.timestamp) - new Date(first.timestamp)) / 60000);
         if (dur < UNKNOWN_MIN_MINUTES) return;
+        var cLat = 0, cLng = 0;
+        cPings.forEach(function(p) { cLat += p.lat; cLng += p.lng; });
         stops.push({
           arrivedAt: first.timestamp,
           leftAt: last.timestamp,
-          lat: clusterLat,
-          lng: clusterLng,
+          lat: cLat / cPings.length,
+          lng: cLng / cPings.length,
           durationMin: dur,
           pingCount: cPings.length,
           location: null,
@@ -222,7 +202,6 @@
         var prev = pingArr[j - 1];
         var moving = isMoving(prev, p);
         var distFromCluster = haversineMeters(p.lat, p.lng, clusterLat, clusterLng);
-
         if (!moving && distFromCluster <= UNKNOWN_CLUSTER_RADIUS) {
           clusterPings.push(p);
         } else {
@@ -235,185 +214,172 @@
       emitCluster(clusterPings);
     }
 
-    for (var i = 0; i < goodPings.length; i++) {
-      var ping = goodPings[i];
-      var prevPing = i > 0 ? goodPings[i - 1] : null;
-      var moving = isMoving(prevPing, ping);
-      var matchedLoc = getMatchingLoc(ping, locations, GEOFENCE_DEFAULT);
-      var matchedId = matchedLoc ? matchedLoc.id : null;
-      var pingAcc = ping.acc ? parseInt(ping.acc) : 0;
+    // ── Main loop ──────────────────────────────────────────────
 
-      // v1.3 — consecutive good-accuracy departure rule
-      // Physical reality: accuracy is good outside, poor inside metal buildings
-      // Require DEPARTURE_CONSEC_REQUIRED consecutive good-accuracy pings outside
-      // the geofence before closing the stop. Single or poor-accuracy outside
-      // pings are noise — hold the window open.
+    for (var i = 0; i < allPings.length; i++) {
+      var ping = allPings[i];
+      var prevPing = i > 0 ? allPings[i - 1] : null;
+      var moving = isMoving(prevPing, ping);
+      var isGoodPing = !(ping.acc && parseInt(ping.acc) > ACC_THRESHOLD);
+
+      // Update rolling centroid window (all pings, no accuracy filter)
+      recentPings.push(ping);
+      if (recentPings.length > WINDOW_SIZE) recentPings.shift();
+      var centroid = computeCentroid(recentPings);
+
+      var matchedLoc = getMatchingLoc(centroid.lat, centroid.lng, locations, GEOFENCE_DEFAULT);
+      var matchedId = matchedLoc ? matchedLoc.id : null;
+
+      // v1.6 departure detection: N consecutive windows where centroid is outside geofence.
+      // Replaces the v1.3 per-ping accuracy gate. Poor-accuracy indoor pings no longer
+      // reset the departure counter — the centroid stays near the location until truly gone.
       if (!matchedId && currentLocId !== null) {
-        var isGoodAccuracy = pingAcc === 0 || pingAcc <= DEPARTURE_ACC_THRESHOLD;
-        if (isGoodAccuracy) {
-          consecutiveOutsideCount++;
-        } else {
-          // Poor accuracy outside — definitely noise, reset counter, stay on site
-          consecutiveOutsideCount = 0;
-          windowLastPing = ping;
-          windowPingCount++;
+        consecutiveOutsideCount++;
+        if (consecutiveOutsideCount < DEPARTURE_WINDOW_COUNT) {
+          addToWindow(ping);
           continue;
         }
-        if (consecutiveOutsideCount < DEPARTURE_CONSEC_REQUIRED) {
-          // Not enough consecutive good outside pings yet — hold window open
-          windowLastPing = ping;
-          windowPingCount++;
-          continue;
-        }
-        // DEPARTURE_CONSEC_REQUIRED consecutive good outside pings — real departure
-        // Fall through to the outside-geofence handling below
+        // Centroid consistently outside — confirmed departure. Flush immediately.
+        flushKnownWindow();
+        if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
+        // Fall through to outside-geofence handler (currentLocId now null)
       }
 
-      // Reset consecutive counter when matched inside geofence
       if (matchedId) consecutiveOutsideCount = 0;
 
       if (matchedId) {
-        // Inside a known geofence
+        // Centroid is inside a known geofence
         if (moving) {
-          // Moving through geofence — drive-past
-          // Only absorb if we already have an established window
           if (currentLocId === matchedId && windowPingCount >= 2) {
-            // Already in a stop window — movement may be within property
-            // Absorb if within gap tolerance
+            // Moving within an established window (on-property movement or brief gap)
             if (gapStartPing) {
               var gapMin = Math.round(
                 (new Date(ping.timestamp) - new Date(gapStartPing.timestamp)) / 60000
               );
               if (gapMin <= getGapTolerance(currentLocId)) {
-                windowLastPing = ping;
-                windowPingCount++;
+                addToWindow(ping);
                 gapStartPing = null;
               } else {
                 flushKnownWindow();
                 if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
               }
             } else {
-              // Moving but still in geofence — extend window (moving within property)
-              windowLastPing = ping;
-              windowPingCount++;
+              addToWindow(ping);
             }
           } else if (currentLocId !== matchedId) {
-            // v1.5 — overlapping geofence check: ping may be closer to a neighbor geofence
-            // but still inside the current one. Only flush if ping is genuinely outside current.
+            // v1.5 — overlapping geofence: centroid may be closer to neighbour but still inside current
             var pingStillInCurrent = (function() {
               if (!currentLocId) return false;
               var curLoc = locations.filter(function(l) { return l.id === currentLocId; })[0];
               if (!curLoc || !curLoc.lat || !curLoc.lng) return false;
-              var curRadius = parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
-              return haversineMeters(ping.lat, ping.lng, curLoc.lat, curLoc.lng) <= curRadius;
+              return haversineMeters(centroid.lat, centroid.lng, curLoc.lat, curLoc.lng) <=
+                parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
             })();
             if (!pingStillInCurrent) {
-              // Drive-past a different location — flush current, don't start new
               flushKnownWindow();
               if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
             }
-            // else: overlap zone — ping is inside both geofences; hold current window
           }
-          // else: moving through geofence with no established window — ignore (drive-past)
+          // Moving through geofence with no window — drive-past, ignore
         } else {
           // Stationary inside geofence
           if (matchedId === currentLocId) {
-            // Continue existing window
-            windowLastPing = ping;
-            windowPingCount++;
+            addToWindow(ping);
             gapStartPing = null;
             consecutiveOutsideCount = 0;
           } else {
-            // v1.5 — overlapping geofence check: matchedId differs because a neighbor geofence
-            // is now marginally closer, but ping may still be inside current geofence.
-            var pingStillInCurrent = (function() {
+            // v1.5 — overlapping geofence check
+            var pingStillInCurrent2 = (function() {
               if (!currentLocId) return false;
               var curLoc = locations.filter(function(l) { return l.id === currentLocId; })[0];
               if (!curLoc || !curLoc.lat || !curLoc.lng) return false;
-              var curRadius = parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
-              return haversineMeters(ping.lat, ping.lng, curLoc.lat, curLoc.lng) <= curRadius;
+              return haversineMeters(centroid.lat, centroid.lng, curLoc.lat, curLoc.lng) <=
+                parseInt(curLoc.geofence_radius || GEOFENCE_DEFAULT);
             })();
-            if (pingStillInCurrent) {
-              // Overlap zone — ping is inside both; hold the current window
-              windowLastPing = ping;
-              windowPingCount++;
+            if (pingStillInCurrent2) {
+              addToWindow(ping);
               gapStartPing = null;
               consecutiveOutsideCount = 0;
             } else {
-              // Genuinely moved to a new location
+              // Genuinely at a new known location
               flushKnownWindow();
               if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
               currentLocId = matchedId;
               windowFirstPing = ping;
               windowLastPing = ping;
               windowPingCount = 1;
+              windowLatSum = ping.lat;
+              windowLngSum = ping.lng;
               gapStartPing = null;
             }
           }
+          // Start new known window if not in one (currentLocId was null, stationary inside geofence)
+          if (!currentLocId) {
+            if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
+            currentLocId = matchedId;
+            windowFirstPing = ping;
+            windowLastPing = ping;
+            windowPingCount = 1;
+            windowLatSum = ping.lat;
+            windowLngSum = ping.lng;
+            gapStartPing = null;
+          }
         }
       } else {
-        // Outside all known geofences
+        // Centroid is outside all known geofences
         if (currentLocId !== null) {
+          // Still have an open known window — gap tolerance logic
           if (moving) {
-            // Left and moving — check gap tolerance
             if (!gapStartPing) {
               gapStartPing = ping;
             } else {
-              var gapMin = Math.round(
+              var gapMin2 = Math.round(
                 (new Date(ping.timestamp) - new Date(gapStartPing.timestamp)) / 60000
               );
-              if (gapMin > getGapTolerance(currentLocId)) {
+              if (gapMin2 > getGapTolerance(currentLocId)) {
                 flushKnownWindow();
-                unknownPings.push(ping);
+                if (isGoodPing && !moving) unknownPings.push(ping);
               }
             }
           } else {
-            // Stationary outside geofence — still in gap tolerance window?
             if (gapStartPing) {
-              var gapMin = Math.round(
+              var gapMin3 = Math.round(
                 (new Date(ping.timestamp) - new Date(gapStartPing.timestamp)) / 60000
               );
-              if (gapMin <= getGapTolerance(currentLocId)) {
-                // Still within tolerance — keep window open
-              } else {
+              if (gapMin3 > getGapTolerance(currentLocId)) {
                 flushKnownWindow();
-                unknownPings.push(ping);
+                if (isGoodPing) unknownPings.push(ping);
               }
             } else {
               gapStartPing = ping;
             }
           }
         } else {
-          // Not in any known window — accumulate for unknown stop detection
+          // No known window — accumulate good-accuracy pings for unknown stop detection
           if (!moving) {
-            unknownPings.push(ping);
+            if (isGoodPing) unknownPings.push(ping);
           } else {
-            // Moving outside geofence — flush unknown cluster
             if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
           }
         }
       }
     }
 
-    // Flush any remaining open window
+    // Flush any open window or remaining unknown pings
     if (currentLocId !== null) flushKnownWindow();
     if (unknownPings.length) flushUnknownPings(unknownPings);
 
-    // Sort chronologically
     stops.sort(function(a, b) { return new Date(a.arrivedAt) - new Date(b.arrivedAt); });
 
-    // Associate hours entries
+    // Associate hours entries with nearest stop
     var GEOFENCE_DEFAULT_ASSOC = parseInt(settings.geofence_radius_default || '100');
     if (typeof DRState !== 'undefined' && DRState.hoursEntries) {
       DRState.hoursEntries.forEach(function(entry) {
         if (!entry.location_id) return;
-        var entryLoc = (DRState.locations || []).find(function(l) {
-          return l.id === entry.location_id;
-        });
+        var entryLoc = (DRState.locations || []).find(function(l) { return l.id === entry.location_id; });
         if (!entryLoc || !entryLoc.lat || !entryLoc.lng) return;
         var assocRadius = parseInt(entryLoc.geofence_radius || GEOFENCE_DEFAULT_ASSOC) * 3;
-        var bestStop = null;
-        var bestDist = Infinity;
+        var bestStop = null, bestDist = Infinity;
         stops.forEach(function(s) {
           var dist = haversineMeters(s.lat, s.lng, entryLoc.lat, entryLoc.lng);
           if (dist < bestDist) { bestDist = dist; bestStop = s; }
@@ -425,9 +391,7 @@
     return stops;
   };
 
-  // Expose haversine for use elsewhere in app
   window.drHaversineMeters = haversineMeters;
-
-  console.log('[gps-engine] loaded v1.5');
+  console.log('[gps-engine] loaded v1.6');
 
 })();
