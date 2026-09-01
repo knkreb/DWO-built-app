@@ -1507,7 +1507,7 @@ function drRenderBottomStrip(dayReview) {
 
   // Action buttons — admin only
   if (AppState.userRole === 'admin') {
-    var canAccept = (dayStatus === 'ready' || dayStatus === 'submitted' || dayStatus === 'none') && openItems === 0;
+    var canAccept = (dayStatus === 'ready' || dayStatus === 'submitted' || dayStatus === 'none' || dayStatus === 'pending') && openItems === 0;
     var selectedTech = AppState.technicians.find(function(t){return t.id===DRState.tech;});
     var techName = selectedTech ? selectedTech.name : 'tech';
     var isOwnDay = DRState.tech === AppState.userId || (selectedTech && selectedTech.name && AppState.userEmail && selectedTech.name.toLowerCase().indexOf(AppState.userEmail.split('@')[0].toLowerCase()) >= 0);

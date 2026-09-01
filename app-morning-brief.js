@@ -622,7 +622,7 @@ function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isD
     if (ex.gapH > 0.5)  html += '<div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#854f0b">' + ex.gapH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Gap</div></div>';
     html += '<div style="flex:1"></div>';
     if (ex.isToday && !ex.clockOut) html += '<button onclick="eodClockOut()" style="font-size:12px;padding:5px 12px;background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Clock Out</button>';
-    html += '<button data-eod-date="' + ex.date + '" onclick="mdrGoToFTLDate(this.getAttribute(\'data-eod-date\'))" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);cursor:pointer">&#8594; FTL</button>';
+    html += '<button data-eod-date="' + ex.date + '" onclick="eodGoToFTL(this.getAttribute(\'data-eod-date\'))" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);cursor:pointer">&#8594; FTL</button>';
     html += '</div></div>';
   });
 
@@ -668,4 +668,16 @@ function eodConfirmClockOut(overlay) {
 function mdrGoToFieldLog() {
   initMobileDailyReview();
   pushScreen('screen-mobile-dailyreview', 'Field Travel Log');
+}
+
+function eodGoToFTL(dateStr) {
+  var isMobile = window.innerWidth < 768;
+  if (isMobile) {
+    MDRState.selectedDate = dateStr;
+    MDRState.weekStart = drGetMonday(new Date(dateStr + 'T12:00:00'));
+    initMobileDailyReview();
+    pushScreen('screen-mobile-dailyreview', 'Field Travel Log');
+  } else {
+    mbGoToFTLDate(dateStr);
+  }
 }
