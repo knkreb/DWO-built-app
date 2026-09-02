@@ -501,6 +501,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="sidebar-item" id="sidebar-invoices" onclick="desktopNav('invoices')"><span class="sidebar-icon">🧾</span> Invoices</div>
       <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
       <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
+      <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Bug Reports</div>
       <div class="sidebar-item" id="sidebar-settings" onclick="desktopNav('settings')"><span class="sidebar-icon">⚙️</span> Settings</div>
       <div class="sidebar-footer">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px" id="sidebar-user"></div>
@@ -665,6 +666,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div id="desktop-panel-endofday" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
         <div id="desktop-end-of-day-body" style="padding:24px;max-width:800px"></div>
       </div>
+      <div id="desktop-panel-bugreports" style="display:none;flex-direction:column;height:100%;overflow:hidden"></div>
       <div id="desktop-panel-settings" style="display:none;overflow-y:auto;flex:1">
         <div class="settings-body" id="settings-body-desktop"></div>
       </div>
@@ -881,7 +883,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .dr-drive-label{font-size:11px;color:var(--text-muted);white-space:nowrap}
 .dr-stop{border:1px solid var(--border);border-radius:8px;margin-bottom:4px;overflow:hidden;cursor:pointer}
 .dr-stop:hover{border-color:var(--header-bg)}
-.dr-stop.selected{border-color:var(--header-bg);border-width:2px}
+.dr-stop.selected{border-color:var(--header-bg);border-width:2px;background:rgba(26,58,92,0.06)}
 .dr-stop.has-issues{border-color:#ef9f27}
 .dr-stop.has-errors{border-color:#e24b4a}
 .dr-stop-head{padding:8px 10px;display:flex;align-items:center;gap:8px;background:var(--surface)}
@@ -976,11 +978,11 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;background:var(--surface)}
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
-<script src="gps-engine.js?v=7"></script>
+<script src="gps-engine.js?v=8"></script>
 <script src="app-morning-brief.js?v=105"></script>
-<script src="app-core.js?v=116"></script>
-<script src="field-travel-log.js?v=115"></script>
-<script src="app-morning-brief.js?v=115"></script>
+<script src="app-core.js?v=117"></script>
+<script src="field-travel-log.js?v=116"></script>
+<script src="app-morning-brief.js?v=116"></script>
 <script src="app-subforms.js?v=112"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>

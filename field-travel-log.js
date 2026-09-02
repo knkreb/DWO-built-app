@@ -1507,7 +1507,7 @@ function drRenderBottomStrip(dayReview) {
 
   // Action buttons — admin only
   if (AppState.userRole === 'admin') {
-    var canAccept = (dayStatus === 'ready' || dayStatus === 'submitted' || dayStatus === 'none' || dayStatus === 'pending') && openItems === 0;
+    var canAccept = (dayStatus === 'ready' || dayStatus === 'submitted' || dayStatus === 'none' || dayStatus === 'pending');
     var selectedTech = AppState.technicians.find(function(t){return t.id===DRState.tech;});
     var techName = selectedTech ? selectedTech.name : 'tech';
     var isOwnDay = DRState.tech === AppState.userId || (selectedTech && selectedTech.name && AppState.userEmail && selectedTech.name.toLowerCase().indexOf(AppState.userEmail.split('@')[0].toLowerCase()) >= 0);
@@ -1515,16 +1515,16 @@ function drRenderBottomStrip(dayReview) {
     if (dayStatus === 'accepted') {
       html += '<button onclick="drReopenDay()" style="padding:7px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:12px">Re-open</button>';
     } else {
-      html += '<button onclick="drAcceptDay()" ' + (!canAccept?'disabled':'') + ' style="padding:7px 14px;background:' + (canAccept?'#27ae60':'var(--surface)') + ';color:' + (canAccept?'#fff':'var(--text-muted)') + ';border:1px solid ' + (canAccept?'#27ae60':'var(--border)') + ';border-radius:var(--radius);cursor:' + (canAccept?'pointer':'not-allowed') + ';font-size:12px;font-weight:600">Accept day</button>';
-      if (!isOwnDay) {
-        html += '<button onclick="drKickBack()" style="padding:7px 14px;border:1px solid #e24b4a;border-radius:var(--radius);background:var(--surface);color:#a32d2d;cursor:pointer;font-size:12px">Kick back to ' + escHtml(techName.split(' ')[0]) + '</button>';
-      }
-    }
-    if (!canAccept) {
-      if (openItems > 0) {
-        html += '<div style="font-size:11px;color:#854f0b">&#9888; ' + openItems + ' untagged stop' + (openItems>1?'s':'') + ' — tag all stops to accept</div>';
-      } else if (dayStatus !== 'none' && dayStatus !== 'ready' && dayStatus !== 'submitted') {
+      if (canAccept && openItems === 0) {
+        html += '<button onclick="drAcceptDay()" style="padding:7px 14px;background:#27ae60;color:#fff;border:1px solid #27ae60;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600">Accept day</button>';
+      } else if (canAccept && openItems > 0) {
+        html += '<div style="font-size:11px;color:#854f0b;margin-bottom:4px">&#9888; ' + openItems + ' untagged stop' + (openItems>1?'s':'') + ' — review before accepting</div>';
+        html += '<button onclick="drAcceptDay()" style="padding:7px 14px;background:#854f0b;color:#fff;border:1px solid #854f0b;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600">Accept Anyway</button>';
+      } else {
         html += '<div style="font-size:11px;color:#854f0b">&#9888; Status is "' + dayStatus + '" — cannot accept from this state</div>';
+      }
+      if (!isOwnDay && canAccept) {
+        html += '<button onclick="drKickBack()" style="padding:7px 14px;border:1px solid #e24b4a;border-radius:var(--radius);background:var(--surface);color:#a32d2d;cursor:pointer;font-size:12px">Kick back to ' + escHtml(techName.split(' ')[0]) + '</button>';
       }
     }
   }
@@ -2148,6 +2148,12 @@ function tbCloseModal() {
   drRenderTimeline();
 }
 
+function tbOpenWorkOrder(woId) {
+  if (!woId) return;
+  tbCloseModal();
+  openWODetail(woId);
+}
+
 function tbUpdateBalance() {
   var gpsEl = document.getElementById('tb-bal-gps');
   var allocEl = document.getElementById('tb-bal-alloc');
@@ -2374,12 +2380,7 @@ function tbBuildWOBlock(alloc, blockIdx) {
   html += '<button onclick="tbRemoveBlock(' + blockIdx + ')" style="background:none;border:none;color:var(--danger,#e24b4a);cursor:pointer;font-size:16px;margin-left:8px">&times;</button>';
   html += '</div>';
   html += '<div class="tb-wo-body">';
-  // Parts & Services collapsed
-  var psKey = 'tb-ps-' + blockIdx;
-  html += '<div onclick="tbTogglePS(\'' + psKey + '\',\'' + (alloc.woId||'') + '\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-secondary);margin-bottom:4px">';
-  html += '<i class="ti ti-chevron-right" id="' + psKey + '-icon" aria-hidden="true"></i>';
-  html += '<span>Parts &amp; Services</span></div>';
-  html += '<div id="' + psKey + '" style="display:none"></div>';
+  html += '<button onclick="tbOpenWorkOrder(\'' + escHtml(alloc.woId||'') + '\')" style="font-size:12px;padding:4px 12px;border:1px solid var(--header-bg);border-radius:var(--radius-sm,4px);background:var(--surface);color:var(--header-bg);cursor:pointer">Open Work Order &#x2197;</button>';
   html += '</div></div>';
   return html;
 }

@@ -1,4 +1,6 @@
 // gps-engine.js — GPS stop detection for ProMech
+// v1.7 — Bug fixes: (1) departure-pending pings no longer corrupt window centroid;
+//         (2) arrival window backdates to first ping physically inside geofence.
 // v1.6 — centroid-based detection: rolling window average replaces per-ping accuracy filter.
 //         Solves indoor GPS degradation (metal roofs, building interference).
 //         Departure uses centroid consistency, not per-ping accuracy gates.
@@ -236,7 +238,6 @@
       if (!matchedId && currentLocId !== null) {
         consecutiveOutsideCount++;
         if (consecutiveOutsideCount < DEPARTURE_WINDOW_COUNT) {
-          addToWindow(ping);
           continue;
         }
         // Centroid consistently outside — confirmed departure. Flush immediately.
@@ -317,7 +318,20 @@
           if (!currentLocId) {
             if (unknownPings.length) { flushUnknownPings(unknownPings); unknownPings = []; }
             currentLocId = matchedId;
-            windowFirstPing = ping;
+            // Backdate arrival: earliest ping in recent window already inside this geofence
+            var arrivalLoc = locations.find(function(l){ return l.id === matchedId; });
+            var arrivedFirst = ping;
+            if (arrivalLoc && arrivalLoc.lat && arrivalLoc.lng) {
+              var arrRadius = parseInt(arrivalLoc.geofence_radius || GEOFENCE_DEFAULT);
+              for (var ri = 0; ri < recentPings.length; ri++) {
+                var rp = recentPings[ri];
+                if (haversineMeters(rp.lat, rp.lng, arrivalLoc.lat, arrivalLoc.lng) <= arrRadius) {
+                  arrivedFirst = rp;
+                  break;
+                }
+              }
+            }
+            windowFirstPing = arrivedFirst;
             windowLastPing = ping;
             windowPingCount = 1;
             windowLatSum = ping.lat;
@@ -392,6 +406,6 @@
   };
 
   window.drHaversineMeters = haversineMeters;
-  console.log('[gps-engine] loaded v1.6');
+  console.log('[gps-engine] loaded v1.7');
 
 })();

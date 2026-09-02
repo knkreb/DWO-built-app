@@ -162,7 +162,7 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
-    loadBugReports('mb-bug-reports-shell');
+    loadBugReports('mb-bug-reports-shell', 'dashboard');
   }
 }
 
@@ -285,7 +285,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
-    loadBugReports('mb-dt-bug-reports-shell');
+    loadBugReports('mb-dt-bug-reports-shell', 'dashboard');
   }
 }
 
