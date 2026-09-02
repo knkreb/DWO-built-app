@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.76';
+const APP_VERSION = '4.77';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -4908,7 +4908,6 @@ function renderSettings(containerId) {
   var activeTab = localStorage.getItem('dwo_settings_tab') || 'general';
   var defaultTechId = localStorage.getItem('dwo_default_tech') || '';
   var tabs = [{id:'general',label:'General'},{id:'workorders',label:'Work Orders'},{id:'billing',label:'Billing'},{id:'locations',label:'Locations'},{id:'gps',label:'GPS'},{id:'data',label:'Data'},{id:'system',label:'System'}];
-  if(AppState.userRole==='admin') tabs.push({id:'feedback',label:'Bug Reports'});
   var html = '<div class="settings-tab-bar">';
   tabs.forEach(function(t){ html += '<div class="settings-tab'+(t.id===activeTab?' active':'')+'" onclick="switchSettingsTab(\''+t.id+'\')">'+t.label+'</div>'; });
   html += '</div>';
@@ -5191,17 +5190,7 @@ function renderSettings(containerId) {
   html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Future: integrations, Twilio, RLS policies, locking controls.</div>';
   html += '</div></div></div>';
 
-  // FEEDBACK (admin only)
-  if(AppState.userRole==='admin'){
-    html += '<div class="settings-tab-content'+(activeTab==='feedback'?' active':'')+'" id="stab-feedback">';
-    html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Bug Reports</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
-    html += '<div id="bug-reports-list"><div style="text-align:center;color:var(--text-muted);padding:20px">Loading...</div></div>';
-    html += '</div></div>';
-    html += '</div>';
-  }
-
   el.innerHTML = html;
-  if(AppState.userRole==='admin' && activeTab==='feedback') loadBugReports(containerId);
 }
 
 function switchSettingsTab(tabId) {
@@ -5212,10 +5201,6 @@ function switchSettingsTab(tabId) {
   document.querySelectorAll('.settings-tab-content').forEach(function(c){
     c.classList.toggle('active', c.id==='stab-'+tabId);
   });
-  if(tabId==='feedback') {
-    var containerId = document.getElementById('settings-body-desktop') ? 'settings-body-desktop' : 'settings-body-mobile';
-    loadBugReports(containerId);
-  }
 }
 
 function saveNewQBOItem() {
@@ -5649,47 +5634,55 @@ function submitBugReport() {
   });
 }
 
-// Admin — load and render bug reports inside settings panel
-function loadBugReports(containerId) {
-  var list = document.getElementById('bug-reports-list');
+// Admin — load and render bug reports into the daily dashboard shell
+// targetId: element id of the shell div to render into
+function loadBugReports(targetId) {
+  var list = document.getElementById(targetId || 'mb-dt-bug-reports-shell');
   if(!list) return;
-  list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px">Loading...</div>';
+  list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px">Loading reports...</div>';
   sb.get('bug_reports','?order=created_at.desc&limit=100').then(function(r){
-    if(!r.ok){ list.innerHTML = '<div style="color:var(--danger);padding:12px">Error loading reports</div>'; return; }
+    if(!r.ok){ list.innerHTML = '<div style="color:var(--danger);padding:12px;font-size:13px">Error loading reports</div>'; return; }
     var rows = r.data || [];
-    if(!rows.length){ list.innerHTML = '<div style="color:var(--text-muted);padding:12px">No bug reports yet.</div>'; return; }
     var statusColors = {open:'var(--danger)',in_progress:'#f59e0b',resolved:'var(--text-muted)'};
     var statusLabels = {open:'Open',in_progress:'In Progress',resolved:'Resolved'};
-    var html = '';
+    var html = '<div style="font-size:16px;font-weight:700;margin-bottom:12px">Bug Reports</div>';
+    if(!rows.length){
+      html += '<div style="font-size:13px;color:var(--text-muted);padding:12px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No bug reports yet</div>';
+      list.innerHTML = html;
+      return;
+    }
     rows.forEach(function(rep){
       var sc = statusColors[rep.status] || 'var(--text-muted)';
-      html += '<div class="settings-block" style="margin-bottom:8px">';
-      html += '<div class="settings-block-header" onclick="toggleSettingsBlock(this)" style="display:flex;align-items:center;gap:8px">';
-      html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+sc+';flex-shrink:0"></span>';
-      html += '<span class="settings-block-title" style="flex:1;font-size:13px">'+escHtml(rep.tech_name||'Unknown')+' &mdash; '+fmtDate(rep.report_date)+'</span>';
-      html += '<span style="font-size:11px;color:'+sc+';margin-right:6px">'+escHtml(statusLabels[rep.status]||rep.status)+'</span>';
-      html += '<span class="settings-block-chevron">v</span></div>';
-      html += '<div class="settings-block-body">';
-      html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">v'+escHtml(rep.app_version||'?')+(rep.screen_context?' &nbsp;·&nbsp; '+escHtml(rep.screen_context):'')+'</div>';
-      html += '<div style="white-space:pre-wrap;font-size:13px;margin-bottom:10px;padding:8px;background:var(--input-bg);border-radius:var(--radius-sm)">'+escHtml(rep.description)+'</div>';
-      html += '<div style="margin-bottom:8px"><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Status</label>';
-      html += '<select onchange="updateBugReportStatus(\''+rep.id+'\',this.value)" style="font-size:13px">';
+      var isResolved = rep.status === 'resolved';
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid '+sc+';border-radius:0 var(--radius) var(--radius) 0;padding:10px 14px;margin-bottom:8px'+(isResolved?';opacity:0.6':'')+'">';
+      html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">';
+      html += '<div style="flex:1">';
+      html += '<div style="font-size:13px;font-weight:600">'+escHtml(rep.tech_name||'Unknown')+'</div>';
+      html += '<div style="font-size:11px;color:var(--text-muted)">'+fmtDate(rep.report_date)+' &nbsp;·&nbsp; v'+escHtml(rep.app_version||'?')+(rep.screen_context?' &nbsp;·&nbsp; '+escHtml(rep.screen_context):'')+'</div>';
+      html += '</div>';
+      html += '<select onchange="updateBugReportStatus(\''+rep.id+'\',this.value,\''+list.id+'\')" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">';
       ['open','in_progress','resolved'].forEach(function(s){
         html += '<option value="'+s+'"'+(rep.status===s?' selected':'')+'>'+statusLabels[s]+'</option>';
       });
-      html += '</select></div>';
-      html += '<div style="margin-bottom:8px"><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Admin Notes</label>';
-      html += '<textarea id="br-notes-'+rep.id+'" style="width:100%;font-size:13px;min-height:60px;resize:vertical;box-sizing:border-box" placeholder="Internal notes...">'+escHtml(rep.admin_notes||'')+'</textarea>';
-      html += '<button onclick="saveBugReportNotes(\''+rep.id+'\')" style="margin-top:4px;font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;background:var(--card-bg)">Save Notes</button></div>';
-      html += '<button onclick="deleteBugReport(\''+rep.id+'\')" style="font-size:12px;padding:4px 12px;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);cursor:pointer;background:none">Delete</button>';
-      html += '</div></div>';
+      html += '</select>';
+      html += '</div>';
+      html += '<div style="white-space:pre-wrap;font-size:13px;margin-bottom:8px;color:var(--text)">'+escHtml(rep.description)+'</div>';
+      html += '<div style="display:flex;align-items:center;gap:6px">';
+      html += '<input id="br-notes-'+rep.id+'" type="text" value="'+escHtml(rep.admin_notes||'')+'" placeholder="Admin note..." style="flex:1;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--text)">';
+      html += '<button onclick="saveBugReportNotes(\''+rep.id+'\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;background:var(--card-bg);white-space:nowrap">Save</button>';
+      html += '<button onclick="deleteBugReport(\''+rep.id+'\',\''+list.id+'\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);cursor:pointer;background:none">Del</button>';
+      html += '</div>';
+      html += '</div>';
     });
     list.innerHTML = html;
   });
 }
-function updateBugReportStatus(id, status) {
+function updateBugReportStatus(id, status, targetId) {
   sb.patch('bug_reports',id,{status:status,modified_at:new Date().toISOString(),modified_by:AppState.userEmail||null})
-    .then(function(r){ if(r.ok) showToast('Status updated'); else showToast('Error updating status'); });
+    .then(function(r){
+      if(r.ok){ showToast('Status updated'); loadBugReports(targetId); }
+      else showToast('Error updating status');
+    });
 }
 function saveBugReportNotes(id) {
   var ta = document.getElementById('br-notes-'+id);
@@ -5697,10 +5690,10 @@ function saveBugReportNotes(id) {
   sb.patch('bug_reports',id,{admin_notes:ta.value.trim()||null,modified_at:new Date().toISOString(),modified_by:AppState.userEmail||null})
     .then(function(r){ if(r.ok) showToast('Notes saved'); else showToast('Error saving notes'); });
 }
-function deleteBugReport(id) {
+function deleteBugReport(id, targetId) {
   if(!confirm('Delete this bug report? This cannot be undone.')) return;
   sb.delete('bug_reports',id).then(function(r){
-    if(r.ok){ showToast('Report deleted'); loadBugReports(); }
+    if(r.ok){ showToast('Report deleted'); loadBugReports(targetId); }
     else showToast('Error deleting report');
   });
 }

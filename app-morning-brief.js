@@ -133,6 +133,12 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
 
   // Tasks — container populated by tasksRenderSection in app-tasks.js
   html += '<div id="mb-tasks-shell" style="margin-bottom:16px"></div>';
+
+  // Bug reports — admin only, loaded after render
+  if (AppState.userRole === 'admin') {
+    html += '<div id="mb-bug-reports-shell" style="margin-bottom:16px"></div>';
+  }
+
   html += '</div>';
   shell.innerHTML = html;
 
@@ -152,6 +158,11 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
   var taskShell = document.getElementById('mb-tasks-shell');
   if (taskShell && typeof tasksRenderSection === 'function') {
     tasksRenderSection(taskShell, dateTasks, locTasks, tech, true);
+  }
+
+  // Populate bug reports section (admin only)
+  if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
+    loadBugReports('mb-bug-reports-shell');
   }
 }
 
@@ -248,6 +259,11 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   // Tasks — container populated by tasksRenderSection in app-tasks.js
   html += '<div id="mb-dt-tasks-shell" style="margin:24px 0 0"></div>';
 
+  // Bug reports — admin only, loaded after render
+  if (AppState.userRole === 'admin') {
+    html += '<div id="mb-dt-bug-reports-shell" style="margin:24px 0 0"></div>';
+  }
+
   html += '</div>';
   body.innerHTML = html;
 
@@ -265,6 +281,11 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   if (taskShell && typeof tasksRenderSection === 'function') {
     var tech = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
     tasksRenderSection(taskShell, dateTasks, locTasks, tech, false);
+  }
+
+  // Populate bug reports section (admin only)
+  if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
+    loadBugReports('mb-dt-bug-reports-shell');
   }
 }
 
