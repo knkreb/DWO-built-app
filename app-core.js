@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.78';
+const APP_VERSION = '4.79';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -5676,43 +5676,75 @@ function loadBugReports(targetId, mode) {
 }
 
 function _renderBugReportsDashboard(list, rows, statuses) {
-  var html = '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Bug Reports</div>';
-  if(!rows.length){
-    html += '<div style="font-size:12px;color:var(--text-muted)">No reports</div>';
-    list.innerHTML = html;
+  // Terminal status = highest sort_order (e.g. "Completed")
+  var terminalStatus = null;
+  if (statuses.length) {
+    terminalStatus = statuses.reduce(function(a, b) { return b.sort_order > a.sort_order ? b : a; });
+  }
+
+  var activeRows = rows.filter(function(r) {
+    return !terminalStatus || r.status_id !== terminalStatus.id;
+  });
+
+  var badge = document.getElementById('mb-badge-bugreports');
+  if (badge) badge.textContent = activeRows.length + ' report' + (activeRows.length !== 1 ? 's' : '');
+
+  if (!activeRows.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No active reports</div>';
     return;
   }
-  // Status banner
+
+  // Count by status name for pills
   var counts = {};
-  rows.forEach(function(r){
+  activeRows.forEach(function(r) {
     var name = (r.bug_report_statuses && r.bug_report_statuses.name) || 'Unknown';
-    counts[name] = (counts[name]||0) + 1;
+    counts[name] = (counts[name] || 0) + 1;
   });
-  var bannerParts = Object.keys(counts).map(function(n){ return counts[n] + ' ' + n; });
-  html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">'+escHtml(bannerParts.join(' · '))+'</div>';
-  // Compact list
-  rows.forEach(function(rep){
+
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  html += '<span class="mbr-pill mbr-pill-active" data-status="" onclick="mbBrFilterStatus(\'\',this)" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid var(--border);background:var(--header-bg);color:#fff;cursor:pointer">All (' + activeRows.length + ')</span>';
+  statuses.forEach(function(s) {
+    if (terminalStatus && s.id === terminalStatus.id) return;
+    var cnt = counts[s.name] || 0;
+    if (cnt) html += '<span class="mbr-pill" data-status="' + s.id + '" onclick="mbBrFilterStatus(\'' + s.id + '\',this)" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);cursor:pointer">' + escHtml(s.name) + ' (' + cnt + ')</span>';
+  });
+  html += '</div>';
+
+  html += '<div id="mbr-list">';
+  activeRows.forEach(function(rep) {
     var st = rep.bug_report_statuses || {};
     var stColor = st.color || 'var(--text-muted)';
-    var uid = 'brd-'+rep.id;
-    html += '<div style="border:1px solid var(--border);border-left:3px solid '+stColor+';border-radius:0 var(--radius) var(--radius) 0;margin-bottom:4px;overflow:hidden">';
-    html += '<div onclick="_brToggle(\''+uid+'\')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;background:var(--surface)">';
-    html += '<span style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(rep.description||'')+'</span>';
-    html += '<span style="font-size:11px;color:'+stColor+';flex-shrink:0;font-weight:600">'+escHtml(st.name||'')+'</span>';
+    var uid = 'brd-' + rep.id;
+    html += '<div class="mbr-row" data-status-id="' + (rep.status_id || '') + '" style="border:1px solid var(--border);border-left:3px solid ' + stColor + ';border-radius:0 var(--radius) var(--radius) 0;margin-bottom:4px;overflow:hidden">';
+    html += '<div onclick="_brToggle(\'' + uid + '\')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;background:var(--surface)">';
+    html += '<span style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(rep.description || '') + '</span>';
+    html += '<span style="font-size:11px;color:' + stColor + ';flex-shrink:0;font-weight:600">' + escHtml(st.name || '') + '</span>';
     html += '</div>';
-    html += '<div id="'+uid+'" style="display:none;padding:10px 12px;background:var(--bg);border-top:1px solid var(--border)">';
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">'+escHtml(rep.tech_name||'Unknown')+' &nbsp;·&nbsp; '+fmtDate(rep.report_date)+' &nbsp;·&nbsp; v'+escHtml(rep.app_version||'?')+(rep.screen_context?' &nbsp;·&nbsp; '+escHtml(rep.screen_context):'')+'</div>';
-    html += '<div style="white-space:pre-wrap;font-size:12px;margin-bottom:8px">'+escHtml(rep.description||'')+'</div>';
+    html += '<div id="' + uid + '" style="display:none;padding:10px 12px;background:var(--bg);border-top:1px solid var(--border)">';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">' + escHtml(rep.tech_name || 'Unknown') + ' &nbsp;·&nbsp; ' + fmtDate(rep.report_date) + ' &nbsp;·&nbsp; v' + escHtml(rep.app_version || '?') + (rep.screen_context ? ' &nbsp;·&nbsp; ' + escHtml(rep.screen_context) : '') + '</div>';
+    html += '<div style="white-space:pre-wrap;font-size:12px;margin-bottom:8px">' + escHtml(rep.description || '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px">';
-    if(AppState.bugReportStatuses && AppState.bugReportStatuses.length){
-      html += '<select onchange="updateBugReportStatus(\''+rep.id+'\',this.value,null,true)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg)">';
-      AppState.bugReportStatuses.forEach(function(s){ html += '<option value="'+s.id+'"'+(rep.status_id===s.id?' selected':'')+'>'+escHtml(s.name)+'</option>'; });
+    if (AppState.bugReportStatuses && AppState.bugReportStatuses.length) {
+      html += '<select onchange="updateBugReportStatus(\'' + rep.id + '\',this.value,null,true)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:3px;background:var(--bg)">';
+      AppState.bugReportStatuses.forEach(function(s) { html += '<option value="' + s.id + '"' + (rep.status_id === s.id ? ' selected' : '') + '>' + escHtml(s.name) + '</option>'; });
       html += '</select>';
     }
     html += '<a href="#" onclick="event.preventDefault();desktopNav(\'bugreports\')" style="font-size:12px;color:var(--header-bg)">View in Bug Reports &#x2192;</a>';
     html += '</div></div></div>';
   });
+  html += '</div>';
   list.innerHTML = html;
+}
+
+function mbBrFilterStatus(statusId, pill) {
+  document.querySelectorAll('.mbr-pill').forEach(function(p) {
+    p.style.background = 'var(--surface)';
+    p.style.color = '';
+  });
+  if (pill) { pill.style.background = 'var(--header-bg)'; pill.style.color = '#fff'; }
+  document.querySelectorAll('.mbr-row').forEach(function(r) {
+    r.style.display = (!statusId || r.dataset.statusId === statusId) ? '' : 'none';
+  });
 }
 
 function _brToggle(uid) {

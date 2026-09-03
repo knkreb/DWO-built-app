@@ -166,6 +166,36 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
   }
 }
 
+// ── Dashboard section card helpers ───────────────────────────
+function mbSectionCardStart(sectionId, title, badge, actionsHtml) {
+  var expanded = false;
+  try { expanded = localStorage.getItem('dwo_mb_sec_' + sectionId) === '1'; } catch(e) {}
+  var h = '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden">';
+  h += '<div onclick="mbToggleSection(\'' + sectionId + '\')" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);cursor:pointer;user-select:none;border-bottom:1px solid var(--border)">';
+  h += '<span style="font-size:14px;font-weight:700">' + title + '</span>';
+  h += '<span style="font-size:11px;padding:1px 8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text-muted)">' + badge + '</span>';
+  h += '<div style="flex:1"></div>';
+  if (actionsHtml) h += actionsHtml;
+  h += '<span id="mb-chevron-' + sectionId + '" style="font-size:11px;color:var(--text-muted);margin-left:8px;display:inline-block;transition:transform 0.15s' + (expanded ? ';transform:rotate(180deg)' : '') + '">&#9662;</span>';
+  h += '</div>';
+  h += '<div id="mb-sec-' + sectionId + '" data-expanded="' + (expanded ? '1' : '0') + '" style="' + (expanded ? '' : 'max-height:280px;overflow-y:auto;') + 'padding:12px 14px">';
+  return h;
+}
+
+function mbSectionCardEnd() { return '</div></div>'; }
+
+function mbToggleSection(id) {
+  var body = document.getElementById('mb-sec-' + id);
+  var chevron = document.getElementById('mb-chevron-' + id);
+  if (!body) return;
+  var expanded = body.dataset.expanded === '1';
+  body.dataset.expanded = expanded ? '0' : '1';
+  body.style.maxHeight = expanded ? '280px' : '';
+  body.style.overflowY = expanded ? 'auto' : '';
+  if (chevron) chevron.style.transform = expanded ? '' : 'rotate(180deg)';
+  try { localStorage.setItem('dwo_mb_sec_' + id, expanded ? '0' : '1'); } catch(e) {}
+}
+
 // ── Morning Brief — Desktop ───────────────────────────────────
 function initMorningBriefDesktop() {
   var body = document.getElementById('desktop-morning-brief-body');
@@ -190,10 +220,13 @@ function initMorningBriefDesktop() {
 
 function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut) {
   missingClockOut = missingClockOut || [];
+  dispatches = (dispatches || []).filter(function(d){
+    return !(d.work_orders && isProcessedStatus(d.work_orders.status));
+  });
   var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
   var html = '<div style="max-width:700px">';
   html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Daily Dashboard</div>';
-  html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:24px">' + dateStr + '</div>';
+  html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:20px">' + dateStr + '</div>';
 
   // Payroll alert — missing clock-outs
   if (missingClockOut.length) {
@@ -219,16 +252,15 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     byTech[tName].push(d);
   });
 
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
-  html += '<div style="font-size:16px;font-weight:700">Dispatch \u2014 ' + today + '</div>';
-  html += '<button onclick="mbAddDispatchDesktop()" style="padding:6px 14px;background:#1a3a5c;color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">+ Assign job</button>';
-  html += '</div>';
+  var dispBadge = dispatches.length + ' job' + (dispatches.length !== 1 ? 's' : '');
+  var dispAction = '<button onclick="mbAddDispatchDesktop();event.stopPropagation()" style="padding:5px 12px;background:#1a3a5c;color:#fff;border:none;border-radius:var(--radius);font-size:12px;cursor:pointer;flex-shrink:0">+ Assign job</button>';
+  html += mbSectionCardStart('dispatch', 'Dispatch \u2014 ' + today, dispBadge, dispAction);
 
   if (!dispatches.length) {
-    html += '<div style="font-size:13px;color:var(--text-muted);padding:16px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center;margin-bottom:24px">No jobs assigned today</div>';
+    html += '<div style="font-size:13px;color:var(--text-muted);padding:12px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No jobs assigned today</div>';
   } else {
     Object.keys(byTech).forEach(function(tName) {
-      html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">' + escHtml(tName) + '</div>';
+      html += '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">' + escHtml(tName) + '</div>';
       byTech[tName].forEach(function(d, i) {
         var wo = d.work_orders || {};
         var isQuoted = wo.form_mode === 'quoted';
@@ -255,19 +287,27 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
       });
     });
   }
+  html += mbSectionCardEnd();
 
-  // Tasks — container populated by tasksRenderSection in app-tasks.js
-  html += '<div id="mb-dt-tasks-shell" style="margin:24px 0 0"></div>';
+  // Tasks section card
+  var taskCount = ((dateTasks ? dateTasks.length : 0) + (locTasks ? locTasks.length : 0));
+  var taskBadge = taskCount + ' task' + (taskCount !== 1 ? 's' : '');
+  html += mbSectionCardStart('tasks', 'Tasks', taskBadge, '');
+  html += '<div id="mb-dt-tasks-shell"></div>';
+  html += mbSectionCardEnd();
 
-  // Bug reports — admin only, loaded after render
+  // Bug reports section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
-    html += '<div id="mb-dt-bug-reports-shell" style="margin:24px 0 0"></div>';
+    html += mbSectionCardStart('bugreports', 'Bug Reports', '<span id="mb-badge-bugreports">…</span>', '');
+    html += '<div id="mb-dt-bug-reports-shell"></div>';
+    html += mbSectionCardEnd();
   }
 
   html += '</div>';
   body.innerHTML = html;
 
   body.addEventListener('click', function(e) {
+    if (e.target.closest('[onclick*="mbToggleSection"]')) return;
     var removeBtn = e.target.closest('.mb-dt-remove');
     if (removeBtn) { mbRemoveDispatch(removeBtn.dataset.id); return; }
     var moveBtn = e.target.closest('.mb-dt-move');
@@ -310,7 +350,8 @@ function mbGetCustName(wo) {
 
 function mbBuildWOOptions() {
   return (AppState.workOrders || []).filter(function(w){
-    return w.active !== false && !isProcessedStatus(w.status);
+    var cat = statusCat(w.status);
+    return w.active !== false && (cat === 'active' || cat === 'draft');
   }).map(function(w){
     var isQuoted = w.form_mode === 'quoted';
     var custName = mbGetCustName(w);
