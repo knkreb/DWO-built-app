@@ -39,7 +39,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .header-title{flex:1;text-align:center;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .header-icon-btn{color:var(--header-text);padding:8px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);flex-shrink:0;font-size:20px}
 .header-icon-btn:active{background:rgba(255,255,255,.15)}
-.screen{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,0px)}
 .screen.hidden{display:none!important}
 #screen-wo-list:not(.hidden){display:flex;flex-direction:column}
 #wo-list-items{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -471,6 +471,17 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div id="morning-brief-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
 </div>
 
+<!-- MOBILE LOCATIONS LIST -->
+<div class="screen hidden" id="screen-mobile-locations" style="display:flex;flex-direction:column;height:100%">
+  <div id="mobile-locations-shell" style="flex:1;overflow-y:auto"></div>
+</div>
+
+<!-- MOBILE LOCATION DETAIL (map + edit sheet) -->
+<div class="screen hidden" id="screen-mobile-location-detail" style="display:flex;flex-direction:column;height:100%;position:relative">
+  <div id="mobile-loc-map" style="flex:1;min-height:0"></div>
+  <div id="mobile-loc-detail-sheet" style="flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);max-height:55%;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,16px)"></div>
+</div>
+
 <!-- MOBILE END OF DAY -->
 <div class="screen hidden" id="screen-end-of-day" style="display:flex;flex-direction:column;height:100%">
   <div id="end-of-day-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
@@ -501,7 +512,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="sidebar-item" id="sidebar-invoices" onclick="desktopNav('invoices')"><span class="sidebar-icon">🧾</span> Invoices</div>
       <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
       <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
-      <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Bug Reports</div>
+      <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Feature Req/Bugs</div>
       <div class="sidebar-item" id="sidebar-settings" onclick="desktopNav('settings')"><span class="sidebar-icon">⚙️</span> Settings</div>
       <div class="sidebar-footer">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px" id="sidebar-user"></div>
@@ -979,25 +990,25 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=8"></script>
-<script src="app-morning-brief.js?v=118"></script>
-<script src="app-core.js?v=118"></script>
-<script src="field-travel-log.js?v=116"></script>
+<script src="app-morning-brief.js?v=119"></script>
+<script src="app-core.js?v=119"></script>
+<script src="field-travel-log.js?v=119"></script>
 <script src="app-subforms.js?v=112"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>
-<script src="app-tasks.js?v=5"></script>
+<script src="app-tasks.js?v=6"></script>
 
 <!-- BUG REPORT SHEET -->
 <div id="bug-report-sheet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;align-items:center;justify-content:center" onclick="if(event.target===this)closeBugReportSheet()">
   <div style="background:var(--bg);border-radius:var(--radius);width:95vw;max-width:440px;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-      <span style="font-size:15px;font-weight:700">Report an Issue</span>
+      <span style="font-size:15px;font-weight:700">Report a Feature/Bug</span>
       <button onclick="closeBugReportSheet()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted)">&#x2715;</button>
     </div>
     <div style="padding:16px">
       <input type="hidden" id="bug-report-context">
       <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">What happened? (be as specific as you can)</label>
-      <textarea id="bug-report-text" style="width:100%;min-height:120px;font-size:14px;resize:vertical;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;background:var(--input-bg);color:var(--text)" placeholder="Describe the bug or problem..."></textarea>
+      <textarea id="bug-report-text" style="width:100%;min-height:120px;font-size:14px;resize:vertical;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;background:var(--input-bg);color:var(--text)" placeholder="Describe the feature request or bug..."></textarea>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
         <button onclick="closeBugReportSheet()" style="padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius);background:none;cursor:pointer;font-size:14px">Cancel</button>
         <button id="bug-report-submit-btn" onclick="submitBugReport()" style="padding:8px 16px;border:none;border-radius:var(--radius);background:var(--header-bg);color:#fff;cursor:pointer;font-size:14px;font-weight:600">Submit</button>

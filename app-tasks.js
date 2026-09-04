@@ -46,12 +46,16 @@ function tasksRenderSection(container, dateTasks, locTasks, tech, isMobile) {
   var myLoc  = tech ? locTasks.filter(isMyTask)  : locTasks;
 
   var addBtn = tech ? '<button class="tasks-section-add" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer">+ Add task</button>' : '';
-  var headSize = isMobile ? '14px' : '16px';
 
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-  html += '<div style="font-size:' + headSize + ';font-weight:700;color:var(--text-primary)">Tasks</div>';
-  html += addBtn;
-  html += '</div>';
+  var html = '';
+  if (isMobile) {
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div style="font-size:14px;font-weight:700;color:var(--text-primary)">Tasks</div>';
+    html += addBtn;
+    html += '</div>';
+  } else if (addBtn) {
+    html += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' + addBtn + '</div>';
+  }
 
   if (!myDate.length && !myLoc.length) {
     html += '<div style="font-size:13px;color:var(--text-muted);padding:12px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No tasks for today</div>';
@@ -190,6 +194,10 @@ function mbAddTask() {
   var today = new Date().toISOString().slice(0, 10);
   var tech  = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var isMobile = AppState.deviceMode !== 'desktop';
+  var techOpts = '<option value="company">Everyone (company-wide)</option>';
+  (AppState.technicians || []).forEach(function(t) {
+    techOpts += '<option value="' + t.id + '"' + (t.id === tech ? ' selected' : '') + '>' + escHtml(t.name) + '</option>';
+  });
 
   var overlay = document.createElement('div');
   overlay.className = 'task-quick-add-overlay';
@@ -203,7 +211,7 @@ function mbAddTask() {
       '<input type="text" id="task-add-notes" placeholder="Notes (optional)" style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:10px">' +
       '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Assign to</div>' +
       '<select id="task-add-assignee" style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:16px">' +
-      '<option value="me">Just me</option><option value="company">Everyone (company-wide)</option>' +
+      techOpts +
       '</select>' +
       '<div style="display:flex;gap:8px">' +
       '<button class="task-add-cancel" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:none;font-size:14px;cursor:pointer">Cancel</button>' +
@@ -222,7 +230,7 @@ function mbAddTask() {
       '<input type="date" id="task-add-date" value="' + today + '" style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:10px">' +
       '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Assign to</div>' +
       '<select id="task-add-assignee" style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:16px">' +
-      '<option value="me">Just me</option><option value="company">Everyone (company-wide)</option>' +
+      techOpts +
       '</select>' +
       '<div style="display:flex;gap:8px">' +
       '<button class="task-add-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:none;font-size:13px;cursor:pointer">Cancel</button>' +
@@ -248,7 +256,9 @@ function tasksSaveQuickAdd(tech, defaultDate, overlay) {
   if (!title) { showToast('Enter a task description'); return; }
   var notes        = notesEl && notesEl.value.trim() ? notesEl.value.trim() : null;
   var date         = (dateEl && dateEl.value) ? dateEl.value : defaultDate;
-  var assigneeType = (assigneeEl && assigneeEl.value === 'company') ? 'company' : 'tech';
+  var assigneeVal = assigneeEl ? assigneeEl.value : 'company';
+  var assigneeType = (assigneeVal === 'company') ? 'company' : 'tech';
+  var assigneeTechId = (assigneeType === 'tech') ? assigneeVal : null;
 
   if (overlay) overlay.remove();
 
@@ -262,8 +272,8 @@ function tasksSaveQuickAdd(tech, defaultDate, overlay) {
   }).then(function(r) {
     if (!r.ok) { showToast('Error saving task'); return; }
     var taskId = r.data && r.data[0] && r.data[0].id;
-    if (assigneeType === 'tech' && tech && taskId) {
-      sb.post('task_assignments', { task_id: taskId, tech_id: tech });
+    if (assigneeType === 'tech' && assigneeTechId && taskId) {
+      sb.post('task_assignments', { task_id: taskId, tech_id: assigneeTechId });
     }
     showToast('Task added');
     tasksRefreshBrief();

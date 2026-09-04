@@ -3499,6 +3499,15 @@ function mdrRenderDay(dayReview) {
   var _mdrSf = (MDRState.currentDayReview && MDRState.currentDayReview.stop_flags) || {};
   if (typeof _mdrSf === 'string') { try { _mdrSf = JSON.parse(_mdrSf); } catch(e) { _mdrSf = {}; } }
   var untagged = MDRState.stops.filter(function(s){return !s.location && !_mdrSf[s.arrivedAt];}).length;
+  var _dr = MDRState.currentDayReview || {};
+  var onClockMin = 0;
+  if (_dr.clock_in) {
+    var _ci = new Date(_dr.clock_in);
+    var _co = _dr.clock_out ? new Date(_dr.clock_out) : new Date();
+    onClockMin = Math.round((_co - _ci) / 60000);
+  } else {
+    onClockMin = totalGPSMin;
+  }
 
   var html = '';
 
@@ -3513,7 +3522,7 @@ function mdrRenderDay(dayReview) {
 
   // Summary strip
   html += '<div style="background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:8px 0;flex-shrink:0">';
-  html += '<div style="flex:1;text-align:center"><div style="font-size:16px;font-weight:600">' + drFormatDuration(totalGPSMin) + '</div><div style="font-size:10px;color:var(--text-muted)">Elapsed</div></div>';
+  html += '<div style="flex:1;text-align:center"><div style="font-size:16px;font-weight:600">' + drFormatDuration(onClockMin) + '</div><div style="font-size:10px;color:var(--text-muted)">On Clock</div></div>';
   html += '<div style="flex:1;text-align:center;border-left:1px solid var(--border)"><div style="font-size:16px;font-weight:600">' + totalPaidH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Paid</div></div>';
   html += '<div style="flex:1;text-align:center;border-left:1px solid var(--border)"><div style="font-size:16px;font-weight:600">' + totalBilledH.toFixed(1) + 'h</div><div style="font-size:10px;color:var(--text-muted)">Billed</div></div>';
   html += '<div style="flex:1;text-align:center;border-left:1px solid var(--border)"><div style="font-size:16px;font-weight:600' + (untagged>0?';color:#854f0b':'') + '">' + untagged + '</div><div style="font-size:10px;color:var(--text-muted)">Untagged</div></div>';

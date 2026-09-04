@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.79';
+const APP_VERSION = '4.80';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -772,6 +772,7 @@ function _goBackImpl() {
   else if (prev === 'screen-mobile-timecard') { showHeader(true,'Timecard',true); renderMobileTimecard(); }
   else if (prev === 'screen-mobile-dailyreview') { showHeader(true,'Field Travel Log',true); if (typeof mdrRefreshHours === 'function') mdrRefreshHours(); }
   else if (prev === 'screen-settings-mobile') { showHeader(true,'Settings',true); }
+  else if (prev === 'screen-morning-brief') { showHeader(true,'Daily Dashboard', AppState.screenStack.length > 0); }
   else { showHeader(true,'ProMech', AppState.screenStack.length>0); }
 }
 
@@ -820,14 +821,14 @@ function closeHamburger() {
 
 function hamburgerNav(dest) {
   closeHamburger();
-  if (dest==='morningbrief') { initMorningBrief(); pushScreen('screen-morning-brief','Daily Dashboard'); }
+  if (dest==='morningbrief') { AppState.screenStack = []; initMorningBrief(); showScreen('screen-morning-brief'); showHeader(true,'Daily Dashboard',false); }
   else if (dest==='wo') { showScreen('screen-wo-list'); showHeader(true,'ProMech',false); if(typeof initMobileFilters==='function') initMobileFilters(); filterWOList(); }
   else if (dest==='dailyreview') { initMobileDailyReview(); pushScreen('screen-mobile-dailyreview','Field Travel Log'); }
   else if (dest==='endofday') { initEndOfDay(); pushScreen('screen-end-of-day','End of Day'); }
   else if (dest==='timecard') { initMobileTimecard(); pushScreen('screen-mobile-timecard','Timecard'); }
   else if (dest==='truckstock') { initMobileTruckStock(); pushScreen('screen-mobile-truckstock','Truck Stock'); }
   else if (dest==='invoices') { pushScreen('screen-mobile-invoices','Invoices'); }
-  else if (dest==='locations') { pushScreen('screen-mobile-locations','Locations'); }
+  else if (dest==='locations') { renderLocationsMobile(); pushScreen('screen-mobile-locations','Locations'); }
   else if (dest==='settings') { renderSettings('settings-body-mobile'); pushScreen('screen-settings-mobile','Settings'); }
 }
 
@@ -2193,7 +2194,7 @@ function renderDesktopGrid() {
     var _fd = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paper',color:'#e67e22'},{system_key:'needs_parts',name:'Parts',color:'#2980b9'},{system_key:'needs_review',name:'Review',color:'#8e44ad'},{system_key:'needs_po',name:'PO',color:'#c0392b'}];
     var flagBadgeHtml = _fd.map(function(f){ return wo['flag_'+f.system_key]?'<span title="'+escHtml(wo['flag_'+f.system_key+'_note']||'')+'" style="margin-left:3px;font-size:10px;background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+';border-radius:3px;padding:1px 4px">⚑ '+f.name+'</span>':''; }).join('');
     var isLocked = isProcessedStatus(wo.status);
-    return '<tr style="background:'+(isLocked?'var(--bg)':st.color+'18')+';opacity:'+(isLocked?'0.55':'1')+'"'+(selected?' class="selected"':'')+' onclick="desktopRowClick(event,\''+wo.id+'\')">'
+    return '<tr style="background:'+(isLocked?'var(--bg)':st.color+'33')+';opacity:'+(isLocked?'0.55':'1')+'"'+(selected?' class="selected"':'')+' onclick="desktopRowClick(event,\''+wo.id+'\')">'
       + '<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox"'+(selected?' checked':'')+' onchange="toggleRowSelect(\''+wo.id+'\',this.checked)"></td>'
       + '<td><strong>'+wo.wo_number+'</strong>'+(wo.origin==='timecard'?'<span title="Created from timecard" style="margin-left:5px;font-size:10px;background:#e67e2222;color:#e67e22;border:1px solid #e67e22;border-radius:3px;padding:1px 4px;font-weight:700">⚠ TC</span>':'')+' '+(showPOBadge?'<span style="font-size:10px;background:#c0392b22;color:var(--danger);border:1px solid var(--danger);border-radius:3px;padding:1px 4px;font-weight:700">PO?</span>':'')+flagBadgeHtml+'</td>'
       + '<td>'+escHtml(cust)+'</td>'
@@ -4958,7 +4959,7 @@ function renderSettings(containerId) {
       +'</div>';
     html += '</div></div>';
     html += '<div class="settings-block"><div class="settings-block-header" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Bug Report Statuses</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body">';
-    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Configurable stages for tracking submitted bug reports.</div>';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Configurable stages for tracking feature requests and bug reports.</div>';
     (AppState.bugReportStatuses||[]).forEach(function(s){
       html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
         +'<input type="color" value="'+(s.color||'#6b7280')+'" style="width:28px;height:26px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer" onchange="saveBugReportStatusColor(\''+s.id+'\',this.value)">'
@@ -5729,7 +5730,7 @@ function _renderBugReportsDashboard(list, rows, statuses) {
       AppState.bugReportStatuses.forEach(function(s) { html += '<option value="' + s.id + '"' + (rep.status_id === s.id ? ' selected' : '') + '>' + escHtml(s.name) + '</option>'; });
       html += '</select>';
     }
-    html += '<a href="#" onclick="event.preventDefault();desktopNav(\'bugreports\')" style="font-size:12px;color:var(--header-bg)">View in Bug Reports &#x2192;</a>';
+    html += '<a href="#" onclick="event.preventDefault();desktopNav(\'bugreports\')" style="font-size:12px;color:var(--header-bg)">View in Feature Req/Bugs &#x2192;</a>';
     html += '</div></div></div>';
   });
   html += '</div>';
@@ -5824,7 +5825,7 @@ function renderBugReportsModule() {
   var statuses = AppState.bugReportStatuses || [];
   var html = '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">';
   html += '<div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">';
-  html += '<div style="font-size:16px;font-weight:700">Bug Reports</div>';
+  html += '<div style="font-size:16px;font-weight:700">Feature Req/Bugs</div>';
   html += '<select id="brm-status-filter" onchange="loadBugReportsModule()" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">';
   html += '<option value="">All Statuses</option>';
   statuses.forEach(function(s){ html += '<option value="'+s.id+'">'+escHtml(s.name)+'</option>'; });
@@ -6002,6 +6003,129 @@ var LocState = {
   mapReady: false,
   geofenceCircle: null
 };
+
+// ── Mobile Locations ──────────────────────────────────────────
+function renderLocationsMobile() {
+  var shell = document.getElementById('mobile-locations-shell');
+  if (!shell) return;
+  shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">Loading locations...</div>';
+  var src = (LocState && LocState.locations && LocState.locations.length)
+    ? Promise.resolve(LocState.locations)
+    : sb.get('locations', '?active=eq.true&select=*&order=name.asc').then(function(r) {
+        var locs = (r.ok && r.data) ? r.data : [];
+        if (LocState) LocState.locations = locs;
+        return locs;
+      });
+  src.then(function(locs) {
+    if (!locs.length) {
+      shell.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">No locations found</div>';
+      return;
+    }
+    var typeLabel = { customer: 'Customer', vendor: 'Vendor', personal: 'Personal' };
+    var html = '<div style="padding:12px">';
+    locs.forEach(function(loc) {
+      var typeName = typeLabel[loc.location_type] || 'Untagged';
+      var typeColor = loc.location_type === 'customer' ? '#1a3a5c' : loc.location_type === 'vendor' ? '#b45309' : loc.location_type === 'personal' ? '#27ae60' : '#888';
+      var addr = [loc.address_street, loc.city, loc.state].filter(Boolean).join(', ');
+      html += '<div onclick="openLocationDetail(\'' + loc.id + '\')" style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ' + typeColor + ';border-radius:0 var(--radius) var(--radius) 0;padding:12px 14px;margin-bottom:8px;cursor:pointer">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">';
+      html += '<span style="font-size:14px;font-weight:600">' + escHtml(loc.name || '') + '</span>';
+      html += '<span style="font-size:11px;padding:1px 7px;border-radius:10px;background:' + typeColor + '22;color:' + typeColor + ';font-weight:600">' + typeName + '</span>';
+      html += '</div>';
+      if (addr) html += '<div style="font-size:12px;color:var(--text-muted)">' + escHtml(addr) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    shell.innerHTML = html;
+  });
+}
+
+function openLocationDetail(locId) {
+  var loc = LocState && LocState.locations && LocState.locations.find(function(l) { return l.id === locId; });
+  if (!loc) return;
+  pushScreen('screen-mobile-location-detail', escHtml(loc.name || 'Location'));
+  var sheet = document.getElementById('mobile-loc-detail-sheet');
+  if (sheet) renderLocationDetailSheet(loc, sheet);
+  var mapEl = document.getElementById('mobile-loc-map');
+  if (!mapEl) return;
+  function initMap() {
+    var lat = parseFloat(loc.lat || 0);
+    var lng = parseFloat(loc.lng || 0);
+    if (!lat && !lng) {
+      mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px">No coordinates on file</div>';
+      return;
+    }
+    var center = { lat: lat, lng: lng };
+    var map = new google.maps.Map(mapEl, { zoom: 16, center: center, disableDefaultUI: false });
+    new google.maps.Marker({ position: center, map: map, title: loc.name || '' });
+  }
+  if (typeof google !== 'undefined' && google.maps) {
+    initMap();
+  } else {
+    locLoadMapsAPI(initMap);
+  }
+}
+
+function renderLocationDetailSheet(loc, sheet) {
+  var typeLabel = { customer: 'Customer', vendor: 'Vendor', personal: 'Personal' };
+  var addr = [loc.address_street, loc.city, loc.state, loc.zip].filter(Boolean).join(', ');
+  var html = '<div style="padding:16px">';
+  html += '<div style="font-size:16px;font-weight:700;margin-bottom:4px">' + escHtml(loc.name || '') + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">' + (typeLabel[loc.location_type] || 'Untagged') + (addr ? ' &nbsp;·&nbsp; ' + escHtml(addr) : '') + '</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Name</div><input id="mloc-name" type="text" value="' + escHtml(loc.name || '') + '" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Address</div><input id="mloc-addr" type="text" value="' + escHtml(loc.address_street || '') + '" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<div style="flex:1"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">City</div><input id="mloc-city" type="text" value="' + escHtml(loc.city || '') + '" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>';
+  html += '<div style="flex:0 0 70px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">State</div><input id="mloc-state" type="text" value="' + escHtml(loc.state || '') + '" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>';
+  html += '<div style="flex:0 0 80px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Zip</div><input id="mloc-zip" type="text" value="' + escHtml(loc.zip || '') + '" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>';
+  html += '</div>';
+  html += '<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Type</div>';
+  html += '<select id="mloc-type" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)">';
+  ['customer','vendor','personal'].forEach(function(t) {
+    html += '<option value="' + t + '"' + (loc.location_type === t ? ' selected' : '') + '>' + typeLabel[t] + '</option>';
+  });
+  html += '<option value=""' + (!loc.location_type ? ' selected' : '') + '>Untagged</option>';
+  html += '</select></div>';
+  html += '<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Notes</div>';
+  html += '<textarea id="mloc-notes" rows="2" style="width:100%;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);resize:none">' + escHtml(loc.notes || '') + '</textarea></div>';
+  html += '<button onclick="saveLocationDetailMobile(\'' + loc.id + '\')" style="width:100%;padding:11px;background:#1a3a5c;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer">Save Changes</button>';
+  html += '</div>';
+  sheet.innerHTML = html;
+}
+
+function saveLocationDetailMobile(locId) {
+  var name  = (document.getElementById('mloc-name')  || {}).value || '';
+  var addr  = (document.getElementById('mloc-addr')  || {}).value || '';
+  var city  = (document.getElementById('mloc-city')  || {}).value || '';
+  var state = (document.getElementById('mloc-state') || {}).value || '';
+  var zip   = (document.getElementById('mloc-zip')   || {}).value || '';
+  var type  = (document.getElementById('mloc-type')  || {}).value || null;
+  var notes = (document.getElementById('mloc-notes') || {}).value || '';
+  if (!name.trim()) { showToast('Name is required'); return; }
+  sb.patchWhere('locations', 'id=eq.' + locId, {
+    name: name.trim(),
+    address_street: addr.trim() || null,
+    city: city.trim() || null,
+    state: state.trim() || null,
+    zip: zip.trim() || null,
+    location_type: type || null,
+    notes: notes.trim() || null,
+    modified_at: new Date().toISOString()
+  }).then(function(r) {
+    if (!r.ok) { showToast('Error saving location'); return; }
+    if (LocState && LocState.locations) {
+      var idx = LocState.locations.findIndex(function(l) { return l.id === locId; });
+      if (idx >= 0) {
+        LocState.locations[idx] = Object.assign({}, LocState.locations[idx], { name: name.trim(), address_street: addr.trim()||null, city: city.trim()||null, state: state.trim()||null, zip: zip.trim()||null, location_type: type||null, notes: notes.trim()||null });
+      }
+    }
+    showToast('Location saved');
+  });
+}
 
 function renderLocationsPanel() {
   var el = document.getElementById('locations-panel-inner');

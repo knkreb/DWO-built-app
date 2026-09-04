@@ -245,6 +245,20 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += '</div>';
   }
 
+  var tech = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  function _isMyTask(t) {
+    if (t.assignee_type === 'company') return true;
+    if (!Array.isArray(t.task_assignments) || !t.task_assignments.length) return true;
+    return t.task_assignments.some(function(a) { return a.tech_id === tech; });
+  }
+  var myDateTasks = tech ? (dateTasks || []).filter(_isMyTask) : (dateTasks || []);
+  var myLocTasks  = tech ? (locTasks  || []).filter(_isMyTask) : (locTasks  || []);
+  var taskCount = myDateTasks.length + myLocTasks.length;
+  var taskBadge = taskCount + ' task' + (taskCount !== 1 ? 's' : '');
+  html += mbSectionCardStart('tasks', 'Tasks', taskBadge, '');
+  html += '<div id="mb-dt-tasks-shell"></div>';
+  html += mbSectionCardEnd();
+
   var byTech = {};
   dispatches.forEach(function(d) {
     var tName = d.technicians ? d.technicians.name : 'Unassigned';
@@ -289,16 +303,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   }
   html += mbSectionCardEnd();
 
-  // Tasks section card
-  var taskCount = ((dateTasks ? dateTasks.length : 0) + (locTasks ? locTasks.length : 0));
-  var taskBadge = taskCount + ' task' + (taskCount !== 1 ? 's' : '');
-  html += mbSectionCardStart('tasks', 'Tasks', taskBadge, '');
-  html += '<div id="mb-dt-tasks-shell"></div>';
-  html += mbSectionCardEnd();
-
-  // Bug reports section card — admin only, loaded after render
+  // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
-    html += mbSectionCardStart('bugreports', 'Bug Reports', '<span id="mb-badge-bugreports">…</span>', '');
+    html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
     html += '<div id="mb-dt-bug-reports-shell"></div>';
     html += mbSectionCardEnd();
   }
@@ -319,7 +326,6 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   // Populate tasks section via app-tasks.js
   var taskShell = document.getElementById('mb-dt-tasks-shell');
   if (taskShell && typeof tasksRenderSection === 'function') {
-    var tech = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
     tasksRenderSection(taskShell, dateTasks, locTasks, tech, false);
   }
 
