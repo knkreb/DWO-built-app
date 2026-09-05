@@ -1,4 +1,9 @@
 // gps-engine.js — GPS stop detection for ProMech
+// v1.8 — Hard cap on high-uncertainty pings (RF interference / signal loss).
+//         Strips positions with accuracy worse than gps_rf_interference_cap (default 500m)
+//         before centroid window. Fixes ghost pings from Android cell-tower fallback
+//         corrupting stop detection at sites with metal roofs or RF interference.
+//         Also fixes isGoodPing field name (acc → accuracy).
 // v1.7 — Bug fixes: (1) departure-pending pings no longer corrupt window centroid;
 //         (2) arrival window backdates to first ping physically inside geofence.
 // v1.6 — centroid-based detection: rolling window average replaces per-ping accuracy filter.
@@ -97,6 +102,7 @@
 
     var settings = (typeof AppState !== 'undefined' && AppState.settings) || {};
     var ACC_THRESHOLD       = parseInt(settings.gps_accuracy_threshold       || '100');
+    var RF_INTERFERENCE_CAP = parseInt(settings.gps_rf_interference_cap      || '500');
     var GEOFENCE_DEFAULT    = parseInt(settings.geofence_radius_default       || '100');
     var KNOWN_MIN_MINUTES   = parseInt(settings.gps_known_stop_min_duration   || '5');
     var UNKNOWN_MIN_MINUTES = parseInt(settings.gps_unknown_stop_min_duration || '10');
@@ -107,9 +113,12 @@
     var WINDOW_SIZE           = parseInt(settings.gps_centroid_window   || '5');
     var DEPARTURE_WINDOW_COUNT = parseInt(settings.gps_departure_windows || '4');
 
-    // Sanity filter: remove physically impossible positions (>120 mph between consecutive pings).
-    // All remaining pings feed the centroid window for known-location matching.
+    // Sanity filter: strip RF-interference/signal-loss positions before centroid window.
+    // First removes pings worse than RF_INTERFERENCE_CAP — these are Android cell-tower
+    // fallback or cached positions returned when satellite lock is lost (typically 400-2500m).
+    // Then removes physically impossible speeds (>120 mph between consecutive pings).
     var allPings = pings.filter(function(p, idx) {
+      if (p.accuracy && p.accuracy > RF_INTERFERENCE_CAP) return false;
       if (idx === 0) return true;
       var prev = pings[idx - 1];
       var dist = haversineMeters(p.lat, p.lng, prev.lat, prev.lng);
@@ -222,7 +231,7 @@
       var ping = allPings[i];
       var prevPing = i > 0 ? allPings[i - 1] : null;
       var moving = isMoving(prevPing, ping);
-      var isGoodPing = !(ping.acc && parseInt(ping.acc) > ACC_THRESHOLD);
+      var isGoodPing = !(ping.accuracy && ping.accuracy > ACC_THRESHOLD);
 
       // Update rolling centroid window (all pings, no accuracy filter)
       recentPings.push(ping);
@@ -406,6 +415,6 @@
   };
 
   window.drHaversineMeters = haversineMeters;
-  console.log('[gps-engine] loaded v1.7');
+  console.log('[gps-engine] loaded v1.8');
 
 })();
