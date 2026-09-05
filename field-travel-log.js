@@ -580,11 +580,11 @@ function drDetectStops(pings, locations) {
   var KNOWN_MIN_PINGS = parseInt(AppState.settings.gps_known_min_pings || '3');
   var UNKNOWN_MIN_MINUTES = parseInt(AppState.settings.gps_unknown_stop_min_duration || '10');
   var UNKNOWN_CLUSTER_RADIUS = 100;
-  var ACC_THRESHOLD = parseInt(AppState.settings.gps_accuracy_threshold || '100');
+  var ACC_THRESHOLD = parseInt(AppState.settings.gps_accuracy_threshold || '40');
   var GEOFENCE_DEFAULT = parseInt(AppState.settings.geofence_radius_default || '100');
 
   var goodPings = pings.filter(function(p) {
-    return !(p.acc && parseInt(p.acc) > ACC_THRESHOLD);
+    return !(p.accuracy && parseInt(p.accuracy) > ACC_THRESHOLD);
   });
   if (!goodPings.length) return [];
 
