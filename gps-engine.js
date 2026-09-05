@@ -102,7 +102,7 @@
 
     var settings = (typeof AppState !== 'undefined' && AppState.settings) || {};
     var ACC_THRESHOLD       = parseInt(settings.gps_accuracy_threshold       || '100');
-    var RF_INTERFERENCE_CAP = parseInt(settings.gps_rf_interference_cap      || '500');
+    var RF_INTERFERENCE_CAP = parseInt(settings.gps_rf_interference_cap      || '350');
     var GEOFENCE_DEFAULT    = parseInt(settings.geofence_radius_default       || '100');
     var KNOWN_MIN_MINUTES   = parseInt(settings.gps_known_stop_min_duration   || '5');
     var UNKNOWN_MIN_MINUTES = parseInt(settings.gps_unknown_stop_min_duration || '10');
@@ -118,7 +118,7 @@
     // fallback or cached positions returned when satellite lock is lost (typically 400-2500m).
     // Then removes physically impossible speeds (>120 mph between consecutive pings).
     var allPings = pings.filter(function(p, idx) {
-      if (p.accuracy && p.accuracy > RF_INTERFERENCE_CAP) return false;
+      if (p.accuracy && p.accuracy >= RF_INTERFERENCE_CAP) return false;
       if (idx === 0) return true;
       var prev = pings[idx - 1];
       var dist = haversineMeters(p.lat, p.lng, prev.lat, prev.lng);
