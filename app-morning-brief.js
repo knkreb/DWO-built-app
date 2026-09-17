@@ -250,7 +250,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
   if (!todayReview || !todayReview.clock_in) {
     html += '<span style="font-size:13px;color:var(--text-muted);flex:1">Not clocked in today</span>';
-    html += '<button onclick="mdrClockIn();setTimeout(initMorningBriefDesktop,400)" style="padding:7px 18px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer">Punch In</button>';
+    html += '<button onclick="dbDesktopPunchIn()" style="padding:7px 18px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer">Punch In</button>';
   } else if (!todayReview.clock_out) {
     var ciTime = new Date(todayReview.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
     html += '<div style="flex:1"><span style="font-size:13px;font-weight:600;color:#27ae60">&#9679; Clocked in</span> <span style="font-size:12px;color:var(--text-muted)">since ' + ciTime + '</span></div>';
@@ -260,7 +260,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     var ciTime2 = new Date(todayReview.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
     var coTime2 = new Date(todayReview.clock_out).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
     html += '<span style="font-size:13px;color:var(--text-muted);flex:1">&#10003; Clocked in: ' + ciTime2 + ' &mdash; Out: ' + coTime2 + '</span>';
-    html += '<button onclick="mdrClockIn();setTimeout(initMorningBriefDesktop,400)" style="padding:7px 14px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">Clock In Again</button>';
+    html += '<button onclick="dbDesktopPunchIn()" style="padding:7px 14px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">Clock In Again</button>';
   }
   html += '</div>';
 
@@ -801,6 +801,28 @@ function eodConfirmClockOut(overlay) {
   mdrUpsertDayReview({clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual'});
   showToast('Day closed out');
   setTimeout(function() { initEndOfDay(); }, 400);
+}
+
+function dbDesktopPunchIn() {
+  var today = new Date().toISOString().slice(0,10);
+  // Always force today's date — desktop dashboard always clocks in for today
+  MDRState.selectedDate = today;
+  var now = new Date();
+  var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  var techId = AppState.userTechId || MDRState.tech;
+  var techSchedule = AppState._techSchedules ? (AppState._techSchedules[techId] || []) : [];
+  var dow = now.getDay();
+  var sched = techSchedule.find(function(s){ return s.day_of_week === dow; });
+  var defaultVal = sched ? ((sched.expected_start || '').substring(0,5) || nowStr) : nowStr;
+  drShowTimePicker('Clock In', defaultVal, function(time) {
+    if (!time) return;
+    var dt = new Date(today + 'T' + time + ':00');
+    var isBackdated = dt < new Date(new Date() - 60000);
+    if (!MDRState.currentDayReview) MDRState.currentDayReview = {};
+    MDRState.currentDayReview.clock_in = dt.toISOString();
+    mdrUpsertDayReview({ clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending' });
+    setTimeout(initMorningBriefDesktop, 400);
+  });
 }
 
 function dashClockOut() {
