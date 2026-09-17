@@ -4146,6 +4146,9 @@ function mdrSaveTagLocation() {
 
 // ── Day submission ────────────────────────────────────────────
 function mdrClockIn() {
+  // Ensure selectedDate is set — may be null if called from morning brief before FTL init
+  if (!MDRState.selectedDate) MDRState.selectedDate = drTodayStr();
+  if (!MDRState.tech) MDRState.tech = AppState.userTechId || drGetDefaultTech() || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var today = new Date();
   var dow = today.getDay();
   var techSchedule = AppState._techSchedules ? (AppState._techSchedules[MDRState.tech] || []) : [];
