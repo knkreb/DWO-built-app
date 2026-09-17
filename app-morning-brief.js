@@ -805,10 +805,10 @@ function eodConfirmClockOut(overlay) {
 
 function dbDesktopPunchIn() {
   var today = new Date().toISOString().slice(0,10);
-  MDRState.selectedDate = today;
+  var techId = AppState.userTechId || MDRState.tech;
+  if (!techId) { showToast('Cannot identify your technician account. Please reload.'); return; }
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  var techId = AppState.userTechId || MDRState.tech;
   var techSchedule = AppState._techSchedules ? (AppState._techSchedules[techId] || []) : [];
   var dow = now.getDay();
   var sched = techSchedule.find(function(s){ return s.day_of_week === dow; });
@@ -816,11 +816,29 @@ function dbDesktopPunchIn() {
   drShowTimePicker('Clock In', defaultVal, function(time) {
     if (!time) return;
     var dt = new Date(today + 'T' + time + ':00');
-    var isBackdated = dt < new Date(new Date() - 60000);
+    if (isNaN(dt.getTime())) { showToast('Invalid time selected'); return; }
+    var clockInIso = dt.toISOString();
+    var isBackdated = dt < new Date(Date.now() - 60000);
+    // Keep MDRState in sync
+    MDRState.selectedDate = today;
+    MDRState.tech = techId;
     if (!MDRState.currentDayReview) MDRState.currentDayReview = {};
-    MDRState.currentDayReview.clock_in = dt.toISOString();
-    mdrUpsertDayReview({ clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending' });
-    setTimeout(initMorningBriefDesktop, 400);
+    MDRState.currentDayReview.clock_in = clockInIso;
+    var updates = { clock_in: clockInIso, clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending', modified_by: AppState.userEmail, modified_at: new Date().toISOString() };
+    // Write directly with callback so desktop refreshes only after Supabase confirms
+    sb.get('day_review', '?tech_id=eq.' + techId + '&review_date=eq.' + today + '&select=id&limit=1').then(function(r) {
+      var existing = r.ok && r.data && r.data.length ? r.data[0] : null;
+      var op = existing
+        ? sb.patch('day_review', existing.id, updates)
+        : sb.post('day_review', Object.assign({ tech_id: techId, review_date: today, created_by: AppState.userEmail }, updates));
+      op.then(function(r2) {
+        if (r2.ok) { initMorningBriefDesktop(); }
+        else { showToast('Error saving punch record'); console.error('Punch-in save failed', r2); }
+      });
+    }).catch(function(e) {
+      showToast('Network error saving punch');
+      console.error('Punch-in error', e);
+    });
   });
 }
 
