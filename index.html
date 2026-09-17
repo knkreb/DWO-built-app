@@ -370,7 +370,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div style="height:1px;background:var(--border);margin:4px 0"></div>
   <div class="hamburger-item" onclick="hamburgerNav('timecard')"><span class="hamburger-item-icon">⏱️</span> Timecard</div>
   <div class="hamburger-item" onclick="hamburgerNav('truckstock')"><span class="hamburger-item-icon">🚛</span> Truck Stock</div>
-  <div class="hamburger-item" onclick="hamburgerNav('invoices')"><span class="hamburger-item-icon">🧾</span> Invoices</div>
+  <div class="hamburger-item" onclick="hamburgerNav('invoicing')"><span class="hamburger-item-icon">💰</span> Customer Invoice Generation</div>
   <div class="hamburger-item" onclick="hamburgerNav('locations')"><span class="hamburger-item-icon">📍</span> Locations</div>
   <div class="hamburger-item" onclick="openBugReportSheet()"><span class="hamburger-item-icon">🐛</span> Report an Issue</div>
   <div class="hamburger-item" onclick="hamburgerNav('settings')"><span class="hamburger-item-icon">⚙️</span> Settings</div>
@@ -508,8 +508,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="sidebar-item" id="sidebar-customers" onclick="desktopNav('customers')"><span class="sidebar-icon">👥</span> Customers</div>
       <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')"><span class="sidebar-icon">🏪</span> Vendors</div>
       <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Locations</div>
-      <div class="sidebar-item" id="sidebar-reconcile" onclick="desktopNav('reconcile')"><span class="sidebar-icon">⚖️</span> Time & Billing Reconciliation</div>
-      <div class="sidebar-item" id="sidebar-invoices" onclick="desktopNav('invoices')"><span class="sidebar-icon">🧾</span> Invoices</div>
+      <div class="sidebar-item" id="sidebar-invoicing" onclick="desktopNav('invoicing')"><span class="sidebar-icon">💰</span> Customer Invoice Generation</div>
       <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
       <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
       <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Feature Req/Bugs</div>
@@ -627,6 +626,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           <div style="font-size:16px;font-weight:700">Invoices</div>
         </div>
         <div id="invoices-panel-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+      </div>
+
+      <!-- Customer Invoice Generation panel -->
+      <div id="desktop-panel-invoicing" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+          <div style="font-size:16px;font-weight:700">Customer Invoice Generation</div>
+        </div>
+        <div id="invoicing-panel-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
       </div>
 
       <!-- Settings panel -->
@@ -990,9 +997,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=10"></script>
-<script src="app-morning-brief.js?v=119"></script>
-<script src="app-core.js?v=121"></script>
-<script src="field-travel-log.js?v=120"></script>
+<script src="app-morning-brief.js?v=120"></script>
+<script src="app-core.js?v=122"></script>
+<script src="field-travel-log.js?v=121"></script>
 <script src="app-subforms.js?v=112"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>
