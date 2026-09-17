@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.82';
+const APP_VERSION = '4.83';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -719,7 +719,7 @@ function showMainScreen() {
   resolveUserTechId(); // Set AppState.userTechId once from authenticated email
   var mv = document.getElementById('mobile-version'); if(mv) mv.textContent = 'v' + APP_VERSION;
   if (AppState.deviceMode === 'desktop') { showScreen('screen-desktop'); showHeader(true,'ProMech',false); initDesktop(); }
-  else { showScreen('screen-wo-list'); showHeader(true,'ProMech',false); renderWOList(); if(typeof initMobileFilters==='function') initMobileFilters(); }
+  else { showScreen('screen-morning-brief'); showHeader(true,'Daily Dashboard',false); initMorningBrief(); if(typeof initMobileFilters==='function') initMobileFilters(); }
 }
 
 function updateReturnBanner() {
@@ -828,6 +828,7 @@ function hamburgerNav(dest) {
   else if (dest==='timecard') { initMobileTimecard(); pushScreen('screen-mobile-timecard','Timecard'); }
   else if (dest==='truckstock') { initMobileTruckStock(); pushScreen('screen-mobile-truckstock','Truck Stock'); }
   else if (dest==='invoices') { pushScreen('screen-mobile-invoices','Invoices'); }
+  else if (dest==='invoicing') { pushScreen('screen-mobile-invoices','Customer Invoice Generation'); }
   else if (dest==='locations') { renderLocationsMobile(); pushScreen('screen-mobile-locations','Locations'); }
   else if (dest==='settings') { renderSettings('settings-body-mobile'); pushScreen('screen-settings-mobile','Settings'); }
 }
@@ -2071,7 +2072,7 @@ function initDesktop() {
   if (savedCol) AppState.desktopSortCol = savedCol;
   if (savedDir) AppState.desktopSortDir = savedDir;
   initDesktopStatusFilter();
-  desktopNav('wo');
+  desktopNav('morningbrief');
 }
 
 function initDesktopStatusFilter() {
@@ -2089,7 +2090,7 @@ function initDesktopStatusFilter() {
 function switchDesktopPanel(panel) { desktopNav(panel); }
 
 function desktopNav(panel) {
-  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','exports','settings','morningbrief','endofday','tasks','bugreports'].forEach(function(p) {
+  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','invoicing','exports','settings','morningbrief','endofday','tasks','bugreports'].forEach(function(p) {
     var el = document.getElementById('desktop-panel-'+p);
     // Don't hide dailyreview when navigating to reconcile — they share the same panel
     // But do hide dailyreview when navigating away from reconcile to something else
@@ -2122,6 +2123,7 @@ function desktopNav(panel) {
     initReconcilePanel(); 
   }
   if (panel==='invoices') initInvoicesPanel();
+  if (panel==='invoicing') initInvoicingPanel();
   if (panel==='settings') renderSettings('settings-body-desktop');
   if (panel==='exports') renderExportsPanel();
   if (panel==='morningbrief') initMorningBriefDesktop();
@@ -3152,10 +3154,16 @@ function drLoadBillingCol() {
   var summaryEl = document.getElementById('dr-billing-summary');
   var bodyEl = document.getElementById('dr-billing-body');
   if (!summaryEl || !bodyEl) return;
-  bodyEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:30px;font-size:13px">Loading...</div>';
 
   var date = DRState.selectedDate;
   var techId = DRState.tech;
+
+  if (!date || !techId) {
+    bodyEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:13px">Select a date in Field Travel Log to view billing data.</div>';
+    return;
+  }
+
+  bodyEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:30px;font-size:13px">Loading...</div>';
 
   Promise.all([
     sb.get('hours_entries', '?tech_id=eq.'+techId+'&entry_date=eq.'+date+'&select=*,work_orders(wo_number,title,status,customer_id,customers(name,display_name))&order=created_at.asc'),
@@ -3648,43 +3656,100 @@ function drBillingAddTravelSave(locId) {
   });
 }
 
+var _exportBatches = null;
+
 function renderExportsPanel() {
   var body = document.getElementById('export-history-panel-body');
   if (!body) return;
-  body.innerHTML = '<div style="color:var(--text-muted);font-size:13px">Loading...</div>';
-  sb.get('export_history','?select=*&order=exported_at.desc&limit=20').then(function(r) {
-    if (!r.ok || !r.data || !r.data.length) { body.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-muted)">No exports yet</div>'; return; }
-    var latest = r.data[0];
+  body.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px">Loading...</div>';
+  sb.get('export_history','?select=*&order=exported_at.desc&limit=100').then(function(r) {
+    _exportBatches = (r.ok && r.data) ? r.data : [];
+    if (!_exportBatches.length) { body.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-muted)">No exports yet</div>'; return; }
     var sidebarEl = document.getElementById('sidebar-last-export');
-    if (sidebarEl) sidebarEl.textContent = 'Last export: '+fmtDate(latest.exported_at);
-    body.innerHTML = r.data.map(function(h) {
-      var isActive = h.active !== false;
-      var woIds = h.wo_ids || [];
-      var html = '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;'+(isActive?'':'opacity:0.6;background:var(--bg)')+'">';
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-      html += '<div><span style="font-size:13px;font-weight:600">'+fmtDateWithTime(h.exported_at)+'</span> <span style="font-size:12px;color:var(--text-muted)">'+h.wo_count+' WOs</span></div>';
-      html += '<div style="display:flex;gap:6px">';
-      if (isActive) {
-        html += '<button style="font-size:11px;padding:3px 10px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="undoExportBatch(\''+h.id+'\','+JSON.stringify(woIds).replace(/"/g,"'")+')">Undo Batch</button>';
-      } else {
-        html += '<button style="font-size:11px;padding:3px 10px;border:1px solid var(--success);border-radius:3px;color:var(--success);background:none;cursor:pointer" onclick="restoreExportBatch(\''+h.id+'\','+JSON.stringify(woIds).replace(/"/g,"'")+')">Restore</button>';
-        html += '<span style="font-size:11px;color:var(--text-muted);margin-left:4px">Undone</span>';
-      }
-      html += '</div></div>';
-      woIds.forEach(function(woId) {
-        var wo = AppState.workOrders.find(function(w){ return w.id===woId; });
-        var woNum = wo ? wo.wo_number : woId.substring(0,8)+'...';
-        var woTitle = wo ? (wo.title||'') : '';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);font-size:12px">';
-        html += '<span style="color:var(--header-bg);font-weight:600;white-space:nowrap">'+escHtml(woNum)+'</span>';
-        html += '<span style="color:var(--text-muted);flex:1;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(woTitle)+'</span>';
-        if (isActive) html += '<button style="font-size:11px;padding:2px 8px;border:1px solid #e67e22;border-radius:3px;color:#e67e22;background:none;cursor:pointer;white-space:nowrap" onclick="unlockSingleWO(\''+woId+'\',\''+h.id+'\')">Unlock</button>';
-        html += '</div>';
-      });
-      html += '</div>';
-      return html;
-    }).join('');
+    if (sidebarEl) sidebarEl.textContent = 'Last export: '+fmtDate(_exportBatches[0].exported_at);
+    var html = '<div style="padding:10px 14px;border-bottom:1px solid var(--border)">';
+    html += '<input type="text" id="export-search" placeholder="Search by date, WO#, customer, or title..." oninput="_filterExports()" style="width:100%;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);box-sizing:border-box">';
+    html += '</div>';
+    html += '<div style="padding:10px 14px" id="export-batches-list">' + _renderExportBatches(_exportBatches, '') + '</div>';
+    body.innerHTML = html;
   });
+}
+
+function _exportWoData(woId) {
+  var wo = AppState.workOrders.find(function(w){ return w.id===woId; });
+  var woNum = wo ? wo.wo_number : woId.substring(0,8)+'...';
+  var woTitle = wo ? (wo.title||'') : '';
+  var custName = '';
+  if (wo) {
+    if (wo.customers) { custName = wo.customers.display_name || wo.customers.name || ''; }
+    else if (wo.customer_id && AppState.customers) {
+      var c = AppState.customers.find(function(x){ return x.id===wo.customer_id; });
+      if (c) custName = c.display_name || c.name || '';
+    }
+  }
+  return { woId: woId, woNum: woNum, woTitle: woTitle, custName: custName };
+}
+
+function _renderExportBatches(batches, searchTerm) {
+  var term = (searchTerm||'').toLowerCase().trim();
+  var html = '';
+  batches.forEach(function(h) {
+    var isActive = h.active !== false;
+    var woIds = h.wo_ids || [];
+    var woData = woIds.map(_exportWoData);
+    if (term) {
+      var dateStr = fmtDateWithTime(h.exported_at).toLowerCase();
+      var matchBatch = dateStr.indexOf(term) >= 0;
+      var matchWO = woData.some(function(d){
+        return d.woNum.toLowerCase().indexOf(term)>=0 || d.woTitle.toLowerCase().indexOf(term)>=0 || d.custName.toLowerCase().indexOf(term)>=0;
+      });
+      if (!matchBatch && !matchWO) return;
+    }
+    var batchId = 'expbatch-' + h.id;
+    var expanded = !!term;
+    html += '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden'+(isActive?'':';opacity:0.7')+'">';
+    html += '<div onclick="_toggleExportBatch(\''+batchId+'\')" style="padding:10px 12px;background:var(--surface);display:flex;align-items:center;gap:8px;cursor:pointer">';
+    html += '<span id="'+batchId+'-icon" style="font-size:11px;color:var(--text-muted);width:12px;flex-shrink:0">'+(expanded?'&#9660;':'&#9654;')+'</span>';
+    html += '<div style="flex:1"><span style="font-size:13px;font-weight:600">'+fmtDateWithTime(h.exported_at)+'</span>';
+    html += ' <span style="font-size:12px;color:var(--text-muted)">'+h.wo_count+' WO'+(h.wo_count!==1?'s':'')+'</span>';
+    if (!isActive) html += ' <span style="font-size:11px;color:var(--text-muted);font-style:italic">Undone</span>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px" onclick="event.stopPropagation()">';
+    if (isActive) {
+      html += '<button style="font-size:11px;padding:3px 10px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="undoExportBatch(\''+h.id+'\','+JSON.stringify(woIds).replace(/"/g,"'")+')">Undo Batch</button>';
+    } else {
+      html += '<button style="font-size:11px;padding:3px 10px;border:1px solid var(--success);border-radius:3px;color:var(--success);background:none;cursor:pointer" onclick="restoreExportBatch(\''+h.id+'\','+JSON.stringify(woIds).replace(/"/g,"'")+')">Restore</button>';
+    }
+    html += '</div></div>';
+    html += '<div id="'+batchId+'" style="display:'+(expanded?'block':'none')+';border-top:1px solid var(--border)">';
+    woData.forEach(function(d) {
+      html += '<div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);font-size:12px;gap:4px;flex-wrap:nowrap">';
+      html += '<span style="color:var(--header-bg);font-weight:600;white-space:nowrap;flex-shrink:0">'+escHtml(d.woNum)+'</span>';
+      if (d.custName) html += '<span style="color:var(--text-secondary);white-space:nowrap;flex-shrink:0"> &middot; '+escHtml(d.custName)+'</span>';
+      html += '<span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"> &middot; '+escHtml(d.woTitle)+'</span>';
+      if (isActive) html += '<button style="font-size:11px;padding:2px 8px;border:1px solid #e67e22;border-radius:3px;color:#e67e22;background:none;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-left:4px" onclick="unlockSingleWO(\''+d.woId+'\',\''+h.id+'\')">Unlock</button>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  return html || '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">No matching exports</div>';
+}
+
+function _toggleExportBatch(id) {
+  var el = document.getElementById(id);
+  var icon = document.getElementById(id+'-icon');
+  if (!el) return;
+  var open = el.style.display === 'none';
+  el.style.display = open ? 'block' : 'none';
+  if (icon) icon.innerHTML = open ? '&#9660;' : '&#9654;';
+}
+
+function _filterExports() {
+  var input = document.getElementById('export-search');
+  var term = input ? input.value : '';
+  var list = document.getElementById('export-batches-list');
+  if (!list || !_exportBatches) return;
+  list.innerHTML = _renderExportBatches(_exportBatches, term);
 }
 
 function unlockSingleWO(woId, histId) {
@@ -4457,6 +4522,25 @@ function initInvoicesPanel() {
     + '<div id="uri-history-area"></div>'
     + '</div>';
   loadAndRenderImportHistory();
+}
+
+function initInvoicingPanel() {
+  var el = document.getElementById('invoicing-panel-body');
+  if (!el) return;
+  el.innerHTML = '<div style="max-width:600px;padding:20px 0">'
+    + '<div style="font-size:22px;font-weight:700;margin-bottom:6px">Customer Invoice Generation</div>'
+    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:28px">Build and review customer invoices by reconciling billable time and materials from the field.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:12px">'
+    + '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;background:var(--surface)" onclick="desktopNav(\'reconcile\')">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:4px">&#9878; Time &amp; Billing Reconciliation</div>'
+    + '<div style="font-size:13px;color:var(--text-muted)">Review field time logs against billed hours. Resolve gaps, add travel time, and prepare billing data.</div>'
+    + '</div>'
+    + '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;background:var(--surface)" onclick="desktopNav(\'invoices\')">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:4px">&#128441; Invoices &amp; Import</div>'
+    + '<div style="font-size:13px;color:var(--text-muted)">Import vendor invoices and manage customer invoice records.</div>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
 }
 
 function importURICSV(input) {
@@ -5757,14 +5841,6 @@ function _brToggle(uid) {
 
 function _renderBugReportsModule(list, rows, statuses, targetId) {
   var html = '';
-  // Filter bar
-  html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">';
-  html += '<select id="brm-status-filter" onchange="loadBugReportsModule()" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">';
-  html += '<option value="">All Statuses</option>';
-  statuses.forEach(function(s){ html += '<option value="'+s.id+'">'+escHtml(s.name)+'</option>'; });
-  html += '</select>';
-  html += '<span style="font-size:12px;color:var(--text-muted);margin-left:auto">'+rows.length+' report'+(rows.length!==1?'s':'')+'</span>';
-  html += '</div>';
   if(!rows.length){
     html += '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted)">No bug reports</div>';
     list.innerHTML = html;
@@ -5808,15 +5884,20 @@ function loadBugReportsModule() {
   var panel = document.getElementById('desktop-panel-bugreports');
   if(!panel) return;
   var filterEl = document.getElementById('brm-status-filter');
-  var statusFilter = filterEl ? filterEl.value : '';
-  var query = '?order=created_at.desc&limit=200&select=*,bug_report_statuses(id,name,color)';
-  if(statusFilter) query += '&status_id=eq.'+statusFilter;
+  var statusFilter = filterEl ? filterEl.value : '__active__';
+  var query = '?order=created_at.desc&limit=200&select=*,bug_report_statuses(id,name,color,sort_order)';
   var list = document.getElementById('brm-list');
   if(!list) return;
   list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px">Loading...</div>';
   var statuses = AppState.bugReportStatuses || [];
+  var isActiveFilter = statusFilter === '__active__' || !statusFilter;
+  if(statusFilter && statusFilter !== '__active__') query += '&status_id=eq.'+statusFilter;
   sb.get('bug_reports', query).then(function(r){
     var rows = (r.ok && r.data) ? r.data : [];
+    if (isActiveFilter && statuses.length) {
+      var terminalStatus = statuses.reduce(function(a,b){ return b.sort_order>a.sort_order?b:a; });
+      rows = rows.filter(function(row){ return row.status_id !== terminalStatus.id; });
+    }
     _renderBugReportsModule(list, rows, statuses, 'brm-list');
   });
 }
@@ -5829,6 +5910,7 @@ function renderBugReportsModule() {
   html += '<div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">';
   html += '<div style="font-size:16px;font-weight:700">Feature Req/Bugs</div>';
   html += '<select id="brm-status-filter" onchange="loadBugReportsModule()" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">';
+  html += '<option value="__active__" selected>Active Only</option>';
   html += '<option value="">All Statuses</option>';
   statuses.forEach(function(s){ html += '<option value="'+s.id+'">'+escHtml(s.name)+'</option>'; });
   html += '</select>';

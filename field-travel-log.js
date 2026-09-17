@@ -1091,6 +1091,13 @@ function drRenderTimeline() {
     html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">';
     if (isMerged || isSecondaryMerged) html += '<div style="font-size:10px;font-weight:600;color:#534ab7;background:#f1efff;border:1px solid #a89fe8;border-radius:99px;padding:1px 7px;white-space:nowrap">&#8853; Merged</div>';
     html += '<div class="dr-stop-badge ' + badgeCls + '">' + badgeText + '</div>';
+    if (!isNonBillable && totalAllocMin > 0 && elapsedMin > 0) {
+      var allocIsGreen = totalAllocMin >= elapsedMin - 5;
+      var indColor = allocIsGreen ? '#27ae60' : '#a32d2d';
+      var indBg = allocIsGreen ? '#eaf3de' : '#fcebeb';
+      var indBorder = allocIsGreen ? '#a8d08f' : '#f09595';
+      html += '<div style="font-size:10px;font-weight:700;color:' + indColor + ';background:' + indBg + ';border:1px solid ' + indBorder + ';border-radius:4px;padding:1px 6px;white-space:nowrap">' + (totalAllocMin/60).toFixed(1) + 'h / ' + (elapsedMin/60).toFixed(1) + 'h</div>';
+    }
     html += '</div>';
     html += '</div>';
 

@@ -4,6 +4,9 @@
 //             isProcessedStatus, mdrUpsertDayReview, mdrClockIn,
 //             initMobileDailyReview, openWODetail, drFormatTime
 
+var _eodShowAll = false;
+var _eodLastRenderData = null;
+
 function mbGoToFTLDate(dateStr) {
   // Navigate desktop FTL to a specific historical date
   var monday = new Date(dateStr + 'T12:00:00');
@@ -76,7 +79,7 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
   html += '<div style="font-size:13px;color:var(--text-secondary);margin-top:2px">' + dateStr + '</div>';
   html += '</div>';
 
-  // Clock in banner
+  // Punch In / Out / Break banner
   if (!clockedIn) {
     html += '<div style="background:#fef3c7;border:1px solid #b45309;border-radius:var(--radius);padding:12px 14px;margin-bottom:16px">';
     html += '<div style="font-size:13px;font-weight:600;color:#b45309;margin-bottom:6px">&#9888; You haven&#39;t clocked in yet</div>';
@@ -92,6 +95,18 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
       html += '<button onclick="mdrClockIn()" style="width:100%;padding:8px;background:#1a3a5c;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer">Clock In</button>';
     }
     html += '</div>';
+  } else {
+    var dayReviewObj = MDRState.currentDayReview;
+    if (dayReviewObj && !dayReviewObj.clock_out) {
+      var ciTimeStr = dayReviewObj.clock_in ? new Date(dayReviewObj.clock_in).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true}) : '';
+      html += '<div style="background:var(--surface);border:1px solid #27ae60;border-radius:var(--radius);padding:10px 12px;margin-bottom:16px">';
+      html += '<div style="font-size:12px;color:#27ae60;font-weight:600;margin-bottom:8px">&#9679; Clocked in' + (ciTimeStr ? ' since ' + ciTimeStr : '') + '</div>';
+      html += '<div style="display:flex;gap:8px">';
+      html += '<button onclick="dashAddBreak()" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px;cursor:pointer;background:var(--bg)">Add Break</button>';
+      html += '<button onclick="dashClockOut()" style="flex:1;padding:7px;background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);font-size:12px;font-weight:600;cursor:pointer">Punch Out</button>';
+      html += '</div>';
+      html += '</div>';
+    }
   }
 
   // Today's jobs
@@ -202,23 +217,26 @@ function initMorningBriefDesktop() {
   if (!body) return;
   var today = new Date().toISOString().slice(0,10);
   body.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-muted)">Loading...</div>';
+  var techId = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   Promise.all([
     sb.get('dispatch_assignments', '?scheduled_date=eq.' + today + '&order=sort_order.asc&select=*,work_orders(wo_number,title,status,form_mode,customer_id,customers(name,display_name)),technicians(name)'),
     sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
     sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)'),
-    sb.get('day_review', '?clock_in=not.is.null&clock_out=is.null&review_date=lt.' + today + '&select=id,tech_id,review_date,clock_in&order=review_date.desc&limit=20')
+    sb.get('day_review', '?clock_in=not.is.null&clock_out=is.null&review_date=lt.' + today + '&select=id,tech_id,review_date,clock_in&order=review_date.desc&limit=20'),
+    techId ? sb.get('day_review', '?tech_id=eq.' + techId + '&review_date=eq.' + today + '&select=*&limit=1') : Promise.resolve({ ok: false, data: [] })
   ]).then(function(results) {
     var dispatches      = (results[0].ok ? results[0].data : []) || [];
     var dateTasks       = (results[1].ok ? results[1].data : []) || [];
     var locTasks        = (results[2].ok ? results[2].data : []) || [];
     var missingClockOut = (results[3].ok ? results[3].data : []) || [];
-    renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut);
+    var todayReview     = (results[4].ok && results[4].data && results[4].data.length) ? results[4].data[0] : null;
+    renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut, todayReview);
   }).catch(function() {
     body.innerHTML = '<div style="color:var(--text-muted)">Could not load morning brief</div>';
   });
 }
 
-function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut) {
+function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today, missingClockOut, todayReview) {
   missingClockOut = missingClockOut || [];
   dispatches = (dispatches || []).filter(function(d){
     return !(d.work_orders && isProcessedStatus(d.work_orders.status));
@@ -226,7 +244,25 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
   var html = '<div style="max-width:700px">';
   html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Daily Dashboard</div>';
-  html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:20px">' + dateStr + '</div>';
+  html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">' + dateStr + '</div>';
+
+  // Punch In / Punch Out / Add Break section
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+  if (!todayReview || !todayReview.clock_in) {
+    html += '<span style="font-size:13px;color:var(--text-muted);flex:1">Not clocked in today</span>';
+    html += '<button onclick="mdrClockIn();setTimeout(initMorningBriefDesktop,400)" style="padding:7px 18px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer">Punch In</button>';
+  } else if (!todayReview.clock_out) {
+    var ciTime = new Date(todayReview.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
+    html += '<div style="flex:1"><span style="font-size:13px;font-weight:600;color:#27ae60">&#9679; Clocked in</span> <span style="font-size:12px;color:var(--text-muted)">since ' + ciTime + '</span></div>';
+    html += '<button onclick="dashAddBreak()" style="padding:7px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;cursor:pointer">Add Break</button>';
+    html += '<button onclick="dashClockOut()" style="padding:7px 16px;background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer">Punch Out</button>';
+  } else {
+    var ciTime2 = new Date(todayReview.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
+    var coTime2 = new Date(todayReview.clock_out).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
+    html += '<span style="font-size:13px;color:var(--text-muted);flex:1">&#10003; Clocked in: ' + ciTime2 + ' &mdash; Out: ' + coTime2 + '</span>';
+    html += '<button onclick="mdrClockIn();setTimeout(initMorningBriefDesktop,400)" style="padding:7px 14px;background:#27ae60;color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer">Clock In Again</button>';
+  }
+  html += '</div>';
 
   // Payroll alert — missing clock-outs
   if (missingClockOut.length) {
@@ -574,13 +610,21 @@ function _eodLoadQueue(container, tech, isDesktop) {
   var systemStart = AppState.settings.system_start_date || '2024-01-01';
   Promise.all([
     sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=lte.' + today + '&review_date=gte.' + systemStart + '&order=review_date.desc&select=*'),
-    sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=gte.' + systemStart + '&entry_date=lte.' + today + '&active=eq.true&select=hours,entry_date')
+    sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=gte.' + systemStart + '&entry_date=lte.' + today + '&active=eq.true&select=hours,entry_date'),
+    sb.get('day_breaks', '?tech_id=eq.' + tech + '&review_date=gte.' + systemStart + '&review_date=lte.' + today + '&select=review_date,break_start,break_end')
   ]).then(function(res) {
     var reviews = res[0].ok ? (res[0].data || []) : [];
     var entries = res[1].ok ? (res[1].data || []) : [];
+    var breaks  = res[2].ok ? (res[2].data || []) : [];
     var billedByDate = {};
     entries.forEach(function(e) {
       billedByDate[e.entry_date] = (billedByDate[e.entry_date] || 0) + parseFloat(e.hours || 0);
+    });
+    var breakMinByDate = {};
+    breaks.forEach(function(b) {
+      if (!b.break_start || !b.break_end) return;
+      var dur = Math.max(0, (new Date(b.break_end) - new Date(b.break_start)) / 60000);
+      breakMinByDate[b.review_date] = (breakMinByDate[b.review_date] || 0) + dur;
     });
     var exceptions = [];
     var weekStart = _eodWeekStart(today);
@@ -596,10 +640,11 @@ function _eodLoadQueue(container, tech, isDesktop) {
         var co = r.clock_out ? new Date(r.clock_out) : (date === today ? new Date() : null);
         if (co) onClockMin = Math.max(0, Math.round((co - ci) / 60000));
       }
-      var onClockH = onClockMin / 60;
+      var breakMin = breakMinByDate[date] || 0;
+      var onClockH = Math.max(0, (onClockMin - breakMin)) / 60;
       var pct = onClockH > 0 ? Math.round((billedH / onClockH) * 100) : null;
       var gapH = Math.max(0, onClockH - billedH);
-      if (date >= weekStart && date <= today) { weekOnClockMin += onClockMin; weekBilledH += billedH; }
+      if (date >= weekStart && date <= today) { weekOnClockMin += (onClockMin - breakMin); weekBilledH += billedH; }
       if (date === today) {
         exceptions.push({ date: date, status: status, billedH: billedH, onClockH: onClockH, gapH: gapH, pct: pct, clockOut: r.clock_out, clockIn: r.clock_in, isToday: true });
         return;
@@ -636,7 +681,27 @@ function _eodWeekStart(today) {
   return d.toISOString().slice(0, 10);
 }
 
+function _eodToggleShowAll() {
+  _eodShowAll = !_eodShowAll;
+  if (_eodLastRenderData) {
+    _eodRenderQueue(
+      _eodLastRenderData.container,
+      _eodLastRenderData.exceptions,
+      _eodLastRenderData.weekOnClockMin,
+      _eodLastRenderData.weekBilledH,
+      _eodLastRenderData.isDesktop
+    );
+  }
+}
+
 function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isDesktop) {
+  _eodLastRenderData = { container: container, exceptions: exceptions, weekOnClockMin: weekOnClockMin, weekBilledH: weekBilledH, isDesktop: isDesktop };
+
+  // Filter accepted entries unless show-all is on
+  var visibleExceptions = _eodShowAll ? exceptions : exceptions.filter(function(ex) {
+    return ex.isToday || ex.status !== 'accepted';
+  });
+
   var weekOnClockH = weekOnClockMin / 60;
   var weekPct = weekOnClockH > 0 ? Math.round((weekBilledH / weekOnClockH) * 100) : null;
   var pctColor = function(p) { return p >= 80 ? '#27ae60' : p >= 60 ? '#854f0b' : '#a32d2d'; };
@@ -646,8 +711,13 @@ function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isD
     return dt.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
   };
 
+  var hiddenCount = exceptions.length - visibleExceptions.length;
+
   var html = '<div style="padding:16px' + (isDesktop ? ';max-width:700px' : '') + '">';
-  html += '<div style="font-size:20px;font-weight:700;margin-bottom:12px">Exceptions Queue</div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html += '<div style="font-size:20px;font-weight:700">Exceptions Queue</div>';
+  html += '<button onclick="_eodToggleShowAll()" style="font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer">' + (_eodShowAll ? 'Active Only' : 'Show All' + (hiddenCount > 0 ? ' (' + hiddenCount + ' hidden)' : '')) + '</button>';
+  html += '</div>';
 
   // Weekly summary bar
   html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:16px">';
@@ -658,14 +728,14 @@ function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isD
   if (weekPct !== null) html += '<div style="text-align:center"><div style="font-size:15px;font-weight:700;color:' + pctColor(weekPct) + '">' + weekPct + '%</div><div style="font-size:10px;color:var(--text-muted)">Efficiency</div></div>';
   html += '</div></div>';
 
-  if (!exceptions.length) {
+  if (!visibleExceptions.length) {
     html += '<div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:14px">&#10003; All caught up</div>';
     html += '</div>';
     container.innerHTML = html;
     return;
   }
 
-  exceptions.forEach(function(ex) {
+  visibleExceptions.forEach(function(ex) {
     var flags = ex.flags || [];
     var isRed = flags.indexOf('kicked_back') >= 0 || flags.indexOf('unclosed') >= 0;
     var isAmber = !isRed && flags.length > 0;
@@ -731,6 +801,51 @@ function eodConfirmClockOut(overlay) {
   mdrUpsertDayReview({clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual'});
   showToast('Day closed out');
   setTimeout(function() { initEndOfDay(); }, 400);
+}
+
+function dashClockOut() {
+  var today = new Date().toISOString().slice(0,10);
+  MDRState.selectedDate = today;
+  eodClockOut();
+}
+
+function dashAddBreak() {
+  var now = new Date();
+  var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:var(--surface);border-radius:12px;padding:20px;width:min(400px,100%)">' +
+    '<div style="font-size:15px;font-weight:700;margin-bottom:4px">Add Break</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Record a break to exclude from time calculations.</div>' +
+    '<div style="display:flex;gap:12px;margin-bottom:16px">' +
+    '<div style="flex:1"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Break Start</div>' +
+    '<input type="time" id="dash-break-start" value="' + nowStr + '" style="width:100%;font-size:16px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box"></div>' +
+    '<div style="flex:1"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Break End</div>' +
+    '<input type="time" id="dash-break-end" value="' + nowStr + '" style="width:100%;font-size:16px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="dash-break-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:none;font-size:14px;cursor:pointer">Cancel</button>' +
+    '<button class="dash-break-save" style="flex:1;padding:10px;background:#1a3a5c;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer">Save Break</button>' +
+    '</div></div>';
+  overlay.addEventListener('click', function(e) {
+    if (e.target.closest('.dash-break-cancel')) { overlay.remove(); return; }
+    if (e.target.closest('.dash-break-save')) {
+      var startEl = document.getElementById('dash-break-start');
+      var endEl = document.getElementById('dash-break-end');
+      if (!startEl || !endEl) return;
+      var today = new Date().toISOString().slice(0,10);
+      var breakStart = new Date(today + 'T' + startEl.value + ':00').toISOString();
+      var breakEnd = new Date(today + 'T' + endEl.value + ':00').toISOString();
+      if (breakEnd <= breakStart) { showToast('End time must be after start time'); return; }
+      var techId = AppState.userTechId || MDRState.tech;
+      sb.post('day_breaks', { tech_id: techId, review_date: today, break_start: breakStart, break_end: breakEnd, created_by: AppState.userEmail || null }).then(function(r) {
+        if (r.ok) { showToast('Break saved'); overlay.remove(); }
+        else showToast('Error saving break');
+      });
+    }
+  });
+  document.body.appendChild(overlay);
 }
 
 function mdrGoToFieldLog() {
