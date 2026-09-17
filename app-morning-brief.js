@@ -805,7 +805,6 @@ function eodConfirmClockOut(overlay) {
 
 function dbDesktopPunchIn() {
   var today = new Date().toISOString().slice(0,10);
-  // Always force today's date — desktop dashboard always clocks in for today
   MDRState.selectedDate = today;
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
