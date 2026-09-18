@@ -41,28 +41,31 @@ function initMorningBrief() {
   if (!shell) return;
   shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">Loading...</div>';
   var today = new Date().toISOString().slice(0,10);
-  // Use resolved tech identity — set once at login, reliable
-  var tech = AppState.userTechId || AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
-  var dayReview = MDRState.currentDayReview || null;
-  var clockedIn = dayReview && dayReview.clock_in;
+  var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
 
   Promise.all([
     sb.get('dispatch_assignments', '?tech_id=eq.' + tech + '&scheduled_date=eq.' + today + '&order=sort_order.asc&select=*,work_orders(wo_number,title,status,form_mode,customers(name,display_name))'),
     sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
     sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)'),
-    sb.get('location_event', '?tid=eq.' + (AppState.traccarId || 'KM') + '&timestamp=gte.' + today + 'T04:00:00Z&timestamp=lte.' + today + 'T23:59:59Z&order=timestamp.asc&limit=1&select=timestamp,lat,lng')
+    sb.get('location_event', '?tid=eq.' + (AppState.traccarId || 'KM') + '&timestamp=gte.' + today + 'T04:00:00Z&timestamp=lte.' + today + 'T23:59:59Z&order=timestamp.asc&limit=1&select=timestamp,lat,lng'),
+    tech ? sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=eq.' + today + '&select=*&limit=1') : Promise.resolve({ ok: false, data: [] })
   ]).then(function(results) {
     var dispatches  = (results[0].ok ? results[0].data : []) || [];
     var dateTasks   = (results[1].ok ? results[1].data : []) || [];
     var locTasks    = (results[2].ok ? results[2].data : []) || [];
     var firstPing   = results[3].ok && results[3].data && results[3].data.length ? results[3].data[0] : null;
-    renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech);
+    var todayReview = (results[4].ok && results[4].data && results[4].data.length) ? results[4].data[0] : null;
+    // Keep MDRState in sync so FTL and punch-out buttons work correctly
+    if (todayReview) MDRState.currentDayReview = todayReview;
+    var clockedIn = todayReview && todayReview.clock_in;
+    renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview);
   }).catch(function() {
-    renderMorningBrief(shell, [], [], [], clockedIn, null, today, tech);
+    var fallbackReview = MDRState.currentDayReview || null;
+    renderMorningBrief(shell, [], [], [], fallbackReview && fallbackReview.clock_in, null, today, tech, fallbackReview);
   });
 }
 
-function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech) {
+function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview) {
   var now = new Date();
   var greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
   var techName = '';
@@ -79,7 +82,8 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
   html += '<div style="font-size:13px;color:var(--text-secondary);margin-top:2px">' + dateStr + '</div>';
   html += '</div>';
 
-  // Punch In / Out / Break banner
+  // Punch In / Out / Break banner \u2014 driven from fresh Supabase data (todayReview)
+  var review = todayReview || MDRState.currentDayReview;
   if (!clockedIn) {
     html += '<div style="background:#fef3c7;border:1px solid #b45309;border-radius:var(--radius);padding:12px 14px;margin-bottom:16px">';
     html += '<div style="font-size:13px;font-weight:600;color:#b45309;margin-bottom:6px">&#9888; You haven&#39;t clocked in yet</div>';
@@ -96,9 +100,8 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
     }
     html += '</div>';
   } else {
-    var dayReviewObj = MDRState.currentDayReview;
-    if (dayReviewObj && !dayReviewObj.clock_out) {
-      var ciTimeStr = dayReviewObj.clock_in ? new Date(dayReviewObj.clock_in).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true}) : '';
+    if (review && !review.clock_out) {
+      var ciTimeStr = review.clock_in ? new Date(review.clock_in).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true}) : '';
       html += '<div style="background:var(--surface);border:1px solid #27ae60;border-radius:var(--radius);padding:10px 12px;margin-bottom:16px">';
       html += '<div style="font-size:12px;color:#27ae60;font-weight:600;margin-bottom:8px">&#9679; Clocked in' + (ciTimeStr ? ' since ' + ciTimeStr : '') + '</div>';
       html += '<div style="display:flex;gap:8px">';
