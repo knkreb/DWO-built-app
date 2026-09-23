@@ -4155,15 +4155,18 @@ function mdrClockIn() {
   var sched = techSchedule.find(function(s){ return s.day_of_week === dow; });
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  var defaultVal = sched ? (sched.expected_start||'').substring(0,5)||nowStr : nowStr;
+  var rawStart = sched ? (sched.expected_start||'').substring(0,5) : '';
+  var defaultVal = (rawStart && rawStart !== '00:00') ? rawStart : nowStr;
   drShowTimePicker('Clock In', defaultVal, function(time) {
     if (!time) return;
     var dt = new Date(MDRState.selectedDate + 'T' + time + ':00');
     var isBackdated = dt < new Date(new Date() - 60000);
     if (!MDRState.currentDayReview) MDRState.currentDayReview = {};
     MDRState.currentDayReview.clock_in = dt.toISOString();
-    mdrUpsertDayReview({ clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending' });
-    setTimeout(function() { initMorningBrief(); pushScreen('screen-morning-brief', 'Daily Dashboard'); }, 400);
+    mdrUpsertDayReview(
+      { clock_in: dt.toISOString(), clock_in_backdated: isBackdated, clock_in_source: 'manual', status: 'pending', sync_status: 'pending' },
+      function() { initMorningBrief(); }
+    );
   });
 }
 
@@ -4223,7 +4226,7 @@ function mdrResubmitDay() {
   mdrUpsertDayReview(updates);
 }
 
-function mdrUpsertDayReview(updates) {
+function mdrUpsertDayReview(updates, onSuccess) {
   if (!MDRState.selectedDate) MDRState.selectedDate = drTodayStr();
   if (!MDRState.tech) MDRState.tech = AppState.userTechId || drGetDefaultTech() || (AppState.technicians[0] && AppState.technicians[0].id);
   updates.modified_by = AppState.userEmail;
@@ -4232,16 +4235,19 @@ function mdrUpsertDayReview(updates) {
     var existing = r.ok && r.data && r.data.length ? r.data[0] : null;
     if (existing) {
       sb.patch('day_review', existing.id, updates).then(function(r2){
-        if (r2.ok) { mdrLoadDay(MDRState.selectedDate); }
+        if (r2.ok) { mdrLoadDay(MDRState.selectedDate); if (onSuccess) onSuccess(); }
         else showToast('Error saving — check Supabase columns exist');
       });
     } else {
       var newRecord = Object.assign({ tech_id: MDRState.tech, review_date: MDRState.selectedDate, status:'pending', sync_status:'pending', created_by: AppState.userEmail }, updates);
       sb.post('day_review', newRecord).then(function(r2){
-        if (r2.ok) { mdrLoadDay(MDRState.selectedDate); }
+        if (r2.ok) { mdrLoadDay(MDRState.selectedDate); if (onSuccess) onSuccess(); }
         else showToast('Error saving day record');
       });
     }
+  }).catch(function(e) {
+    showToast('Network error — punch not saved');
+    console.error('mdrUpsertDayReview error', e);
   });
 }
 

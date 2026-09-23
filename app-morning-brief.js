@@ -815,7 +815,8 @@ function dbDesktopPunchIn() {
   var techSchedule = AppState._techSchedules ? (AppState._techSchedules[techId] || []) : [];
   var dow = now.getDay();
   var sched = techSchedule.find(function(s){ return s.day_of_week === dow; });
-  var defaultVal = sched ? ((sched.expected_start || '').substring(0,5) || nowStr) : nowStr;
+  var rawStart = sched ? (sched.expected_start || '').substring(0,5) : '';
+  var defaultVal = (rawStart && rawStart !== '00:00') ? rawStart : nowStr;
   drShowTimePicker('Clock In', defaultVal, function(time) {
     if (!time) return;
     var dt = new Date(today + 'T' + time + ':00');
