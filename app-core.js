@@ -440,7 +440,6 @@ function loadAllData() {
       var cached = {
         statuses: loadCache('statuses'),
         wo_flags: loadCache('wo_flags'),
-        technicians: loadCache('technicians'),
         hours_types: loadCache('hours_types'),
         qbo_items: loadCache('qbo_items')
       };
@@ -449,11 +448,12 @@ function loadAllData() {
       if (statusesValid) {
         if (cached.statuses) AppState.statuses = cached.statuses;
         if (cached.wo_flags) AppState.woFlags = cached.wo_flags;
-        if (cached.technicians) AppState.technicians = cached.technicians;
         if (cached.hours_types) AppState.hoursTypes = cached.hours_types;
         if (cached.qbo_items) AppState.qboItems = cached.qbo_items;
-        // Always fetch settings fresh — never cache, so new keys always load
-        lookupPromises = loadSettings();
+        // Always fetch settings, technicians, bug report statuses and contact role types fresh —
+        // never cached (or, for technicians, must reflect active/inactive changes immediately), so
+        // new/changed values always load
+        lookupPromises = Promise.all([loadSettings(), loadTechnicians(), loadBugReportStatuses(), loadContactRoleTypes()]);
       } else {
         // Cache invalid — fetch everything fresh
         lookupPromises = Promise.all([
@@ -469,7 +469,7 @@ function loadAllData() {
       }
     } else {
       lookupPromises = Promise.all([
-        loadStatuses(), loadWoFlags(), loadTechnicians(), loadHoursTypes(), loadQBOItems(), loadSettings(), loadBugReportStatuses()
+        loadStatuses(), loadWoFlags(), loadTechnicians(), loadHoursTypes(), loadQBOItems(), loadSettings(), loadContactRoleTypes(), loadBugReportStatuses()
       ]).then(function() {
         saveCache('statuses', AppState.statuses);
         saveCache('wo_flags', AppState.woFlags);
