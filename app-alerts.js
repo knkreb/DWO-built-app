@@ -198,8 +198,9 @@ function loadMoreAuditLog() {
     if (!r.ok) return;
     AlertsState.auditRows = AlertsState.auditRows.concat(r.data || []);
     AlertsState.auditPage++;
-    var rowsEl = document.getElementById('audit-log-rows');
-    if (!rowsEl) return;
+    // Settings renders into both a desktop and a mobile container, so this id can exist twice — update all of them.
+    var rowsEls = document.querySelectorAll('[id="audit-log-rows"]');
+    if (!rowsEls.length) return;
     var html = '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)">'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">When</th>'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Who</th>'
@@ -219,8 +220,8 @@ function loadMoreAuditLog() {
         + '</tr>';
     });
     html += '</tbody></table>';
-    rowsEl.innerHTML = html;
-    var moreBtn = document.getElementById('audit-log-more-btn');
-    if (moreBtn) moreBtn.style.display = (r.data && r.data.length === pageSize) ? '' : 'none';
+    rowsEls.forEach(function(el) { el.innerHTML = html; });
+    var showMore = (r.data && r.data.length === pageSize);
+    document.querySelectorAll('[id="audit-log-more-btn"]').forEach(function(btn) { btn.style.display = showMore ? '' : 'none'; });
   });
 }
