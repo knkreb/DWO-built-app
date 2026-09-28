@@ -93,14 +93,14 @@ function tasksCardHtml(t, tech) {
   var isLocTask = t.task_type === 'location';
 
   var claimerName = '';
-  if (isClaimedByOther && AppState.technicians) {
-    var claimer = AppState.technicians.find(function(x) { return x.id === t.claimed_by; });
+  if (isClaimedByOther) {
+    var claimer = findTechAny(t.claimed_by);
     if (claimer) claimerName = claimer.name.split(' ')[0];
   }
 
   var completedByName = '';
-  if (isCompleted && t.completed_by && AppState.technicians) {
-    var completer = AppState.technicians.find(function(x) { return x.id === t.completed_by; });
+  if (isCompleted && t.completed_by) {
+    var completer = findTechAny(t.completed_by);
     if (completer) completedByName = completer.name.split(' ')[0];
   }
 
@@ -325,8 +325,8 @@ function tasksRenderAdminPanel(el) {
       var locName = t.locations ? (t.locations.name || '') : '';
       var isLocTask = t.task_type === 'location';
       var techName = '';
-      if (AppState.technicians && Array.isArray(t.task_assignments) && t.task_assignments.length) {
-        var found = AppState.technicians.find(function(x){ return x.id === t.task_assignments[0].tech_id; });
+      if (Array.isArray(t.task_assignments) && t.task_assignments.length) {
+        var found = findTechAny(t.task_assignments[0].tech_id);
         if (found) techName = found.name;
       }
       var assigneeLabel = t.assignee_type === 'company' ? 'Company-wide' : (techName || 'Specific tech');
@@ -335,12 +335,12 @@ function tasksRenderAdminPanel(el) {
       var dateLabel = isLocTask ? ('&#128205; ' + escHtml(locName || 'No location')) : (t.scheduled_date || 'No date');
 
       var auditParts = [];
-      if (t.claimed_by && AppState.technicians) {
-        var claimerA = AppState.technicians.find(function(x){ return x.id === t.claimed_by; });
+      if (t.claimed_by) {
+        var claimerA = findTechAny(t.claimed_by);
         if (claimerA) auditParts.push('Claimed by ' + escHtml(claimerA.name.split(' ')[0]) + (t.claimed_at ? ' &middot; ' + t.claimed_at.slice(0,10) : ''));
       }
-      if (t.completed_by && AppState.technicians) {
-        var completerA = AppState.technicians.find(function(x){ return x.id === t.completed_by; });
+      if (t.completed_by) {
+        var completerA = findTechAny(t.completed_by);
         if (completerA) auditParts.push('Completed by ' + escHtml(completerA.name.split(' ')[0]) + (t.completed_at ? ' &middot; ' + t.completed_at.slice(0,10) : ''));
       }
 

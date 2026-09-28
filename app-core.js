@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.87';
+const APP_VERSION = '4.88';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -129,6 +129,17 @@ var sb = {
         });
       });
   },
+  invoke: function(fnName, body) {
+    var headers = { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' };
+    if (AppState.session && AppState.session.access_token) headers['Authorization'] = 'Bearer ' + AppState.session.access_token;
+    return fetch(SUPABASE_URL + '/functions/v1/' + fnName, { method: 'POST', headers: headers, body: JSON.stringify(body||{}) })
+      .then(function(res) {
+        return res.text().then(function(text) {
+          try { return { ok: res.ok, status: res.status, data: text ? JSON.parse(text) : null }; }
+          catch(e) { return { ok: res.ok, status: res.status, data: text }; }
+        });
+      });
+  },
   get: function(table, params) { return this.req('GET', '/rest/v1/'+table+(params||'')); },
   post: function(table, body) { return this.req('POST', '/rest/v1/'+table, body); },
   patch: function(table, id, body) { return this.req('PATCH', '/rest/v1/'+table+'?id=eq.'+id, body); },
@@ -150,6 +161,7 @@ var sb = {
 
 var AppState = {
   session: null, userRole: null, userEmail: null, userTechId: null, deviceMode: null, theme: 'light',
+  profile: null, allTechnicians: [],
   screenStack: [], currentWO: null, editingWOId: null, batchStatusMode: false,
   workOrders: [], customers: [], technicians: [], hoursTypes: [], qboItems: [], vendors: [], settings: {}, contactRoleTypes: [],
   hoursEntries: [], lineItems: [], quotedLines: [],
@@ -256,7 +268,8 @@ window.addEventListener('load', function() {
     try {
       AppState.session = JSON.parse(saved);
       AppState.userEmail = AppState.session.user && AppState.session.user.email;
-      loadUserRole().then(function() {
+      loadProfileAndIdentity().then(function(status) {
+        if (status !== 'ok') return;
         resolveDeviceMode();
         loadAllData().then(showMainScreen);
       });
@@ -279,31 +292,41 @@ function doLogin() {
   btn.disabled = true; btn.textContent = 'Signing in...';
   sb.signIn(email, password).then(function(res) {
     btn.disabled = false; btn.textContent = 'Sign In';
-    if (!res.ok || res.data.error) { errEl.textContent = res.data.error_description || res.data.message || 'Sign in failed.'; return; }
+    if (!res.ok || res.data.error) {
+      var rawErr = res.data.error_description || res.data.message || res.data.msg || '';
+      errEl.textContent = /banned|deactivat/i.test(rawErr) ? 'This account has been deactivated. Contact Kevin.' : (rawErr || 'Sign in failed.');
+      return;
+    }
     AppState.session = res.data;
     AppState.userEmail = res.data.user && res.data.user.email;
     localStorage.setItem('dwo_session', JSON.stringify(res.data));
     localStorage.setItem('dwo_app_version', APP_VERSION);
-    loadUserRole().then(function() {
-      var isMobileUA2 = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      var isMobileW2 = window.screen.width < 900;
-      var dm2 = (isMobileUA2||isMobileW2) ? 'mobile' : (localStorage.getItem('dwo_device_mode')||'desktop');
-      AppState.deviceMode = dm2;
-      localStorage.setItem('dwo_device_mode', dm2);
-      loadAllData().then(showMainScreen);
-      loadAllData().then(showMainScreen);
+    loadProfileAndIdentity().then(function(status) {
+      if (status !== 'ok') return;
+      continueLoginAfterIdentity();
     });
   });
 }
 
+function continueLoginAfterIdentity() {
+  var isMobileUA2 = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  var isMobileW2 = window.screen.width < 900;
+  var dm2 = (isMobileUA2||isMobileW2) ? 'mobile' : (localStorage.getItem('dwo_device_mode')||'desktop');
+  AppState.deviceMode = dm2;
+  localStorage.setItem('dwo_device_mode', dm2);
+  loadAllData().then(showMainScreen);
+}
+
+/* MOVED TO app-users.js — v4.88 — 2026-09-27 — replaced by loadProfileAndIdentity() (profiles table, keyed to auth user id)
 function loadUserRole() {
   return sb.get('user_roles', '?email=eq.' + encodeURIComponent(AppState.userEmail) + '&select=role')
     .then(function(r) { AppState.userRole = (r.ok && r.data && r.data.length) ? r.data[0].role : 'field'; });
 }
+*/
 
 function doLogout() {
   sb.signOut().then(function() {
-    AppState.session = null; AppState.userRole = null;
+    AppState.session = null; AppState.userRole = null; AppState.profile = null; AppState.userTechId = null;
     localStorage.removeItem('dwo_session'); AppState.screenStack = [];
     showScreen('screen-login'); showHeader(false);
   });
@@ -659,7 +682,20 @@ function getCustName(custObj) {
 function loadWorkOrders() { return sb.get('work_orders','?select=*,customers(display_name,name)&order=created_at.asc').then(function(r){ if(r.ok) AppState.workOrders=r.data||[]; }); }
 function refreshWOData() { showToast('Refreshing...'); AppState.projectedCache={}; loadWorkOrders().then(function(){ renderDesktopGrid(); if(typeof refreshAgingBar==='function') refreshAgingBar(); showToast('Refreshed'); }); }
 function loadCustomers()  { return sb.get('customers','?select=*&order=name.asc').then(function(r){ if(r.ok) AppState.customers=r.data||[]; }); }
-function loadTechnicians(){ return sb.get('technicians','?active=eq.true&select=*&order=name.asc').then(function(r){ if(r.ok) AppState.technicians=r.data||[]; }); }
+// Looks up a technician by id in allTechnicians first so deactivated people still resolve
+// by name in historical records (hours entries, day review, timecards, reports).
+function findTechAny(id) {
+  var list = (AppState.allTechnicians && AppState.allTechnicians.length) ? AppState.allTechnicians : AppState.technicians;
+  return (list || []).find(function(t){ return t.id === id; });
+}
+function loadTechnicians(){
+  return sb.get('technicians','?select=*&order=name.asc').then(function(r){
+    if(r.ok) {
+      AppState.allTechnicians = r.data||[];
+      AppState.technicians = (r.data||[]).filter(function(t){ return t.active; });
+    }
+  });
+}
 function loadHoursTypes() {
   return sb.get('hours_types','?active=eq.true&select=*').then(function(r){
     if(r.ok) {
@@ -685,11 +721,7 @@ function loadSettings() {
 function getDefaultTechId() {
   var stored = localStorage.getItem('dwo_default_tech');
   if (stored) return stored;
-  if (AppState.userRole === 'admin') {
-    var kevin = AppState.technicians.find(function(t){ return t.name.toLowerCase().indexOf('kevin')>=0; });
-    return (kevin && kevin.id) || (AppState.technicians[0] && AppState.technicians[0].id) || '';
-  }
-  return (AppState.technicians[0] && AppState.technicians[0].id) || '';
+  return AppState.userTechId || (AppState.technicians[0] && AppState.technicians[0].id) || '';
 }
 function setDefaultTech(id) { localStorage.setItem('dwo_default_tech', id); }
 
@@ -709,6 +741,8 @@ function showHeader(show, title, showBack) {
   if (AppState.userRole === 'admin' && AppState.deviceMode === 'desktop') { mb.style.display = ''; mb.textContent = AppState.deviceMode === 'mobile' ? 'desktop' : 'mobile'; }
   else mb.style.display = 'none';
   if (hb) hb.style.display = (show && AppState.deviceMode === 'mobile' && !showBack) ? '' : 'none';
+  var bellBtn = document.getElementById('btn-alerts-bell');
+  if (bellBtn) bellBtn.style.display = (show && AppState.userRole === 'admin') ? '' : 'none';
   // On mobile with back button, hide the title text to give back button room
   var titleText = document.getElementById('header-title-text');
   if (titleText) titleText.style.display = (AppState.deviceMode === 'mobile' && showBack) ? 'none' : '';
@@ -1392,7 +1426,7 @@ function dtHoursEditRow(e, isNew) {
   var defHours = e ? parseFloat(e.hours||0) : '';
   var defBill = e ? !!e.billable : true;
   var defTechId = e ? e.tech_id : defTech;
-  var defTechName = (AppState.technicians.find(function(t){return t.id===defTechId;})||{}).name||'';
+  var defTechName = (findTechAny(defTechId)||{}).name||'';
 
   return '<div class="dt-edit-row dt-hours-grid" data-eid="'+id+'" data-type="hours">'
     + '<input class="dt-input" type="date" name="entry_date" value="'+defDate+'" tabindex="1">'
@@ -1666,7 +1700,7 @@ function dtSaveHoursRow(row, wo, eid, isNew, addNext, showPrompt) {
     if (r.ok) {
       var entry = isNew ? (r.data&&r.data[0]) : Object.assign({}, AppState.hoursEntries.find(function(e){return e.id===eid;})||{}, data);
       if (entry) {
-        entry.technicians = AppState.technicians.find(function(t){return t.id===techId;});
+        entry.technicians = findTechAny(techId);
         entry.hours_types = ht;
         if (isNew) AppState.hoursEntries.push(entry);
         else { var idx=AppState.hoursEntries.findIndex(function(e){return e.id===eid;}); if(idx>=0) AppState.hoursEntries[idx]=entry; }
@@ -2126,7 +2160,7 @@ function desktopNav(panel) {
   if (panel==='invoicing') initInvoicingPanel();
   if (panel==='settings') renderSettings('settings-body-desktop');
   if (panel==='exports') renderExportsPanel();
-  if (panel==='morningbrief') initMorningBriefDesktop();
+  if (panel==='morningbrief') { initMorningBriefDesktop(); if (typeof loadAlerts === 'function') loadAlerts(); }
   if (panel==='bugreports') renderBugReportsModule();
   if (panel==='endofday') initEndOfDayDesktop();
   if (panel==='tasks' && typeof initTasksPanel === 'function') initTasksPanel();
@@ -2687,7 +2721,7 @@ function renderReconcilePanel() {
   var toUTC = drNextLocalMidnightUTC(date);
 
   Promise.all([
-    sb.get('location_event', '?tid=eq.'+(AppState.technicians.find(function(t){return t.id===techId;})||{}).tid+'&timestamp=gte.'+fromUTC+'&timestamp=lt.'+toUTC+'&select=id,tid,timestamp,lat,lng,accuracy,speed&order=timestamp.asc&limit=10000'),
+    sb.get('location_event', '?tid=eq.'+(findTechAny(techId)||{}).tid+'&timestamp=gte.'+fromUTC+'&timestamp=lt.'+toUTC+'&select=id,tid,timestamp,lat,lng,accuracy,speed&order=timestamp.asc&limit=10000'),
     sb.get('hours_entries', '?tech_id=eq.'+techId+'&entry_date=eq.'+date+'&select=*,work_orders(wo_number,title,status,customer_id,customers(name,display_name))&order=created_at.asc')
   ]).then(function(results) {
     DRState.pings = (results[0].ok && results[0].data) ? results[0].data : [];
@@ -2764,7 +2798,7 @@ function rcDefaultHoursTypeId() {
 
 function rcGetTechInfo() {
   var techId = DRState.tech || (AppState.technicians&&AppState.technicians[0]&&AppState.technicians[0].id);
-  var techName = (AppState.technicians.find(function(t){return t.id===techId;})||{}).name||'';
+  var techName = (findTechAny(techId)||{}).name||'';
   return { id: techId, name: techName };
 }
 
@@ -4293,6 +4327,7 @@ function saveStatusField(id, field, value) {
   });
 }
 
+/* MOVED TO app-users.js — v4.88 — 2026-09-27 — replaced by the Users screen (deactivate/reactivate via admin-users edge function, audited)
 function deactivateTech(id, name) {
   if (!confirm('Deactivate '+name+'? They will be removed from all dropdowns but historical entries are preserved.')) return;
   sb.patch('technicians', id, {active: false}).then(function(r) {
@@ -4315,6 +4350,7 @@ function addNewTech() {
     } else showToast('Error adding technician');
   });
 }
+*/
 
 function saveTechField(techId, field, value) {
   var updates = {};
@@ -4331,8 +4367,10 @@ function saveTechField(techId, field, value) {
 function saveTechColor(techId, color) {
   sb.patch('technicians', techId, {color: color}).then(function(r) {
     if (r.ok) {
-      var t = AppState.technicians.find(function(t){ return t.id===techId; });
-      if (t) t.color = color;
+      [AppState.allTechnicians, AppState.technicians].forEach(function(list) {
+        var t = (list||[]).find(function(x){ return x.id===techId; });
+        if (t) t.color = color;
+      });
       showToast('Color saved');
     } else showToast('Error saving color');
   });
@@ -4997,6 +5035,7 @@ function renderSettings(containerId) {
   var activeTab = localStorage.getItem('dwo_settings_tab') || 'general';
   var defaultTechId = localStorage.getItem('dwo_default_tech') || '';
   var tabs = [{id:'general',label:'General'},{id:'workorders',label:'Work Orders'},{id:'billing',label:'Billing'},{id:'locations',label:'Locations'},{id:'gps',label:'GPS'},{id:'data',label:'Data'},{id:'system',label:'System'}];
+  if (AppState.userRole === 'admin') tabs.push({id:'alerts',label:'Alerts'}, {id:'audit',label:'Audit Log'});
   var html = '<div class="settings-tab-bar">';
   tabs.forEach(function(t){ html += '<div class="settings-tab'+(t.id===activeTab?' active':'')+'" onclick="switchSettingsTab(\''+t.id+'\')">'+t.label+'</div>'; });
   html += '</div>';
@@ -5085,23 +5124,7 @@ function renderSettings(containerId) {
   html += '</select></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Takes effect immediately. Saved to this device only.</div>';
   html += '</div></div>';
-  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Technicians</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
-  AppState.technicians.forEach(function(t){
-    var col=t.color||'#cccccc';
-    html += '<div class="lookup-item" style="align-items:center"><span class="lookup-item-name">'+escHtml(t.name)+'</span>'
-      +'<span style="display:flex;align-items:center;gap:8px;margin-left:auto"><span style="font-size:11px;color:var(--text-muted)">Color:</span>'
-      +'<input type="color" value="'+col+'" style="width:32px;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;cursor:pointer" onchange="saveTechColor(\''+t.id+'\',this.value)">'
-      +'<span style="font-size:11px;color:var(--text-muted)">TID:</span>'
-      +'<input type="text" value="'+(t.tid||'')+'" placeholder="e.g. KM" maxlength="4" style="width:44px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:3px;background:var(--bg);text-align:center" onblur="saveTechField(\''+t.id+'\',\'tid\',this.value)">'
-      +'<span class="lookup-item-badge">active</span>'
-      +'<button style="font-size:11px;padding:2px 8px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="deactivateTech(\''+t.id+'\',\''+escHtml(t.name)+'\')">x Deactivate</button>'
-      +'</span></div>';
-  });
-  html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:12px;font-weight:600;margin-bottom:6px">Add New Technician</div>'
-    +'<div style="display:flex;gap:8px;align-items:center"><input type="text" id="new-tech-name" placeholder="Full name" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;flex:1">'
-    +'<input type="color" id="new-tech-color" value="#3498db" style="width:36px;height:32px;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer">'
-    +'<button class="btn-dark" style="font-size:13px;padding:6px 14px" onclick="addNewTech()">+ Add</button></div></div>';
-  html += '</div></div>';
+  if (typeof renderUsersBlock === 'function') html += renderUsersBlock();
 
   // Tech Schedule block
   var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -5296,7 +5319,18 @@ function renderSettings(containerId) {
   html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Future: integrations, Twilio, RLS policies, locking controls.</div>';
   html += '</div></div></div>';
 
+  // ALERTS + AUDIT LOG (admin only)
+  if (AppState.userRole === 'admin') {
+    html += '<div class="settings-tab-content'+(activeTab==='alerts'?' active':'')+'" id="stab-alerts">';
+    html += (typeof renderAlertsSettingsTab === 'function') ? renderAlertsSettingsTab() : '';
+    html += '</div>';
+    html += '<div class="settings-tab-content'+(activeTab==='audit'?' active':'')+'" id="stab-audit">';
+    html += (typeof renderAuditLogTab === 'function') ? renderAuditLogTab() : '';
+    html += '</div>';
+  }
+
   el.innerHTML = html;
+  if (activeTab === 'audit' && typeof initAuditLogTab === 'function') initAuditLogTab();
 }
 
 function switchSettingsTab(tabId) {
@@ -5307,6 +5341,7 @@ function switchSettingsTab(tabId) {
   document.querySelectorAll('.settings-tab-content').forEach(function(c){
     c.classList.toggle('active', c.id==='stab-'+tabId);
   });
+  if (tabId === 'audit' && typeof initAuditLogTab === 'function') initAuditLogTab();
 }
 
 function saveNewQBOItem() {

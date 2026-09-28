@@ -322,7 +322,7 @@ function drLoadDay(dateStr) {
 }
 
 function drGetTechTid() {
-  var tech = AppState.technicians.find(function(t) { return t.id === DRState.tech; });
+  var tech = findTechAny(DRState.tech);
   if (!tech) return null;
   return tech.tid || null;
 }
@@ -1515,7 +1515,7 @@ function drRenderBottomStrip(dayReview) {
   // Action buttons — admin only
   if (AppState.userRole === 'admin') {
     var canAccept = (dayStatus === 'ready' || dayStatus === 'submitted' || dayStatus === 'none' || dayStatus === 'pending');
-    var selectedTech = AppState.technicians.find(function(t){return t.id===DRState.tech;});
+    var selectedTech = findTechAny(DRState.tech);
     var techName = selectedTech ? selectedTech.name : 'tech';
     var isOwnDay = DRState.tech === AppState.userId || (selectedTech && selectedTech.name && AppState.userEmail && selectedTech.name.toLowerCase().indexOf(AppState.userEmail.split('@')[0].toLowerCase()) >= 0);
 
@@ -2703,7 +2703,7 @@ function tbSelectWO(woId) {
   stop.allocations.push(alloc);
   // Save to hours_entries
   var loc = stop.location;
-  var autoTechName = (AppState.technicians.find(function(t){return t.id===DRState.tech;})||{}).name||'';
+  var autoTechName = (findTechAny(DRState.tech)||{}).name||'';
   sb.post('hours_entries', {
     work_order_id: woId,
     tech_id: DRState.tech,
@@ -3060,7 +3060,7 @@ function drAllocSave() {
       line_total: hours * rate,
       location_id: stop.location ? stop.location.id : null,
       day_review_id: null,
-      descriptor: (wo?wo.wo_number:'') + ' - ' + ((AppState.technicians.find(function(t){return t.id===DRState.tech;})||{}).name||'') + ' - ' + (wo?wo.title:''),
+      descriptor: (wo?wo.wo_number:'') + ' - ' + ((findTechAny(DRState.tech)||{}).name||'') + ' - ' + (wo?wo.title:''),
       created_by: AppState.userEmail, modified_by: AppState.userEmail,
       // Store in memory
       _custId: custId, _custName: cust?getCustName(cust):'',
@@ -3291,7 +3291,7 @@ function drAcceptDay() {
 }
 
 function drKickBack() {
-  var tech = AppState.technicians.find(function(t){return t.id===DRState.tech;});
+  var tech = findTechAny(DRState.tech);
   var techName = tech ? tech.name.split(' ')[0] : 'tech';
   var reason = prompt('Reason for kicking back to ' + techName + ':');
   if (!reason) return;
@@ -3349,7 +3349,7 @@ function mdrRender() {
     });
     html += '</select>';
   } else {
-    var tech = AppState.technicians.find(function(t){return t.id===MDRState.tech;});
+    var tech = findTechAny(MDRState.tech);
     html += '<div style="color:#ffffff99;font-size:12px">' + escHtml(tech ? tech.name : '') + '</div>';
   }
   html += '</div>';
@@ -3448,7 +3448,7 @@ function mdrLoadDay(dateStr) {
 }
 
 function drGetTechTidForTech(techId) {
-  var tech = AppState.technicians.find(function(t){ return t.id === techId; });
+  var tech = findTechAny(techId);
   return tech ? (tech.tid || null) : null;
 }
 

@@ -19,9 +19,7 @@ function mbGoToFTLDate(dateStr) {
   desktopNav('dailyreview');
 }
 
-// ── Tech identity resolution ──────────────────────────────────
-// Called once from showMainScreen after loadAllData completes.
-// Sets AppState.userTechId by matching authenticated email to technicians table.
+/* MOVED TO app-users.js — v4.88 — 2026-09-27 — replaced by profile.technician_id (real login identity, no more email-guessing)
 function resolveUserTechId() {
   if (!AppState.technicians || !AppState.userEmail) return;
   var emailPrefix = AppState.userEmail.split('@')[0].toLowerCase();
@@ -34,12 +32,14 @@ function resolveUserTechId() {
   // Keep MDRState.tech in sync
   if (AppState.userTechId) MDRState.tech = AppState.userTechId;
 }
+*/
 
 // ── Morning Brief — Mobile ────────────────────────────────────
 function initMorningBrief() {
   var shell = document.getElementById('morning-brief-shell');
   if (!shell) return;
   shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">Loading...</div>';
+  if (typeof loadAlerts === 'function') loadAlerts();
   var today = new Date().toISOString().slice(0,10);
   var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
 
@@ -273,7 +273,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += '<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">&#9888; Payroll Alert — Missing Clock-out</div>';
     html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">'+missingClockOut.length+' day'+(missingClockOut.length===1?'':'s')+' clocked in with no clock-out recorded:</div>';
     missingClockOut.forEach(function(r) {
-      var tech = AppState.technicians && AppState.technicians.find(function(t){ return t.id === r.tech_id; });
+      var tech = (AppState.allTechnicians||AppState.technicians) && (AppState.allTechnicians||AppState.technicians).find(function(t){ return t.id === r.tech_id; });
       var techName = tech ? tech.name : 'Unknown tech';
       var ciTime = r.clock_in ? new Date(r.clock_in).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true}) : '';
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:0.5px solid #e67e2244">';

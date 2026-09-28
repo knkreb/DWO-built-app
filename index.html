@@ -350,6 +350,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
     <img id="header-logo-img" style="display:none;height:28px;border-radius:4px;object-fit:contain" src="" alt="Logo">
     <span id="header-title-text" class="header-title-text">ProMech</span>
   </div>
+  <button class="header-icon-btn" id="btn-alerts-bell" onclick="openAlertsPanel()" title="Alerts" style="display:none;position:relative">🔔<span id="alerts-bell-badge" style="display:none;position:absolute;top:2px;right:2px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;border-radius:8px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px"></span></button>
   <button class="header-icon-btn" id="btn-theme" onclick="toggleTheme()" title="Toggle theme">☀️</button>
   <button class="header-icon-btn" id="btn-mode-toggle" onclick="toggleDeviceMode()" title="Switch mode" style="display:none">🖥️</button>
 </header>
@@ -373,6 +374,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div class="hamburger-item" onclick="hamburgerNav('invoicing')"><span class="hamburger-item-icon">💰</span> Customer Invoice Generation</div>
   <div class="hamburger-item" onclick="hamburgerNav('locations')"><span class="hamburger-item-icon">📍</span> Locations</div>
   <div class="hamburger-item" onclick="openBugReportSheet()"><span class="hamburger-item-icon">🐛</span> Report an Issue</div>
+  <div class="hamburger-item" onclick="openMyTrackerIdSheet()"><span class="hamburger-item-icon">📍</span> My Tracker ID</div>
+  <div class="hamburger-item" id="hamburger-alerts-item" onclick="openAlertsPanel();closeHamburger()" style="display:none;justify-content:space-between"><span><span class="hamburger-item-icon">🔔</span> Alerts</span><span id="hamburger-alerts-badge" style="display:none;background:var(--danger);color:#fff;font-size:11px;font-weight:700;border-radius:9px;min-width:18px;height:18px;line-height:18px;text-align:center;padding:0 4px"></span></div>
   <div class="hamburger-item" onclick="hamburgerNav('settings')"><span class="hamburger-item-icon">⚙️</span> Settings</div>
   <div class="hamburger-item" id="hamburger-sort-item" onclick="cycleHamburgerSort()" style="justify-content:space-between">
     <span><span class="hamburger-item-icon">&#x2195;</span> Sort</span>
@@ -398,6 +401,31 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="form-group"><label class="form-label">Password</label><input type="password" id="login-password" name="password" placeholder="Password" autocomplete="current-password"></div>
       <button class="btn-primary" id="btn-login" onclick="doLogin()">Sign In</button>
       <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- NOT SET UP -->
+<div class="screen hidden" id="screen-not-setup">
+  <div id="screen-login-inner">
+    <div class="login-card">
+      <div class="login-logo"><div class="login-logo-mark">🚫</div><h1>Not set up</h1></div>
+      <p id="not-setup-message" style="text-align:center;color:var(--text-secondary);margin:8px 0 18px">Your login isn't set up in DWO yet. Contact Kevin.</p>
+      <button class="btn-primary" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+</div>
+
+<!-- SET PASSWORD (forced) -->
+<div class="screen hidden" id="screen-set-password">
+  <div id="screen-login-inner">
+    <div class="login-card">
+      <div class="login-logo"><div class="login-logo-mark">🔒</div><h1>Set your password</h1></div>
+      <p style="text-align:center;color:var(--text-secondary);margin:0 0 14px;font-size:13px">Choose a new password to continue.</p>
+      <div class="form-group"><label class="form-label">New password</label><input type="password" id="set-password-new" placeholder="At least 8 characters" autocomplete="new-password"></div>
+      <div class="form-group"><label class="form-label">Confirm password</label><input type="password" id="set-password-confirm" placeholder="Repeat password" autocomplete="new-password"></div>
+      <button class="btn-primary" id="btn-set-password" onclick="submitForcedPasswordChange()">Save</button>
+      <div class="login-error" id="set-password-error"></div>
     </div>
   </div>
 </div>
@@ -468,6 +496,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 <!-- MOBILE MORNING BRIEF -->
 <div class="screen hidden" id="screen-morning-brief" style="display:flex;flex-direction:column;height:100%">
+  <div id="alerts-dashboard-card-mobile" style="display:none;flex-shrink:0"></div>
   <div id="morning-brief-shell" style="display:flex;flex-direction:column;height:100%;overflow:hidden"></div>
 </div>
 
@@ -679,6 +708,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         </div>
       </div>
       <div id="desktop-panel-morningbrief" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
+        <div id="alerts-dashboard-card-desktop" style="display:none;max-width:800px;margin:24px 24px 0"></div>
         <div id="desktop-morning-brief-body" style="padding:24px;max-width:800px"></div>
       </div>
       <div id="desktop-panel-endofday" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
@@ -857,6 +887,38 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   </div>
 </div>
 
+<!-- TRACKER ID SHEET (startup prompt + self-service "My tracker ID") -->
+<div class="sheet-overlay" id="tracker-id-sheet" onclick="closeTrackerIdSheet(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-header"><h3 id="tracker-id-sheet-title">GPS tracker ID</h3><button class="sheet-close" onclick="closeTrackerIdSheet()">✕</button></div>
+    <div style="padding:16px">
+      <p id="tracker-id-sheet-help" style="font-size:13px;color:var(--text-secondary);margin:0 0 12px">Enter the ID set in your tracking app.</p>
+      <input type="text" id="tracker-id-input" placeholder="e.g. JY" maxlength="4" style="width:100%;box-sizing:border-box;text-transform:uppercase">
+      <div id="tracker-id-error" style="color:var(--danger);font-size:12px;margin-top:6px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn-dark" style="flex:1" onclick="saveOwnTrackerId()">Save</button>
+        <button id="tracker-id-later-btn" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);background:none;color:var(--text-secondary);cursor:pointer" onclick="closeTrackerIdSheet()">Later</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- USER ACTION SHEET (generic confirm/form panel for Users screen) -->
+<div class="sheet-overlay" id="user-action-sheet" onclick="closeUserActionSheet(event)">
+  <div class="bottom-sheet">
+    <div class="sheet-header"><h3 id="user-action-sheet-title">Confirm</h3><button class="sheet-close" onclick="closeUserActionSheet()">✕</button></div>
+    <div id="user-action-sheet-body" style="padding:16px"></div>
+  </div>
+</div>
+
+<!-- ALERTS PANEL -->
+<div class="sheet-overlay" id="alerts-panel-sheet" onclick="closeAlertsPanel(event)">
+  <div class="bottom-sheet" style="max-height:85vh">
+    <div class="sheet-header"><h3>Alerts</h3><button class="sheet-close" onclick="closeAlertsPanel()">✕</button></div>
+    <div id="alerts-panel-body" style="padding:16px;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- BARCODE -->
 <div class="barcode-overlay" id="barcode-overlay">
   <video class="barcode-video" id="barcode-video" playsinline autoplay muted></video>
@@ -997,13 +1059,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=10"></script>
-<script src="app-morning-brief.js?v=125"></script>
-<script src="app-core.js?v=126"></script>
-<script src="field-travel-log.js?v=127"></script>
+<script src="app-morning-brief.js?v=126"></script>
+<script src="app-core.js?v=127"></script>
+<script src="app-users.js?v=1"></script>
+<script src="app-alerts.js?v=1"></script>
+<script src="field-travel-log.js?v=128"></script>
 <script src="app-subforms.js?v=112"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>
-<script src="app-tasks.js?v=6"></script>
+<script src="app-tasks.js?v=7"></script>
 
 <!-- BUG REPORT SHEET -->
 <div id="bug-report-sheet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;align-items:center;justify-content:center" onclick="if(event.target===this)closeBugReportSheet()">
