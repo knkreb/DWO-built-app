@@ -138,6 +138,9 @@ var sb = {
           try { return { ok: res.ok, status: res.status, data: text ? JSON.parse(text) : null }; }
           catch(e) { return { ok: res.ok, status: res.status, data: text }; }
         });
+      })
+      .catch(function() {
+        return { ok: false, status: 0, data: { error: 'Network error — could not reach the server.' } };
       });
   },
   get: function(table, params) { return this.req('GET', '/rest/v1/'+table+(params||'')); },
