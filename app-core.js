@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.90';
+const APP_VERSION = '4.91';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -866,7 +866,7 @@ function hamburgerNav(dest) {
   else if (dest==='truckstock') { initMobileTruckStock(); pushScreen('screen-mobile-truckstock','Truck Stock'); }
   else if (dest==='invoices') { pushScreen('screen-mobile-invoices','Invoices'); }
   else if (dest==='invoicing') { pushScreen('screen-mobile-invoices','Customer Invoice Generation'); }
-  else if (dest==='locations') { renderLocationsMobile(); pushScreen('screen-mobile-locations','Locations'); }
+  else if (dest==='locations') { renderLocationsMobile(); pushScreen('screen-mobile-locations','Sites'); }
   else if (dest==='settings') { renderSettings('settings-body-mobile'); pushScreen('screen-settings-mobile','Settings'); }
 }
 
@@ -2925,7 +2925,7 @@ function renderReconcileBody() {
   html += '<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">';
   html += '<colgroup><col style="width:26%"><col style="width:12%"><col style="width:12%"><col style="width:36%"><col style="width:14%"></colgroup>';
   html += '<thead><tr>';
-  html += '<th style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:.5px solid var(--border);text-align:left">Location</th>';
+  html += '<th style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:.5px solid var(--border);text-align:left">Site</th>';
   html += '<th style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:.5px solid var(--border);text-align:right">Elapsed</th>';
   html += '<th style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:.5px solid var(--border);text-align:right">Billed</th>';
   html += '<th style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:.5px solid var(--border);text-align:left">Work order(s)</th>';
@@ -3380,7 +3380,7 @@ function drRenderBillingCol(entries, lineItems) {
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">';
   html += '<colgroup><col style="width:24%"><col style="width:10%"><col style="width:10%"><col style="width:42%"><col style="width:14%"></colgroup>';
   html += '<thead><tr style="border-bottom:.5px solid var(--border)">';
-  ['Location','Elapsed','Billed','Work order(s) & Parts','Status'].forEach(function(h,i) {
+  ['Site','Elapsed','Billed','Work order(s) & Parts','Status'].forEach(function(h,i) {
     var align = (i===1||i===2) ? 'right' : 'left';
     html += '<th style="font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:5px 8px;text-align:'+align+'">'+h+'</th>';
   });
@@ -5091,7 +5091,7 @@ function renderSettings(containerId) {
   var el = document.getElementById(containerId); if(!el) return;
   var activeTab = localStorage.getItem('dwo_settings_tab') || 'general';
   var defaultTechId = localStorage.getItem('dwo_default_tech') || '';
-  var tabs = [{id:'general',label:'General'},{id:'workorders',label:'Work Orders'},{id:'billing',label:'Billing'},{id:'locations',label:'Locations'},{id:'gps',label:'GPS'},{id:'data',label:'Data'},{id:'system',label:'System'}];
+  var tabs = [{id:'general',label:'General'},{id:'workorders',label:'Work Orders'},{id:'billing',label:'Billing'},{id:'locations',label:'Sites'},{id:'gps',label:'GPS'},{id:'data',label:'Data'},{id:'system',label:'System'}];
   if (AppState.userRole === 'admin') tabs.push({id:'alerts',label:'Alerts'}, {id:'audit',label:'Audit Log'});
   var html = '<div class="settings-tab-bar">';
   tabs.forEach(function(t){ html += '<div class="settings-tab'+(t.id===activeTab?' active':'')+'" onclick="switchSettingsTab(\''+t.id+'\')">'+t.label+'</div>'; });
@@ -5279,14 +5279,14 @@ function renderSettings(containerId) {
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Advisory only — shown as a warning in Time & Billing Reconciliation before export. Not enforced at save time.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Start/end of day travel threshold (min)</div><input class="settings-row-input" type="number" step="5" min="0" value="'+(AppState.settings.billing_travel_threshold_min||'30')+'" onchange="saveSetting(\'billing_travel_threshold_min\',this.value)"></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">First and last drive segments longer than this are flagged in Time & Billing Reconciliation as potential billable travel. Default: 30 minutes.</div>';
-  html += '<div class="settings-row"><div class="settings-row-label">Tech home location</div>';
+  html += '<div class="settings-row"><div class="settings-row-label">Tech home site</div>';
   html += '<select class="settings-row-input" onchange="saveSetting(\'tech_home_location_id\',this.value)">';
   html += '<option value="">— None set —</option>';
   (AppState.locations||[]).filter(function(l){return l.active!==false;}).forEach(function(l){
     html += '<option value="'+escHtml(l.id)+'"'+(AppState.settings.tech_home_location_id===l.id?' selected':'')+'>'+escHtml(l.name)+'</option>';
   });
   html += '</select></div>';
-  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Used to calculate start/end of day travel distance. Set your home location in Location Manager first.</div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Used to calculate start/end of day travel distance. Set your home site in Site Manager first.</div>';
   html += '</div></div>';
   html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">QBO Items</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   AppState.qboItems.forEach(function(q){ html += '<div class="lookup-item"><span class="lookup-item-name">'+escHtml(q.name)+'</span><span class="lookup-item-badge">'+escHtml(q.zed_axis_name)+'</span></div>'; });
@@ -5300,8 +5300,8 @@ function renderSettings(containerId) {
   html += '<div class="settings-tab-content'+(activeTab==='locations'?' active':'')+'" id="stab-locations">';
   html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Geofence Defaults</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   html += '<div class="settings-row"><div class="settings-row-label">Default geofence radius (meters)</div><input class="settings-row-input" type="number" step="1" min="10" value="'+(AppState.settings.geofence_radius_default||'100')+'" onchange="saveSetting(\'geofence_radius_default\',this.value)"></div>';
-  html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Applies to all locations not customized individually. Override per location in the Location Manager.</div></div></div>';
-  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Location Entity Types</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
+  html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Applies to all sites not customized individually. Override per site in the Site Manager.</div></div></div>';
+  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Site Entity Types</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   html += '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">System types (customer, vendor, personal) are built in and cannot be removed.</div>';
   html += '<div style="font-size:12px;color:var(--text-muted)">Additional entity types - coming in a future build.</div></div></div>';
   html += '</div>';
@@ -5310,21 +5310,21 @@ function renderSettings(containerId) {
   // GPS & TRACKING
   html += '<div class=\"settings-tab-content'+(activeTab==='gps'?' active':'')+'\" id=\"stab-gps\">';
   html += '<div class=\"settings-block\"><div class=\"settings-block-header open\" onclick=\"toggleSettingsBlock(this)\"><span class=\"settings-block-title\">Stop Detection</span><span class=\"settings-block-chevron\">v</span></div><div class=\"settings-block-body open\">';
-  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:10px\">Known locations are detected by geofence presence — any ping within the radius counts. Unknown locations require pings clustered within 100m for the minimum duration below.</div>';
+  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:10px\">Known sites are detected by geofence presence — any ping within the radius counts. Unknown sites require pings clustered within 100m for the minimum duration below.</div>';
   html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Default geofence radius (meters)</div><input class=\"settings-row-input\" type=\"number\" step=\"1\" min=\"10\" value=\"'+(AppState.settings.geofence_radius_default||'100')+'\" onchange=\"saveSetting(\'geofence_radius_default\',this.value)\"></div>';
-  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Default radius for known location geofences. Override per location in Location Manager. Default: 100m.</div>';
-  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known location min dwell (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"30\" step=\"1\" value=\"'+(AppState.settings.gps_known_stop_min_duration||'5')+'\"|onchange=\"saveSetting(\'gps_known_stop_min_duration\',this.value)\"></div>';
+  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Default radius for known site geofences. Override per site in Site Manager. Default: 100m.</div>';
+  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known site min dwell (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"30\" step=\"1\" value=\"'+(AppState.settings.gps_known_stop_min_duration||'5')+'\"|onchange=\"saveSetting(\'gps_known_stop_min_duration\',this.value)\"></div>';
   html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Minimum minutes inside a known geofence to register as a stop. Filters drive-past false positives. Default: 5.</div>';
-  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known location gap tolerance (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"0\" max=\"120\" step=\"5\" value=\"'+(AppState.settings.gps_known_gap_tolerance||'30')+'\" onchange=\"saveSetting(\'gps_known_gap_tolerance\',this.value)\"></div>';
+  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known site gap tolerance (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"0\" max=\"120\" step=\"5\" value=\"'+(AppState.settings.gps_known_gap_tolerance||'30')+'\" onchange=\"saveSetting(\'gps_known_gap_tolerance\',this.value)\"></div>';
   html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">If GPS signal lost within a known geofence and returns within this many minutes, treat as one continuous stop. Default: 30.</div>';
-  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Personal location gap tolerance (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"30\" max=\"240\" step=\"15\" value=\"'+(AppState.settings.gps_personal_gap_tolerance||'120')+'\" onchange=\"saveSetting(\'gps_personal_gap_tolerance\',this.value)\"></div>';
-  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Gap tolerance for personal/home locations where WiFi reduces GPS ping frequency. Default: 120 min.</div>';
-  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known location min pings</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"10\" step=\"1\" value=\"'+(AppState.settings.gps_known_min_pings||'3')+'\" onchange=\"saveSetting(\'gps_known_min_pings\',this.value)\"></div>';
+  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Personal site gap tolerance (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"30\" max=\"240\" step=\"15\" value=\"'+(AppState.settings.gps_personal_gap_tolerance||'120')+'\" onchange=\"saveSetting(\'gps_personal_gap_tolerance\',this.value)\"></div>';
+  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Gap tolerance for personal/home sites where WiFi reduces GPS ping frequency. Default: 120 min.</div>';
+  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Known site min pings</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"10\" step=\"1\" value=\"'+(AppState.settings.gps_known_min_pings||'3')+'\" onchange=\"saveSetting(\'gps_known_min_pings\',this.value)\"></div>';
   html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Minimum GPS pings inside geofence before gap tolerance applies. Prevents drive-past false stops. Default: 3.</div>';
-  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Unknown location min duration (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"60\" step=\"1\" value=\"'+(AppState.settings.gps_unknown_stop_min_duration||'10')+'\" onchange=\"saveSetting(\'gps_unknown_stop_min_duration\',this.value)\"></div>';
-  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Minimum minutes at an unknown location (within 100m) to surface as a stop. Filters traffic lights and brief pauses. Default: 10.</div>';
+  html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Unknown site min duration (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"1\" max=\"60\" step=\"1\" value=\"'+(AppState.settings.gps_unknown_stop_min_duration||'10')+'\" onchange=\"saveSetting(\'gps_unknown_stop_min_duration\',this.value)\"></div>';
+  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Minimum minutes at an unknown site (within 100m) to surface as a stop. Filters traffic lights and brief pauses. Default: 10.</div>';
   html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Merge gap threshold (min)</div><input class=\"settings-row-input\" type=\"number\" min=\"15\" max=\"480\" step=\"15\" value=\"'+(AppState.settings.gps_merge_gap_threshold||'120')+'\" onchange=\"saveSetting(\'gps_merge_gap_threshold\',this.value)\"></div>';
-  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Maximum gap between visits to the same location to suggest merging. Default: 120 min.</div>';
+  html += '<div style=\"font-size:11px;color:var(--text-muted);margin-bottom:8px\">Maximum gap between visits to the same site to suggest merging. Default: 120 min.</div>';
   html += '</div></div>';
   html += '<div class=\"settings-block\"><div class=\"settings-block-header open\" onclick=\"toggleSettingsBlock(this)\"><span class=\"settings-block-title\">Data Quality</span><span class=\"settings-block-chevron\">v</span></div><div class=\"settings-block-body open\">';
   html += '<div class=\"settings-row\"><div class=\"settings-row-label\">Accuracy filter (meters)</div><input class=\"settings-row-input\" type=\"number\" min=\"10\" max=\"500\" step=\"10\" value=\"'+(AppState.settings.gps_accuracy_threshold||'100')+'\" onchange=\"saveSetting(\'gps_accuracy_threshold\',this.value)\"></div>';
@@ -6184,7 +6184,7 @@ var LocState = {
 function renderLocationsMobile() {
   var shell = document.getElementById('mobile-locations-shell');
   if (!shell) return;
-  shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">Loading locations...</div>';
+  shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">Loading sites...</div>';
   var src = (LocState && LocState.locations && LocState.locations.length)
     ? Promise.resolve(LocState.locations)
     : sb.get('locations', '?active=eq.true&select=*&order=name.asc').then(function(r) {
@@ -6194,7 +6194,7 @@ function renderLocationsMobile() {
       });
   src.then(function(locs) {
     if (!locs.length) {
-      shell.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">No locations found</div>';
+      shell.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">No sites found</div>';
       return;
     }
     var typeLabel = { customer: 'Customer', vendor: 'Vendor', personal: 'Personal' };
@@ -6219,7 +6219,7 @@ function renderLocationsMobile() {
 function openLocationDetail(locId) {
   var loc = LocState && LocState.locations && LocState.locations.find(function(l) { return l.id === locId; });
   if (!loc) return;
-  pushScreen('screen-mobile-location-detail', escHtml(loc.name || 'Location'));
+  pushScreen('screen-mobile-location-detail', escHtml(loc.name || 'Site'));
   var sheet = document.getElementById('mobile-loc-detail-sheet');
   if (sheet) renderLocationDetailSheet(loc, sheet);
   var mapEl = document.getElementById('mobile-loc-map');
@@ -6292,14 +6292,14 @@ function saveLocationDetailMobile(locId) {
     notes: notes.trim() || null,
     modified_at: new Date().toISOString()
   }).then(function(r) {
-    if (!r.ok) { showToast('Error saving location'); return; }
+    if (!r.ok) { showToast('Error saving site'); return; }
     if (LocState && LocState.locations) {
       var idx = LocState.locations.findIndex(function(l) { return l.id === locId; });
       if (idx >= 0) {
         LocState.locations[idx] = Object.assign({}, LocState.locations[idx], { name: name.trim(), address_street: addr.trim()||null, city: city.trim()||null, state: state.trim()||null, zip: zip.trim()||null, location_type: type||null, notes: notes.trim()||null });
       }
     }
-    showToast('Location saved');
+    showToast('Site saved');
   });
 }
 
@@ -6314,9 +6314,9 @@ function renderLocationsPanel() {
   var inner = '';
   inner += '<div id="loc-shell">';
   inner += '<div id="loc-topbar">';
-  inner += '<div style="font-size:15px;font-weight:700">Locations</div>';
+  inner += '<div style="font-size:15px;font-weight:700">Sites</div>';
   inner += '<div style="display:flex;gap:6px">';
-  inner += '<button class="btn-outline" onclick="locAddNew()" style="font-size:12px;padding:5px 12px">+ Add Location</button>';
+  inner += '<button class="btn-outline" onclick="locAddNew()" style="font-size:12px;padding:5px 12px">+ Add Site</button>';
   inner += '</div></div>';
   inner += '<div id="loc-filter-bar">';
   inner += '<div class="loc-pill active" id="loc-pill-all" onclick="locSetFilter(\'all\')">All</div>';
@@ -6324,7 +6324,7 @@ function renderLocationsPanel() {
   inner += '<div class="loc-pill" id="loc-pill-vendor" onclick="locSetFilter(\'vendor\')">Vendor</div>';
   inner += '<div class="loc-pill" id="loc-pill-personal" onclick="locSetFilter(\'personal\')">Personal</div>';
   inner += '<div class="loc-pill" id="loc-pill-untagged" onclick="locSetFilter(\'untagged\')" style="border-color:#ba7517;color:#854f0b">Untagged</div>';
-  inner += '<div class="loc-search"><input type="text" placeholder="Search locations..." oninput="locSearch(this.value)" id="loc-search-input"></div>';
+  inner += '<div class="loc-search"><input type="text" placeholder="Search sites..." oninput="locSearch(this.value)" id="loc-search-input"></div>';
   inner += '<select id="loc-sort-select" onchange="locSetSort(this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-secondary);cursor:pointer">';
   inner += '<option value="recent" selected>Recent</option>';
   inner += '<option value="alpha">A–Z</option>';
@@ -6332,9 +6332,9 @@ function renderLocationsPanel() {
   inner += '</div>';
   inner += '<div id="loc-count-bar">Loading...</div>';
   inner += '<div id="loc-body">';
-  inner += '<div id="loc-list-col"><div id="loc-list"><div style="padding:20px;color:var(--text-muted);font-size:13px">Loading locations...</div></div></div>';
+  inner += '<div id="loc-list-col"><div id="loc-list"><div style="padding:20px;color:var(--text-muted);font-size:13px">Loading sites...</div></div></div>';
   inner += '<div id="loc-map-col"><div id="loc-map"></div>';
-  inner += '<div id="loc-detail"><div style="padding:14px;color:var(--text-muted);font-size:13px">Select a location to see details</div></div>';
+  inner += '<div id="loc-detail"><div style="padding:14px;color:var(--text-muted);font-size:13px">Select a site to see details</div></div>';
   inner += '</div></div></div>';
   el.innerHTML = inner;
   loadLocations();
@@ -6349,7 +6349,7 @@ function loadLocations() {
         locInitMap();
       } else {
         var el = document.getElementById('loc-list');
-        if (el) el.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">Error loading locations</div>';
+        if (el) el.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">Error loading sites</div>';
       }
     });
 }
@@ -6388,7 +6388,7 @@ function locRenderList() {
   var el = document.getElementById('loc-list');
   if (!el) return;
   if (!LocState.filtered.length) {
-    el.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px">No locations found</div>';
+    el.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:13px">No sites found</div>';
     return;
   }
   var html = '';
@@ -6443,7 +6443,7 @@ function locUpdateCount() {
   var pending = LocState.locations.filter(function(l) { return l.geocode_status === 'pending'; }).length;
   var failed = LocState.locations.filter(function(l) { return l.geocode_status === 'failed'; }).length;
   var untagged = LocState.locations.filter(function(l) { return !l.location_type; }).length;
-  var parts = [total + ' locations'];
+  var parts = [total + ' sites'];
   if (pending) parts.push(pending + ' pending geocode');
   if (failed) parts.push(failed + ' failed');
   if (untagged) parts.push(untagged + ' untagged');
@@ -6466,9 +6466,9 @@ function locApproveLocation(id) {
         loc.reviewed_at = new Date().toISOString();
       }
       locApplyFilter();
-      showToast('Location approved');
+      showToast('Site approved');
     } else {
-      showToast('Error approving location');
+      showToast('Error approving site');
     }
   });
 }
@@ -6539,7 +6539,7 @@ function locRenderDetail(loc) {
   html += '<input type="checkbox" id="loc-dead-zone-cb"' + (loc.gps_dead_zone ? ' checked' : '') + ' onchange="locSaveDeadZone(\'' + lid + '\',this.checked)" style="cursor:pointer">';
   html += '<label for="loc-dead-zone-cb" style="font-size:12px;font-weight:600;cursor:pointer">Known GPS dead zone</label>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Signal gaps at this location are absorbed silently regardless of duration. Use for concrete basements, vaults, or other known no-signal areas.</div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Signal gaps at this site are absorbed silently regardless of duration. Use for concrete basements, vaults, or other known no-signal areas.</div>';
   if (loc.gps_dead_zone) {
     html += '<input type="text" value="' + escHtml(loc.gps_dead_zone_note || '') + '" placeholder="Note (e.g. Concrete basement, no signal expected)" onchange="locSaveDeadZoneNote(\'' + lid + '\',this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box">';
   }
@@ -6760,7 +6760,7 @@ function locRenderEditPanel(loc, isNew, prefill) {
   var isDefaultGeo = isEdit ? !loc.geofence_radius : true;
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
-  html += '<div style="font-size:13px;font-weight:700">' + (isEdit ? 'Edit location' : 'Add location') + '</div>';
+  html += '<div style="font-size:13px;font-weight:700">' + (isEdit ? 'Edit site' : 'Add site') + '</div>';
   html += '<div style="display:flex;gap:5px">';
   html += '<button class="btn-outline" style="font-size:11px;padding:4px 10px" onclick="locCancelEdit()">Cancel</button>';
   if (isEdit) html += '<button class="btn-outline" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger)" onclick="locDeleteLocation(\'' + escHtml(loc.id) + '\')">Delete</button>';
@@ -6768,7 +6768,7 @@ function locRenderEditPanel(loc, isNew, prefill) {
   html += '</div></div>';
 
   // Name
-  html += '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:3px">Location name *</label>';
+  html += '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:3px">Site name *</label>';
   html += '<input type="text" id="loc-edit-name" value="' + escHtml(isEdit?loc.name||'':prefill.name||'') + '" placeholder="e.g. Dover Mall, United Refrigeration" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)"></div>';
 
   // Type + Label
@@ -6839,7 +6839,7 @@ function locRenderEditPanel(loc, isNew, prefill) {
       return dist <= 200;
     });
     if (nearby.length) {
-      html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:5px;border-top:1px solid var(--border);padding-top:8px">Nearby locations (' + nearby.length + ')</div>';
+      html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:5px;border-top:1px solid var(--border);padding-top:8px">Nearby sites (' + nearby.length + ')</div>';
       nearby.forEach(function(n) {
         var dist = Math.round(locHaversineMeters(loc.lat, loc.lng, n.lat, n.lng));
         html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">';
@@ -6847,7 +6847,7 @@ function locRenderEditPanel(loc, isNew, prefill) {
         html += '<button onclick="locSelectById(\'' + n.id + '\')" style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer">View</button>';
         html += '</div>';
       });
-      html += '<button onclick="locAddNewAtCoords(' + loc.lat + ',' + loc.lng + ',\'' + escHtml(loc.address_street||'').replace(/'/g,"\\'") + '\')" style="font-size:11px;padding:4px 10px;border:1px dashed var(--border);border-radius:3px;background:var(--surface);cursor:pointer;width:100%;margin-top:6px">+ Add another location here</button>';
+      html += '<button onclick="locAddNewAtCoords(' + loc.lat + ',' + loc.lng + ',\'' + escHtml(loc.address_street||'').replace(/'/g,"\\'") + '\')" style="font-size:11px;padding:4px 10px;border:1px dashed var(--border);border-radius:3px;background:var(--surface);cursor:pointer;width:100%;margin-top:6px">+ Add another site here</button>';
     }
   }
 
@@ -6905,7 +6905,7 @@ function locCancelEdit() {
     locRenderDetail(loc);
   } else {
     var el = document.getElementById('loc-detail');
-    if (el) el.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:13px">Select a location to see details</div>';
+    if (el) el.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:13px">Select a site to see details</div>';
   }
 }
 
@@ -6941,7 +6941,7 @@ function locSaveEdit(id) {
   var manualLng = parseFloat((document.getElementById('loc-edit-lng')||{}).value||'');
   var hasManualCoords = !isNaN(manualLat) && !isNaN(manualLng) && manualLat !== 0 && manualLng !== 0;
 
-  if (!name.trim()) { showToast('Location name is required'); return; }
+  if (!name.trim()) { showToast('Site name is required'); return; }
 
   var payload = {
     name: name.trim(),
@@ -6984,17 +6984,17 @@ function locSaveEdit(id) {
         locRenderDetail(loc);
         if (LocState.mapReady) locRenderMarkers();
         if (hasManualCoords) {
-          showToast('Location saved — coordinates set');
+          showToast('Site saved — coordinates set');
         } else if (addressChanged && !isOfficeVerified && street && city) {
           var fullAddr = [street, city, state, zip].filter(Boolean).join(', ');
-          showToast('Location saved — re-geocoding address...');
+          showToast('Site saved — re-geocoding address...');
           geocodeLocationById(id, fullAddr);
         } else if (addressChanged && isOfficeVerified) {
-          showToast('Location saved — pin not moved (office verified). Use Verify Pin to update manually.');
+          showToast('Site saved — pin not moved (office verified). Use Verify Pin to update manually.');
         } else {
-          showToast('Location saved');
+          showToast('Site saved');
         }
-      } else showToast('Error saving location');
+      } else showToast('Error saving site');
     });
   } else {
     // Insert new
@@ -7011,19 +7011,19 @@ function locSaveEdit(id) {
         locApplyFilter();
         locRenderDetail(newLoc);
         if (LocState.mapReady) locRenderMarkers();
-        showToast('Location added');
+        showToast('Site added');
         // Geocode if address provided
         if (street && city) {
           var fullAddr = [street, city, state, zip].filter(Boolean).join(', ');
           geocodeCustomer(newLoc.id, fullAddr);
         }
-      } else showToast('Error adding location');
+      } else showToast('Error adding site');
     });
   }
 }
 
 function locDeleteLocation(id) {
-  if (!confirm('Deactivate this location? It will be hidden but historical data is preserved.')) return;
+  if (!confirm('Deactivate this site? It will be hidden but historical data is preserved.')) return;
   sb.patch('locations', id, {active: false, modified_by: AppState.userEmail, modified_at: new Date().toISOString()})
     .then(function(r) {
       if (r.ok) {
@@ -7031,10 +7031,10 @@ function locDeleteLocation(id) {
         LocState.selected = null;
         locApplyFilter();
         var el = document.getElementById('loc-detail');
-        if (el) el.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:13px">Location deactivated</div>';
+        if (el) el.innerHTML = '<div style="padding:14px;color:var(--text-muted);font-size:13px">Site deactivated</div>';
         if (LocState.mapReady) locRenderMarkers();
-        showToast('Location deactivated');
-      } else showToast('Error deactivating location');
+        showToast('Site deactivated');
+      } else showToast('Error deactivating site');
     });
 }
 

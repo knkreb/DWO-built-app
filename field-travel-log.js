@@ -1183,7 +1183,7 @@ function drRenderTimeline() {
         if (addr) html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">' + escHtml(addr) + '</div>';
         // Pending location warning
         if (isPendingLocation) {
-          html += '<div style="background:#faeeda;border:1px solid #ef9f27;border-radius:var(--radius);padding:6px 10px;margin-bottom:8px;font-size:11px;color:#854f0b">&#9888; Location pending review — approve in Location Manager before submitting day.</div>';
+          html += '<div style="background:#faeeda;border:1px solid #ef9f27;border-radius:var(--radius);padding:6px 10px;margin-bottom:8px;font-size:11px;color:#854f0b">&#9888; Site pending review — approve in Site Manager before submitting day.</div>';
         }
         // Merged time banner
         var dayReview = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate && r.tech_id === DRState.tech; });
@@ -1631,9 +1631,9 @@ function drSaveStopLocation(idx) {
   }).then(function(r) {
     if (r.ok) {
       dayReview.stop_locations = stopLocs;
-      showToast('Location saved — ' + stop.location.name);
+      showToast('Site saved — ' + stop.location.name);
       drRenderTimeline();
-    } else showToast('Error saving location');
+    } else showToast('Error saving site');
   });
 }
 
@@ -1713,7 +1713,7 @@ function drIdentifySearch(val) {
     }).slice(0, 8);
   }
   if (!results.length && q) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">No matches — will save as new location</div>';
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">No matches — will save as new site</div>';
     return;
   }
   var html = '';
@@ -1740,7 +1740,7 @@ function drSaveIdentify() {
   var type = DRState.identifyType;
   var nameEl = document.getElementById('dr-identify-name');
   var name = nameEl ? nameEl.value.trim() : '';
-  if (!name) { showToast('Please enter a location name'); return; }
+  if (!name) { showToast('Please enter a site name'); return; }
 
   var payload = {
     name: name,
@@ -1775,10 +1775,10 @@ function drSaveIdentify() {
       DRState.identifyType = null;
       DRState.identifyEntityId = null;
       DRState.identifyEntityName = null;
-      showToast('Location saved — pending review');
+      showToast('Site saved — pending review');
       drRenderTimeline();
     } else {
-      showToast('Error saving location');
+      showToast('Error saving site');
     }
   });
 }
@@ -1880,7 +1880,7 @@ function drRenderIdentifyForm(idx) {
   var html = '<div style="padding:10px 0">';
 
   if (step === 'type') {
-    html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">What type of location is this?</div>';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">What type of site is this?</div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     var types = [{k:'customer',l:'Customer'},{k:'vendor',l:'Vendor'},{k:'personal',l:'Personal'},{k:'office',l:'Office'},{k:'other',l:'Other'}];
     types.forEach(function(t) {
@@ -1890,20 +1890,20 @@ function drRenderIdentifyForm(idx) {
     });
     html += '</div>';
   } else if (step === 'entity') {
-    var label = type === 'customer' ? 'Which customer?' : type === 'vendor' ? 'Which vendor?' : type === 'personal' ? 'Name this location' : 'Name this location';
+    var label = type === 'customer' ? 'Which customer?' : type === 'vendor' ? 'Which vendor?' : type === 'personal' ? 'Name this site' : 'Name this site';
     html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">' + label + '</div>';
     if (type === 'customer' || type === 'vendor') {
       html += '<input type="text" id="dr-identify-search" placeholder="Search ' + type + 's..." oninput="drIdentifySearch(this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box;margin-bottom:6px">';
       html += '<div id="dr-identify-results" style="margin-bottom:6px"></div>';
     }
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Location name</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Site name</div>';
     html += '<input type="text" id="dr-identify-name" placeholder="e.g. Grace Presbyterian Church" onclick="event.stopPropagation()" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box;margin-bottom:8px">';
     if (type === 'personal') {
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Personal stops default to non-billable time.</div>';
     }
     html += '<div style="display:flex;gap:6px">';
     html += '<button onclick="event.stopPropagation();drCancelIdentify()" style="font-size:12px;padding:5px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Cancel</button>';
-    html += '<button onclick="event.stopPropagation();drSaveIdentify()" style="font-size:12px;padding:5px 14px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Save location</button>';
+    html += '<button onclick="event.stopPropagation();drSaveIdentify()" style="font-size:12px;padding:5px 14px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Save site</button>';
     html += '</div>';
   }
   html += '</div>';
@@ -2549,7 +2549,7 @@ function tbRenderCustList(query) {
   html += '<div class="tb-step-label">Which customer?</div></div>';
   html += '<input type="text" placeholder="Search customers..." oninput="tbRenderCustList(this.value)" value="' + escHtml(query) + '" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box;margin-bottom:10px">';
   if (nearbyCusts.length) {
-    html += '<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-bottom:6px">AT THIS LOCATION</div>';
+    html += '<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-bottom:6px">AT THIS SITE</div>';
     nearbyCusts.forEach(function(c) {
       html += '<div class="tb-cust-item" onclick="tbSelectCust(\'' + c.id + '\',\'' + escHtml(getCustName(c).replace(/'/g,'\\\'')) + '\')">';
       html += '<div class="tb-cust-badge">C</div>';
@@ -2836,7 +2836,7 @@ function drBuildIdentifyPanel(div, stop) {
   html += '<div style="padding:10px 14px;flex-shrink:0">';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">' + drFormatTime(stop.arrivedAt) + ' &ndash; ' + drFormatTime(stop.leftAt) + ' &middot; ' + drFormatDuration(drElapsedMin(stop)) + '</div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">' + stop.lat.toFixed(5) + ', ' + stop.lng.toFixed(5) + '</div>';
-  html += '<input type="text" id="dr-tag-name" placeholder="Location name..." style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:8px">';
+  html += '<input type="text" id="dr-tag-name" placeholder="Site name..." style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:8px">';
   html += '<select id="dr-tag-type" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:8px">';
   html += '<option value="customer">Customer</option>';
   html += '<option value="vendor">Vendor</option>';
@@ -2845,7 +2845,7 @@ function drBuildIdentifyPanel(div, stop) {
   html += '<option value="lunch">Lunch</option>';
   html += '<option value="other">Other (non-billable)</option>';
   html += '</select>';
-  html += '<button onclick="drSaveTagLocation()" style="width:100%;padding:8px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600">Save location</button>';
+  html += '<button onclick="drSaveTagLocation()" style="width:100%;padding:8px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600">Save site</button>';
   html += '</div>';
   html += '<div style="border-top:1px solid var(--border);padding:10px 14px;flex-shrink:0"><div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">NEARBY PLACES</div></div>';
   html += '<div id="dr-places-list" style="flex:1;overflow-y:auto;padding:0 14px 14px"><div style="font-size:12px;color:var(--text-muted)">Loading suggestions...</div></div>';
@@ -3233,7 +3233,7 @@ function drSaveTagLocation() {
   var typeEl = document.getElementById('dr-tag-type');
   var name = nameEl ? nameEl.value.trim() : '';
   var type = typeEl ? typeEl.value : 'other';
-  if (!name) { showToast('Enter a location name'); return; }
+  if (!name) { showToast('Enter a site name'); return; }
   var stop = DRState.stops[DRState.tagStopIdx];
   if (!stop) return;
 
@@ -3267,7 +3267,7 @@ function drSaveTagLocation() {
       if (LocState.locations) LocState.locations.push(newLoc);
       stop.location = newLoc;
       stop.stopType = isBillable ? (locationType === 'customer' ? 'job_site' : 'billable_errand') : 'non_billable';
-      showToast('Location saved');
+      showToast('Site saved');
       if (isBillable) {
         DRState.tagStep = 2;
         drRenderTagOverlay();
@@ -3802,7 +3802,7 @@ function mdrBuildTagSheet(div, stop) {
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">' + drFormatTime(stop.arrivedAt) + ' &ndash; ' + drFormatTime(stop.leftAt) + ' &middot; ' + drFormatDuration(drElapsedMin(stop)) + '</div>';
 
   if (step === 'type') {
-    html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:10px">What type of location is this?</div>';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:10px">What type of site is this?</div>';
     var types = [{k:'customer',l:'Customer',bg:'#e6f1fb',col:'#185fa5'},{k:'vendor',l:'Vendor',bg:'#eaf3de',col:'#3b6d11'},{k:'personal',l:'Personal',bg:'#faeeda',col:'#854f0b'},{k:'office',l:'Office',bg:'#f1efff',col:'#534ab7'},{k:'other',l:'Other',bg:'var(--surface)',col:'var(--text-secondary)'}];
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">';
     types.forEach(function(t) {
@@ -3810,7 +3810,7 @@ function mdrBuildTagSheet(div, stop) {
     });
     html += '</div>';
   } else {
-    var label = type === 'customer' ? 'Which customer?' : type === 'vendor' ? 'Which vendor?' : 'Name this location';
+    var label = type === 'customer' ? 'Which customer?' : type === 'vendor' ? 'Which vendor?' : 'Name this site';
     html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">' + label + '</div>';
     if (type === 'customer' || type === 'vendor') {
       html += '<input type="text" id="mdr-identify-search" placeholder="Search ' + type + 's..." oninput="mdrIdentifySearch(this.value)" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);box-sizing:border-box;margin-bottom:8px">';
@@ -3822,11 +3822,11 @@ function mdrBuildTagSheet(div, stop) {
     if (type === 'office') {
       html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Office stops default to non-billable. You\'ll be prompted if billable time occurred here.</div>';
     }
-    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Location name</div>';
+    html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Site name</div>';
     html += '<input type="text" id="mdr-tag-name" placeholder="e.g. Home Depot Rt 13" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);box-sizing:border-box;margin-bottom:12px">';
     html += '<div style="display:flex;gap:8px">';
     html += '<button onclick="mdrIdentifyBack()" style="flex:1;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px">Back</button>';
-    html += '<button onclick="mdrSaveTagLocation()" style="flex:2;padding:10px;background:#1a5fa8;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Save location</button>';
+    html += '<button onclick="mdrSaveTagLocation()" style="flex:2;padding:10px;background:#1a5fa8;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Save site</button>';
     html += '</div>';
   }
   html += '</div>';
@@ -3863,7 +3863,7 @@ function mdrIdentifySearch(val) {
     }).slice(0, 8);
   }
   if (!results.length) {
-    el.innerHTML = q ? '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">No matches — will save as new location</div>' : '';
+    el.innerHTML = q ? '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">No matches — will save as new site</div>' : '';
     return;
   }
   var html = '';
@@ -4092,7 +4092,7 @@ function mdrSaveTagLocation() {
   var nameEl = document.getElementById('mdr-tag-name');
   var name = nameEl ? nameEl.value.trim() : '';
   var type = MDRState.identifyType || 'other';
-  if (!name) { showToast('Enter a location name'); return; }
+  if (!name) { showToast('Enter a site name'); return; }
   var stop = MDRState.stops[MDRState.tagStopIdx];
   if (!stop) return;
   var billableTypes = ['customer','vendor'];
@@ -4128,7 +4128,7 @@ function mdrSaveTagLocation() {
       stop.isPaid = isPaid;
       stop.isBillable = isBillable;
       stop.allocations = stop.allocations || [];
-      showToast('Location saved — pending review');
+      showToast('Site saved — pending review');
       mdrCloseTagSheet();
       if (isBillable) {
         MDRState.tagStep = 2;

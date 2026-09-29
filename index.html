@@ -372,7 +372,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div class="hamburger-item" onclick="hamburgerNav('timecard')"><span class="hamburger-item-icon">⏱️</span> Timecard</div>
   <div class="hamburger-item" onclick="hamburgerNav('truckstock')"><span class="hamburger-item-icon">🚛</span> Truck Stock</div>
   <div class="hamburger-item" onclick="hamburgerNav('invoicing')"><span class="hamburger-item-icon">💰</span> Customer Invoice Generation</div>
-  <div class="hamburger-item" onclick="hamburgerNav('locations')"><span class="hamburger-item-icon">📍</span> Locations</div>
+  <div class="hamburger-item" onclick="hamburgerNav('locations')"><span class="hamburger-item-icon">📍</span> Sites</div>
   <div class="hamburger-item" onclick="openBugReportSheet()"><span class="hamburger-item-icon">🐛</span> Report an Issue</div>
   <div class="hamburger-item" onclick="openMyTrackerIdSheet()"><span class="hamburger-item-icon">📍</span> My Tracker ID</div>
   <div class="hamburger-item" id="hamburger-alerts-item" onclick="openAlertsPanel();closeHamburger()" style="display:none;justify-content:space-between"><span><span class="hamburger-item-icon">🔔</span> Alerts</span><span id="hamburger-alerts-badge" style="display:none;background:var(--danger);color:#fff;font-size:11px;font-weight:700;border-radius:9px;min-width:18px;height:18px;line-height:18px;text-align:center;padding:0 4px"></span></div>
@@ -536,7 +536,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="sidebar-item" id="sidebar-truckstock" onclick="desktopNav('truckstock')"><span class="sidebar-icon">🚛</span> Truck Stock</div>
       <div class="sidebar-item" id="sidebar-customers" onclick="desktopNav('customers')"><span class="sidebar-icon">👥</span> Customers</div>
       <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')"><span class="sidebar-icon">🏪</span> Vendors</div>
-      <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Locations</div>
+      <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Sites</div>
       <div class="sidebar-item" id="sidebar-invoicing" onclick="desktopNav('invoicing')"><span class="sidebar-icon">💰</span> Customer Invoice Generation</div>
       <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
       <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
@@ -1060,14 +1060,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 </style>
 <script src="gps-engine.js?v=10"></script>
 <script src="app-morning-brief.js?v=126"></script>
-<script src="app-core.js?v=132"></script>
+<script src="app-core.js?v=133"></script>
 <script src="app-users.js?v=1"></script>
 <script src="app-alerts.js?v=3"></script>
-<script src="field-travel-log.js?v=128"></script>
+<script src="field-travel-log.js?v=129"></script>
 <script src="app-subforms.js?v=112"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>
-<script src="app-tasks.js?v=7"></script>
+<script src="app-tasks.js?v=8"></script>
 
 <!-- BUG REPORT SHEET -->
 <div id="bug-report-sheet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;align-items:center;justify-content:center" onclick="if(event.target===this)closeBugReportSheet()">

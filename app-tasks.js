@@ -63,7 +63,7 @@ function tasksRenderSection(container, dateTasks, locTasks, tech, isMobile) {
     myDate.forEach(function(t) { html += tasksCardHtml(t, tech); });
     if (myLoc.length) {
       if (myDate.length) {
-        html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px">Location Tasks</div>';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px">Site Tasks</div>';
       }
       myLoc.forEach(function(t) { html += tasksCardHtml(t, tech); });
     }
@@ -431,7 +431,7 @@ function tasksOpenTaskForm(task) {
       '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--bg);font-size:13px">' +
       '<input type="radio" name="tf-type" value="date" ' + (taskType === 'date' ? 'checked' : '') + '> Date task</label>' +
       '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--bg);font-size:13px">' +
-      '<input type="radio" name="tf-type" value="location" ' + (taskType === 'location' ? 'checked' : '') + '> Location task</label>' +
+      '<input type="radio" name="tf-type" value="location" ' + (taskType === 'location' ? 'checked' : '') + '> Site task</label>' +
       '</div>' +
 
       '<div id="tf-date-row" style="' + (taskType !== 'date' ? 'display:none;' : '') + 'margin-bottom:14px">' +
@@ -440,7 +440,7 @@ function tasksOpenTaskForm(task) {
       '</div>' +
 
       '<div id="tf-loc-row" style="' + (taskType !== 'location' ? 'display:none;' : '') + 'margin-bottom:14px">' +
-      '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px">LOCATION</div>' +
+      '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px">SITE</div>' +
       '<select id="task-form-loc" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);font-size:13px">' + locOpts + '</select>' +
       '</div>' +
 
