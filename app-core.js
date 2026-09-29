@@ -1817,29 +1817,33 @@ function dtHoursDeletedRow(e) {
   var ht = e.hours_types;
   var rate = parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
   var val = e.billable ? parseFloat(e.hours||0)*rate : 0;
-  return '<div class="dt-read-row dt-hours-grid" data-eid="'+e.id+'" data-type="hours" style="opacity:0.5;text-decoration:line-through">'
-    + '<span class="dt-cell">'+fmtDate(e.entry_date)+'</span>'
-    + '<span class="dt-cell">'+escHtml(techName)+'</span>'
-    + '<span class="dt-cell dt-muted">'+escHtml(typeName)+'</span>'
-    + '<span class="dt-cell">'+parseFloat(e.hours||0).toFixed(1)+' hrs</span>'
-    + '<span class="dt-cell dt-muted">'+(e.billable?'Yes':'No')+'</span>'
-    + '<span class="dt-cell dt-muted dt-ellipsis">'+escHtml(e.descriptor||'')+'</span>'
-    + '<span class="dt-cell dt-right">$'+val.toFixed(2)+'</span>'
-    + '<button class="dt-del-btn" style="text-decoration:none" onclick="event.stopPropagation();dtUndoDelete(\'hours_entries\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
+  // Note: fade uses color (not opacity) on the text cells only — a parent's opacity composites
+  // down and can't be overridden by a child, which would make the undo button unreadable too.
+  var s = 'color:var(--text-muted);text-decoration:line-through';
+  return '<div class="dt-read-row dt-hours-grid" data-eid="'+e.id+'" data-type="hours">'
+    + '<span class="dt-cell" style="'+s+'">'+fmtDate(e.entry_date)+'</span>'
+    + '<span class="dt-cell" style="'+s+'">'+escHtml(techName)+'</span>'
+    + '<span class="dt-cell dt-muted" style="'+s+'">'+escHtml(typeName)+'</span>'
+    + '<span class="dt-cell" style="'+s+'">'+parseFloat(e.hours||0).toFixed(1)+' hrs</span>'
+    + '<span class="dt-cell dt-muted" style="'+s+'">'+(e.billable?'Yes':'No')+'</span>'
+    + '<span class="dt-cell dt-muted dt-ellipsis" style="'+s+'">'+escHtml(e.descriptor||'')+'</span>'
+    + '<span class="dt-cell dt-right" style="'+s+'">$'+val.toFixed(2)+'</span>'
+    + '<button class="dt-del-btn" style="color:var(--header-bg);font-weight:700" onclick="event.stopPropagation();dtUndoDelete(\'hours_entries\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
     + '</div>';
 }
 
 function dtPartsDeletedRow(e) {
   var qboName = (e.qbo_items && e.qbo_items.name) || '';
-  return '<div class="dt-read-row dt-parts-grid" data-eid="'+e.id+'" data-type="parts" style="opacity:0.5;text-decoration:line-through">'
-    + '<span class="dt-cell">'+fmtDate(e.transaction_date)+'</span>'
-    + '<span class="dt-cell dt-muted">'+escHtml(qboName)+'</span>'
-    + '<span class="dt-cell dt-ellipsis">'+escHtml(e.description||'')+'</span>'
-    + '<span class="dt-cell">'+parseFloat(e.qty||1).toFixed(0)+'</span>'
-    + '<span class="dt-cell dt-right">$'+parseFloat(e.cost||0).toFixed(2)+'</span>'
-    + '<span class="dt-cell dt-right dt-muted">'+Math.round(parseFloat(e.margin||0)*100)+'%</span>'
-    + '<span class="dt-cell dt-right">$'+parseFloat(e.sell_total||0).toFixed(2)+'</span>'
-    + '<button class="dt-del-btn" style="text-decoration:none" onclick="event.stopPropagation();dtUndoDelete(\'line_items\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
+  var s = 'color:var(--text-muted);text-decoration:line-through';
+  return '<div class="dt-read-row dt-parts-grid" data-eid="'+e.id+'" data-type="parts">'
+    + '<span class="dt-cell" style="'+s+'">'+fmtDate(e.transaction_date)+'</span>'
+    + '<span class="dt-cell dt-muted" style="'+s+'">'+escHtml(qboName)+'</span>'
+    + '<span class="dt-cell dt-ellipsis" style="'+s+'">'+escHtml(e.description||'')+'</span>'
+    + '<span class="dt-cell" style="'+s+'">'+parseFloat(e.qty||1).toFixed(0)+'</span>'
+    + '<span class="dt-cell dt-right" style="'+s+'">$'+parseFloat(e.cost||0).toFixed(2)+'</span>'
+    + '<span class="dt-cell dt-right dt-muted" style="'+s+'">'+Math.round(parseFloat(e.margin||0)*100)+'%</span>'
+    + '<span class="dt-cell dt-right" style="'+s+'">$'+parseFloat(e.sell_total||0).toFixed(2)+'</span>'
+    + '<button class="dt-del-btn" style="color:var(--header-bg);font-weight:700" onclick="event.stopPropagation();dtUndoDelete(\'line_items\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
     + '</div>';
 }
 
