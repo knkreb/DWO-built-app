@@ -8,3 +8,7 @@ Real login identity via `profiles` (keyed to `auth.users.id`, never email/name),
 
 ## v4.89 — Operational Audit Trail
 Extended the audit trail to ~31 tables (work orders, hours entries, line items, tasks, customers, vendors, technicians, settings, and more) via one reusable generic trigger, replacing the old hand-written per-field triggers on day_review and line_items. Every table's audit rows now carry a resolved `context` (e.g. the linked work order's number) so a single free-text search finds related edits across tables. The Audit Log tab (Settings) gained search: free text, date range, module, and action filters. See `docs/specs/operational-audit-trail.md`. Excluded on purpose: `location_event` (214k+ raw GPS pings), `profiles`/`alerts` (already have dedicated named-action auditing), `user_roles` (retired).
+
+## v4.90 — Audit trail delete snapshot + Undo on hours/parts rows
+- audit_row_changes() now captures a full snapshot of a record's field values into the "deactivate" audit row (e.g. hours, cost, tech, descriptor) instead of an empty summary — Kevin's feedback that a deleted hours entry showed no "before" value.
+- Work order screen: deleting an hours or parts entry no longer removes it immediately — it now shows struck-through/greyed in place with an undo (↺) button to restore it, for the current view. Reopening the work order still shows only active entries as normal.

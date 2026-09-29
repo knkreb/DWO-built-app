@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.89';
+const APP_VERSION = '4.90';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1780,17 +1780,67 @@ function dtFlashSaved(row) {
 
 function dtSoftDelete(table, id) {
   if (!confirm('Delete this entry?')) return;
+  var list = table==='hours_entries' ? AppState.hoursEntries : AppState.lineItems;
+  var entry = list.find(function(e){ return e.id===id; });
   sb.patch(table, id, {active: false, modified_by: AppState.userEmail}).then(function(r) {
     if (r.ok) {
-      if (table==='hours_entries') AppState.hoursEntries = AppState.hoursEntries.filter(function(e){return e.id!==id;});
-      else AppState.lineItems = AppState.lineItems.filter(function(e){return e.id!==id;});
+      if (entry) entry.active = false;
       var row = document.querySelector('[data-eid="'+id+'"]');
-      if (row) row.remove();
+      if (row && entry) row.outerHTML = (table==='hours_entries') ? dtHoursDeletedRow(entry) : dtPartsDeletedRow(entry);
+      else if (row) row.remove();
       dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
       delete AppState.projectedCache[AppState.currentWO.id];
       showToast('Deleted');
     } else showToast('Error deleting');
   });
+}
+
+function dtUndoDelete(table, id) {
+  var list = table==='hours_entries' ? AppState.hoursEntries : AppState.lineItems;
+  var entry = list.find(function(e){ return e.id===id; });
+  sb.patch(table, id, {active: true, modified_by: AppState.userEmail}).then(function(r) {
+    if (!r.ok) { showToast('Error restoring'); return; }
+    if (entry) entry.active = true;
+    var row = document.querySelector('[data-eid="'+id+'"]');
+    if (row && entry) row.outerHTML = (table==='hours_entries') ? dtHoursReadRow(entry) : dtPartsReadRow(entry);
+    dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
+    delete AppState.projectedCache[AppState.currentWO.id];
+    showToast('Restored');
+  });
+}
+
+// Struck-through, disabled row shown right after a delete — click the undo icon to bring it back.
+// Only lasts for this view: reopening the work order re-renders the active-only list as normal.
+function dtHoursDeletedRow(e) {
+  var techName = (e.technicians&&e.technicians.name) || '';
+  var typeName = (e.hours_types&&e.hours_types.name) || '';
+  var ht = e.hours_types;
+  var rate = parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
+  var val = e.billable ? parseFloat(e.hours||0)*rate : 0;
+  return '<div class="dt-read-row dt-hours-grid" data-eid="'+e.id+'" data-type="hours" style="opacity:0.5;text-decoration:line-through">'
+    + '<span class="dt-cell">'+fmtDate(e.entry_date)+'</span>'
+    + '<span class="dt-cell">'+escHtml(techName)+'</span>'
+    + '<span class="dt-cell dt-muted">'+escHtml(typeName)+'</span>'
+    + '<span class="dt-cell">'+parseFloat(e.hours||0).toFixed(1)+' hrs</span>'
+    + '<span class="dt-cell dt-muted">'+(e.billable?'Yes':'No')+'</span>'
+    + '<span class="dt-cell dt-muted dt-ellipsis">'+escHtml(e.descriptor||'')+'</span>'
+    + '<span class="dt-cell dt-right">$'+val.toFixed(2)+'</span>'
+    + '<button class="dt-del-btn" style="text-decoration:none" onclick="event.stopPropagation();dtUndoDelete(\'hours_entries\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
+    + '</div>';
+}
+
+function dtPartsDeletedRow(e) {
+  var qboName = (e.qbo_items && e.qbo_items.name) || '';
+  return '<div class="dt-read-row dt-parts-grid" data-eid="'+e.id+'" data-type="parts" style="opacity:0.5;text-decoration:line-through">'
+    + '<span class="dt-cell">'+fmtDate(e.transaction_date)+'</span>'
+    + '<span class="dt-cell dt-muted">'+escHtml(qboName)+'</span>'
+    + '<span class="dt-cell dt-ellipsis">'+escHtml(e.description||'')+'</span>'
+    + '<span class="dt-cell">'+parseFloat(e.qty||1).toFixed(0)+'</span>'
+    + '<span class="dt-cell dt-right">$'+parseFloat(e.cost||0).toFixed(2)+'</span>'
+    + '<span class="dt-cell dt-right dt-muted">'+Math.round(parseFloat(e.margin||0)*100)+'%</span>'
+    + '<span class="dt-cell dt-right">$'+parseFloat(e.sell_total||0).toFixed(2)+'</span>'
+    + '<button class="dt-del-btn" style="text-decoration:none" onclick="event.stopPropagation();dtUndoDelete(\'line_items\',\''+e.id+'\')" title="Undo delete">&#8634;</button>'
+    + '</div>';
 }
 
 function dtRefreshSectionMeta(type) {
