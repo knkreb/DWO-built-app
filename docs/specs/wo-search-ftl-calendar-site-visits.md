@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 Baseline: DWO v4.87 (vanilla JS/HTML PWA, Supabase backend, Netlify hosting)
-Status: #5 built (v4.91). #1–3 reviewed against the codebase, ready to build. #4 open pending Kevin's phasing decision.
+Status: #5 built (v4.91). #1, #2, #3 built (v4.92). #4 open pending Kevin's phasing decision.
 
 ## Ground rules for Claude Code
 - Read the existing code before changing anything. Table names, column names, and file locations below are not confirmed. Verify them in the codebase and report anything that does not match.
@@ -37,7 +37,7 @@ No schema changes, no data restructure, no internal identifier renames — match
 
 ---
 
-## 1. Work order screen: search by work order number
+## 1. Work order screen: search by work order number — DONE (v4.92)
 
 **What:** Add a search field for work order number to the ribbon bar on the work order screen, alongside the other searchable attributes.
 
@@ -53,7 +53,7 @@ No schema changes, no data restructure, no internal identifier renames — match
 
 ---
 
-## 2. Work order screen: "Clear filters" button
+## 2. Work order screen: "Clear filters" button — DONE (v4.92)
 
 **What:** Add a "Clear filters" button to the same ribbon bar.
 
@@ -66,7 +66,7 @@ No schema changes, no data restructure, no internal identifier renames — match
 
 ---
 
-## 3. Field Travel Log (FTL): expandable monthly calendar
+## 3. Field Travel Log (FTL): expandable monthly calendar — DONE (v4.92, desktop only)
 
 **What:** Keep the current weekly display and add an expandable monthly calendar for faster navigation.
 

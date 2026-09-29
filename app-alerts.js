@@ -13,6 +13,19 @@ var AlertsState = {
 var STATUS_LABELS = { unread: 'Unread', acknowledged: 'Acknowledged', in_progress: 'In progress', resolved: 'Resolved' };
 var SEVERITY_COLORS = { info: '#3498db', warning: '#e67e22', urgent: '#c0392b' };
 
+// A delete snapshot is a single "field: value; field: value" string — render one pair per line
+// instead of a run-on sentence. Plain field updates (no "; ") render as before.
+function formatAuditOldNew(oldVal, newVal) {
+  function fmt(v) {
+    if (!v) return '';
+    if (v.indexOf('; ') >= 0) return v.split('; ').map(function(part) { return escHtml(part); }).join('<br>');
+    return escHtml(v);
+  }
+  if (oldVal && !newVal) return fmt(oldVal);
+  if (!oldVal && newVal) return fmt(newVal);
+  return fmt(oldVal) + ' &rarr; ' + fmt(newVal);
+}
+
 function loadAlerts() {
   if (AppState.userRole !== 'admin') return Promise.resolve();
   return sb.get('alerts', '?select=*&order=created_at.desc&limit=200').then(function(r) {
@@ -308,7 +321,7 @@ function loadMoreAuditLog() {
         + '<td style="padding:4px 6px">' + escHtml(row.context || '') + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.action || '') + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.field_name || '') + '</td>'
-        + '<td style="padding:4px 6px">' + escHtml(row.old_value || '') + ' &rarr; ' + escHtml(row.new_value || '') + '</td>'
+        + '<td style="padding:4px 6px">' + formatAuditOldNew(row.old_value, row.new_value) + '</td>'
         + '</tr>';
     });
     html += '</tbody></table>';

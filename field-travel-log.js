@@ -28,7 +28,9 @@ var DRState = {
   infoWindow: null,
   tagStep: 0,
   tagStopIdx: null,
-  stopFlags: {}
+  stopFlags: {},
+  monthCalOpen: false,
+  monthCalMonth: null
 };
 
 // ── Timezone helpers ─────────────────────────────────────────
@@ -84,6 +86,9 @@ function drBuildShell() {
   html += '<button onclick="drReconcileNavDay(1)" style="padding:3px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:13px">&#8250;</button>';
   html += '</div>';
   html += '</div>';
+  html += '<div id="dr-month-toggle" onclick="drToggleMonthCalendar()" style="display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);flex-shrink:0">'
+    + '<span id="dr-month-chevron">&#9656;</span> Month view</div>';
+  html += '<div id="dr-month-calendar" style="display:none;border-bottom:1px solid var(--border);flex-shrink:0"></div>';
   html += '<div id="dr-week-bar"></div>';
   html += '<div id="dr-body">';
   html += '<div id="dr-timeline-col"><div style="padding:20px;color:var(--text-muted);font-size:13px">Select a day to view timeline</div></div>';
@@ -280,6 +285,69 @@ function drRenderWeekBar() {
   if (DRState.unreviewed) {
     html += '<div class="dr-unreviewed">&#9888; Unreviewed days in prior weeks</div>';
   }
+  el.innerHTML = html;
+  if (DRState.monthCalOpen) drRenderMonthCalendar();
+}
+
+// ── Month calendar (collapsed by default) — faster navigation to a week months away ──
+function drToggleMonthCalendar() {
+  DRState.monthCalOpen = !DRState.monthCalOpen;
+  var body = document.getElementById('dr-month-calendar');
+  var chevron = document.getElementById('dr-month-chevron');
+  if (body) body.style.display = DRState.monthCalOpen ? '' : 'none';
+  if (chevron) chevron.innerHTML = DRState.monthCalOpen ? '&#9662;' : '&#9656;';
+  if (DRState.monthCalOpen) {
+    DRState.monthCalMonth = DRState.monthCalMonth || new Date(DRState.weekStart.getFullYear(), DRState.weekStart.getMonth(), 1);
+    drRenderMonthCalendar();
+  }
+}
+
+function drNavMonth(dir) {
+  var m = DRState.monthCalMonth || new Date();
+  DRState.monthCalMonth = new Date(m.getFullYear(), m.getMonth() + dir, 1);
+  drRenderMonthCalendar();
+}
+
+function drJumpToMonthDay(dateStr) {
+  DRState.weekStart = drGetMonday(new Date(dateStr + 'T12:00:00'));
+  localStorage.setItem('dwo_ftl_week_start', drDateStr(DRState.weekStart));
+  DRState.selectedDate = dateStr;
+  drLoadWeek();
+}
+
+function drRenderMonthCalendar() {
+  var el = document.getElementById('dr-month-calendar');
+  if (!el || !DRState.monthCalOpen) return;
+  var m = DRState.monthCalMonth || new Date(DRState.weekStart.getFullYear(), DRState.weekStart.getMonth(), 1);
+  var month = m.getMonth();
+  var firstOfMonth = new Date(m.getFullYear(), month, 1);
+  var startOfGrid = drGetMonday(firstOfMonth);
+  var monthLabel = firstOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  var weekStartStr = drDateStr(DRState.weekStart);
+  var weekEndStr = drDateStr(drAddDays(DRState.weekStart, 6));
+  var todayStr = drTodayStr();
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px">'
+    + '<button onclick="event.stopPropagation();drNavMonth(-1)" style="padding:3px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:12px">&#8249;</button>'
+    + '<div style="font-size:12px;font-weight:600">' + monthLabel + '</div>'
+    + '<button onclick="event.stopPropagation();drNavMonth(1)" style="padding:3px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:12px">&#8250;</button>'
+    + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:0 10px;font-size:10px;text-align:center;color:var(--text-muted)">';
+  ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function(d){ html += '<div>' + d + '</div>'; });
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:2px 10px 10px">';
+  for (var i = 0; i < 42; i++) {
+    var d = drAddDays(startOfGrid, i);
+    var ds = drDateStr(d);
+    var inMonth = d.getMonth() === month;
+    var inCurrentWeek = ds >= weekStartStr && ds <= weekEndStr;
+    var isToday = ds === todayStr;
+    var bg = inCurrentWeek ? 'var(--header-bg)' : 'transparent';
+    var color = inCurrentWeek ? '#fff' : (inMonth ? 'var(--text-primary)' : 'var(--text-muted)');
+    var border = (isToday && !inCurrentWeek) ? '1px solid var(--header-bg)' : '1px solid transparent';
+    html += '<div onclick="event.stopPropagation();drJumpToMonthDay(\'' + ds + '\')" style="cursor:pointer;text-align:center;padding:4px 0;border-radius:4px;font-size:12px;background:' + bg + ';color:' + color + ';border:' + border + ';opacity:' + (inMonth ? '1' : '0.4') + '">' + d.getDate() + '</div>';
+  }
+  html += '</div>';
   el.innerHTML = html;
 }
 
