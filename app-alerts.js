@@ -177,43 +177,135 @@ function renderAlertsSettingsTab() {
   return html;
 }
 
-// ── Settings → Audit Log tab (read-only) ───────────────────────
+// ── Settings → Audit Log tab (read-only, searchable) ───────────
 function renderAuditLogTab() {
-  return '<div class="settings-block"><div class="settings-block-header open"><span class="settings-block-title">Audit Log</span></div><div class="settings-block-body open">'
-    + '<div id="audit-log-rows"><div style="font-size:12px;color:var(--text-muted)">Loading...</div></div>'
-    + '<button class="btn-dark" id="audit-log-more-btn" style="margin-top:10px;display:none" onclick="loadMoreAuditLog()">Load more</button>'
-    + '</div></div>';
+  var html = '<div class="settings-block"><div class="settings-block-header open"><span class="settings-block-title">Audit Log</span></div><div class="settings-block-body open">';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">';
+  html += '<div style="flex:1;min-width:200px"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px">Search</label>'
+    + '<input type="text" id="audit-search-text" placeholder="WO number, customer, value, email..." style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)" onkeydown="if(event.key===\'Enter\')applyAuditFilters()"></div>';
+  html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px">From</label>'
+    + '<input type="date" id="audit-search-from" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)"></div>';
+  html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px">To</label>'
+    + '<input type="date" id="audit-search-to" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)"></div>';
+  html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px">Module</label>'
+    + '<select id="audit-search-module" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)">'
+    + AUDIT_MODULES.map(function(m) { return '<option value="' + m[0] + '">' + m[1] + '</option>'; }).join('')
+    + '</select></div>';
+  html += '<div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px">Action</label>'
+    + '<select id="audit-search-action" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg)">'
+    + AUDIT_ACTIONS.map(function(a) { return '<option value="' + a[0] + '">' + a[1] + '</option>'; }).join('')
+    + '</select></div>';
+  html += '<button class="btn-dark" onclick="applyAuditFilters()">Search</button>';
+  html += '<button onclick="clearAuditFilters()" style="padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);background:none;cursor:pointer;font-size:13px">Clear</button>';
+  html += '</div>';
+  html += '<div id="audit-log-rows"><div style="font-size:12px;color:var(--text-muted)">Loading...</div></div>';
+  html += '<button class="btn-dark" id="audit-log-more-btn" style="margin-top:10px;display:none" onclick="loadMoreAuditLog()">Load more</button>';
+  html += '</div></div>';
+  return html;
 }
 
+var AUDIT_MODULES = [
+  ['', 'All modules'],
+  ['work_orders', 'Work Orders'], ['hours_entries', 'Hours Entries'], ['line_items', 'Line Items (Parts/Invoices)'],
+  ['day_review', 'Day Review'], ['tasks', 'Tasks'], ['task_assignments', 'Task Assignments'],
+  ['customers', 'Customers'], ['customer_contacts', 'Customer Contacts'], ['vendors', 'Vendors'],
+  ['technicians', 'Technicians'], ['locations', 'Locations'], ['hours_types', 'Hours Types'],
+  ['qbo_items', 'QBO Items'], ['quoted_invoices', 'Quoted Invoices'], ['wo_flags', 'WO Flags'],
+  ['wo_statuses', 'WO Statuses'], ['settings', 'Settings'], ['contact_role_types', 'Contact Role Types'],
+  ['bug_reports', 'Bug Reports'], ['bug_report_statuses', 'Bug Report Statuses'],
+  ['dispatch_assignments', 'Dispatch Assignments'], ['profiles', 'Users'], ['alerts', 'Alerts'],
+];
+var AUDIT_ACTIONS = [
+  ['', 'All actions'], ['create', 'Create'], ['update', 'Update'], ['deactivate', 'Deactivate'], ['reactivate', 'Reactivate'],
+  ['email_change', 'Email change'], ['reset_password', 'Password reset'], ['tid_change', 'Tracker ID change'],
+  ['tid_change_by_user', 'Tracker ID change (self)'], ['status_change', 'Status change'],
+];
+
 function initAuditLogTab() {
+  AlertsState.auditPage = 0;
+  AlertsState.auditRows = [];
+  AlertsState.auditFilters = { text: '', from: '', to: '', module: '', action: '' };
+  loadMoreAuditLog();
+}
+
+// Settings renders into both a desktop and mobile container at once, so an id can exist twice —
+// pick whichever copy is actually visible rather than always grabbing the first (possibly hidden) one.
+function getVisibleEl(id) {
+  var els = document.querySelectorAll('[id="' + id + '"]');
+  for (var i = 0; i < els.length; i++) { if (els[i].offsetParent !== null) return els[i]; }
+  return els[0] || null;
+}
+
+function applyAuditFilters() {
+  var textEl = getVisibleEl('audit-search-text');
+  var fromEl = getVisibleEl('audit-search-from');
+  var toEl = getVisibleEl('audit-search-to');
+  var moduleEl = getVisibleEl('audit-search-module');
+  var actionEl = getVisibleEl('audit-search-action');
+  AlertsState.auditFilters = {
+    text: textEl ? textEl.value.trim() : '',
+    from: fromEl ? fromEl.value : '',
+    to: toEl ? toEl.value : '',
+    module: moduleEl ? moduleEl.value : '',
+    action: actionEl ? actionEl.value : '',
+  };
   AlertsState.auditPage = 0;
   AlertsState.auditRows = [];
   loadMoreAuditLog();
 }
 
-function loadMoreAuditLog() {
+function clearAuditFilters() {
+  ['audit-search-text', 'audit-search-from', 'audit-search-to', 'audit-search-module', 'audit-search-action'].forEach(function(id) {
+    document.querySelectorAll('[id="' + id + '"]').forEach(function(el) { el.value = ''; });
+  });
+  applyAuditFilters();
+}
+
+function buildAuditQuery() {
   var pageSize = 50;
   var offset = AlertsState.auditPage * pageSize;
-  sb.get('audit_log', '?select=*&order=changed_at.desc&limit=' + pageSize + '&offset=' + offset).then(function(r) {
+  var f = AlertsState.auditFilters || {};
+  var params = ['select=*', 'order=changed_at.desc', 'limit=' + pageSize, 'offset=' + offset];
+  if (f.module) params.push('table_name=eq.' + f.module);
+  if (f.action) params.push('action=eq.' + f.action);
+  if (f.from) params.push('changed_at=gte.' + f.from + 'T00:00:00');
+  if (f.to) params.push('changed_at=lte.' + f.to + 'T23:59:59');
+  if (f.text) {
+    var safe = f.text.replace(/[,()."]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (safe) {
+      var term = '*' + safe.split(' ').join('*') + '*';
+      var orCols = ['context', 'changed_by', 'field_name', 'old_value', 'new_value', 'table_name'];
+      params.push('or=(' + orCols.map(function(col) { return col + '.ilike.' + term; }).join(',') + ')');
+    }
+  }
+  return '?' + params.join('&');
+}
+
+function loadMoreAuditLog() {
+  sb.get('audit_log', buildAuditQuery()).then(function(r) {
     if (!r.ok) return;
     AlertsState.auditRows = AlertsState.auditRows.concat(r.data || []);
     AlertsState.auditPage++;
     // Settings renders into both a desktop and a mobile container, so this id can exist twice — update all of them.
     var rowsEls = document.querySelectorAll('[id="audit-log-rows"]');
     if (!rowsEls.length) return;
+    var moduleLabels = {}; AUDIT_MODULES.forEach(function(m) { moduleLabels[m[0]] = m[1]; });
     var html = '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)">'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">When</th>'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Who</th>'
-      + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">What</th>'
+      + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Module</th>'
+      + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Context</th>'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Action</th>'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Field</th>'
       + '<th style="padding:4px 6px;text-align:left;color:var(--text-muted);font-size:10px">Old &rarr; New</th>'
       + '</tr></thead><tbody>';
+    if (!AlertsState.auditRows.length) html += '<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text-muted)">No matching audit entries</td></tr>';
     AlertsState.auditRows.forEach(function(row) {
       html += '<tr style="border-bottom:1px solid var(--border)">'
         + '<td style="padding:4px 6px;white-space:nowrap">' + new Date(row.changed_at).toLocaleString() + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.changed_by || '') + '</td>'
-        + '<td style="padding:4px 6px">' + escHtml(row.table_name || '') + '</td>'
+        + '<td style="padding:4px 6px">' + escHtml(moduleLabels[row.table_name] || row.table_name || '') + '</td>'
+        + '<td style="padding:4px 6px">' + escHtml(row.context || '') + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.action || '') + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.field_name || '') + '</td>'
         + '<td style="padding:4px 6px">' + escHtml(row.old_value || '') + ' &rarr; ' + escHtml(row.new_value || '') + '</td>'
@@ -221,7 +313,7 @@ function loadMoreAuditLog() {
     });
     html += '</tbody></table>';
     rowsEls.forEach(function(el) { el.innerHTML = html; });
-    var showMore = (r.data && r.data.length === pageSize);
+    var showMore = (r.data && r.data.length === 50);
     document.querySelectorAll('[id="audit-log-more-btn"]').forEach(function(btn) { btn.style.display = showMore ? '' : 'none'; });
   });
 }
