@@ -85,6 +85,8 @@ No schema changes, no data restructure, no internal identifier renames — match
 
 ## 4. Site visit history ("when was I here")
 
+> SUPERSEDED 2026-09-30 by docs/specs/site-visits-and-claims.md (billing-first redesign). The text below is the original and is kept for history.
+
 **What:** On the Sites module, add a visit history for each site so the user can see in one place the dates people were on site, for example "Sept: 3, 4, 6, 9, 11, 15".
 
 **Two sources, one selector**

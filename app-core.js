@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.92';
+const APP_VERSION = '4.93';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -6570,6 +6570,7 @@ function locRenderDetail(loc) {
     html += '<a href="#" style="font-size:10px" onclick="locResetGeofence(\'' + lid + '\');return false">reset to default</a>';
   }
   html += '</td></tr>';
+  if (typeof locTravelRowHtml === 'function') html += locTravelRowHtml(loc); // v4.93 — app-sites-travel.js
   html += '</table>';
   // GPS dead zone toggle
   html += '<div style="margin-top:10px;padding:8px 0;border-top:1px solid var(--border)">';
@@ -6851,6 +6852,9 @@ function locRenderEditPanel(loc, isNew, prefill) {
   }
   html += '</div>';
 
+  // v4.93 — travel allowance (app-sites-travel.js)
+  if (typeof locTravelEditFieldsHtml === 'function') html += locTravelEditFieldsHtml(loc, isEdit);
+
   // Settings checkboxes
   html += '<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;padding:8px;background:var(--bg);border-radius:3px;border:1px solid var(--border)">';
   html += '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer"><input type="checkbox" id="loc-edit-billable"' + ((isEdit?loc.billable_default:true)?' checked':'') + '> Billable by default</label>';
@@ -6905,6 +6909,7 @@ function locEditTypeChange() {
   var custRow = document.getElementById('loc-edit-cust-row');
   if (!type || !custRow) return;
   custRow.style.display = type.value === 'customer' ? '' : 'none';
+  if (typeof locTravelTypeChange === 'function') locTravelTypeChange(); // v4.93 — app-sites-travel.js
 }
 
 function locEditCustSearch(val) {
@@ -6996,6 +7001,9 @@ function locSaveEdit(id) {
     modified_by: AppState.userEmail,
     modified_at: new Date().toISOString()
   };
+
+  // v4.93 — travel allowance (app-sites-travel.js)
+  if (typeof locTravelPayload === 'function') Object.assign(payload, locTravelPayload());
 
   // v4.46 — apply manual coordinates if entered
   if (hasManualCoords) {
