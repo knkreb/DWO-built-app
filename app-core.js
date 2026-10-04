@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.93';
+const APP_VERSION = '4.94';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -508,6 +508,7 @@ function loadAllData() {
       applyCompanyBranding(AppState.settings.company_name, AppState.settings.company_logo_url);
       subscribeToWorkOrders();
       subscribeToHoursEntries();
+      if (typeof invLoadActiveRun === 'function') invLoadActiveRun();
     });
   }).catch(function(err) {
     console.error('loadAllData error:', err);
@@ -989,7 +990,7 @@ function renderWODetail(wo) {
 
   var out = '';
   if (isCompletedStatus(wo.status) && isAdmin) out += '<div class="completion-banner">Ready to export - use Desktop Review to export to Zed Axis</div>';
-  var isLocked = isProcessedStatus(wo.status);
+  var isLocked = (typeof invWoLockedForMe==='function') ? invWoLockedForMe(wo) : isProcessedStatus(wo.status);
   if (isLocked) {
     out += '<div style="background:#99999918;border:1px solid #999;border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">'
       + '<span style="font-size:13px;font-weight:600;color:var(--text-muted)">🔒 This WO has been exported and is locked for editing</span>'
@@ -1402,7 +1403,7 @@ function dtHoursReadRow(e) {
   var ht = e.hours_types;
   var rate = parseFloat(AppState.settings[ht&&ht.internal_rate_key]||0);
   var val = e.billable ? parseFloat(e.hours||0)*rate : 0;
-  var locked = AppState.currentWO && isProcessedStatus(AppState.currentWO.status);
+  var locked = AppState.currentWO && ((typeof invWoLockedForMe==='function') ? invWoLockedForMe(AppState.currentWO) : isProcessedStatus(AppState.currentWO.status));
   return '<div class="dt-read-row dt-hours-grid" data-eid="'+e.id+'" data-type="hours"'+(locked?'':' ondblclick="dtEditHoursRow(this)"')+'>'
     + '<span class="dt-cell">'+fmtDate(e.entry_date)+'</span>'
     + '<span class="dt-cell">'+escHtml(techName)+'</span>'
@@ -1425,7 +1426,7 @@ function buildDescriptor(wo, invoiceNum, description) {
 
 function dtPartsReadRow(e) {
   var qboName = (e.qbo_items && e.qbo_items.name) || '';
-  var locked = AppState.currentWO && isProcessedStatus(AppState.currentWO.status);
+  var locked = AppState.currentWO && ((typeof invWoLockedForMe==='function') ? invWoLockedForMe(AppState.currentWO) : isProcessedStatus(AppState.currentWO.status));
   return '<div class="dt-read-row dt-parts-grid" data-eid="'+e.id+'" data-type="parts"'+(locked?'':' ondblclick="dtEditPartsRow(this)"')+'>'
     + '<span class="dt-cell">'+fmtDate(e.transaction_date)+'</span>'
     + '<span class="dt-cell dt-muted">'+escHtml(qboName)+'</span>'
@@ -4033,7 +4034,9 @@ function createTruckStockWO() {
   var woNum = prefix+nextNum;
   sb.patchWhere('settings','key=eq.wo_number_next',{value:String(nextNum+1)});
   AppState.settings.wo_number_next = String(nextNum+1);
-  sb.post('work_orders',{wo_number:woNum,title:title,customer_id:null,customer_flag:false,form_mode:'time_materials',status:10,po_number:woNum,work_description:'Truck Stock',created_by:AppState.userEmail,modified_by:AppState.userEmail})
+  var _tsSt = getStatusByKey('completed') || (AppState.statuses||[]).filter(function(x){return x.category==='completed';})[0];
+  if (!_tsSt) { showToast('No Completed status is set up'); return; }
+  sb.post('work_orders',{wo_number:woNum,title:title,customer_id:null,customer_flag:false,form_mode:'time_materials',status:_tsSt.num,po_number:woNum,work_description:'Truck Stock',created_by:AppState.userEmail,modified_by:AppState.userEmail})
   .then(function(r){
     if(r.ok&&r.data&&r.data.length){
       loadWorkOrders().then(function(){
@@ -4657,6 +4660,7 @@ function initInvoicesPanel() {
   loadAndRenderImportHistory();
 }
 
+/* MOVED TO app-invoice-gen.js — v4.94 — 2026-10-04
 function initInvoicingPanel() {
   var el = document.getElementById('invoicing-panel-body');
   if (!el) return;
@@ -4675,6 +4679,7 @@ function initInvoicingPanel() {
     + '</div>'
     + '</div>';
 }
+*/
 
 function importURICSV(input) {
   var file = input.files[0]; if (!file) return;

@@ -516,8 +516,10 @@ function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6){
   var updates=wos.map(function(wo){
     var newCount=(wo.invoice_suffix_count||0)+1;
     if(wo.multi_bill){
-      return sb.patch('work_orders',wo.id,{status:7,invoice_suffix_count:newCount,exported_at:null,exported_by:null,modified_by:AppState.userEmail}).then(function(){
-        wo.status=7;wo.invoice_suffix_count=newCount;wo.exported_at=null;wo.exported_by=null;
+      var _ipSt=getStatusByKey('in_progress')||(AppState.statuses||[]).filter(function(x){return x.category==='active';})[0];
+      var _ipNum=_ipSt?_ipSt.num:wo.status;
+      return sb.patch('work_orders',wo.id,{status:_ipNum,invoice_suffix_count:newCount,exported_at:null,exported_by:null,modified_by:AppState.userEmail}).then(function(){
+        wo.status=_ipNum;wo.invoice_suffix_count=newCount;wo.exported_at=null;wo.exported_by=null;
         var idx=AppState.workOrders.findIndex(function(w){return w.id===wo.id;});
         if(idx>=0)AppState.workOrders[idx]=wo;
       });
@@ -534,6 +536,7 @@ function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6){
     }
   });
   Promise.all(updates).then(function(){
+    if(typeof invRunMarkExported==='function') invRunMarkExported(woIds);
     clearSelection(); renderDesktopGrid(); loadExportHistory();
     showToast('Exported '+wos.length+' WO'+(wos.length>1?'s':'')+' - file downloading');
   });
@@ -554,7 +557,7 @@ function _processDWOExcel(file){
       var hoursRows =hoursSheet ?XLSX.utils.sheet_to_json(hoursSheet, {defval:'',raw:false}):[];
       var partsRows =partsSheet ?XLSX.utils.sheet_to_json(partsSheet, {defval:'',raw:false}):[];
       var quotedRows=quotedSheet?XLSX.utils.sheet_to_json(quotedSheet,{defval:'',raw:false}):[];
-      var statusMap={'00-Approval Request':0,'01-Quote Request':1,'02-Quoted':2,'03-Parts to be Ordered':3,'04-In Research':4,'05-Parts Ordered':5,'06-Work Ready':6,'07-In Progress':7,'08-Entry Work Needed':8,'09-Recheck Job':9,'10-Completed':10,'11-BATCH INVOICE PROCESS':11,'12-Invoiced':12,'15-Invoiced outside DWO':15,'99-Cancelled':99};
+      var statusMap={'00-Approval Request':'approval_request','01-Quote Request':'quote_request','02-Quoted':'quoted','03-Parts to be Ordered':'parts_to_order','04-In Research':'in_research','05-Parts Ordered':'parts_ordered','06-Work Ready':'work_ready','07-In Progress':'in_progress','08-Entry Work Needed':'entry_work_needed','09-Recheck Job':'recheck_job','10-Completed':'completed','11-BATCH INVOICE PROCESS':'batch_invoice','12-Invoiced':'invoiced','15-Invoiced outside DWO':'invoiced_outside','99-Cancelled':'cancelled'}; // status names in the old export map to system_keys, resolved to current numbers by getStatusByKey (v4.94)
       function parseWOName(raw){var str=String(raw||'').trim();var ci=str.indexOf(':');if(ci<0)return{woNumber:str,title:str};var left=str.slice(0,ci).trim();var title=str.slice(ci+1).trim();var num=left.replace(/^[Pp]+/,'');return{woNumber:'P'+num,title:title};}
       function parseDate(val){if(!val)return todayStr();var s=String(val).trim();if(s.match(/^\d{4}-\d{2}-\d{2}/))return s.slice(0,10);var parts=s.split('/');if(parts.length===3){var m=parts[0],d=parts[1],y=parts[2];return y.padStart(4,'20')+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');}return todayStr();}
       var preview=[];var addCustRow=AppState.customers.find(function(c){return c.qbo_customer_id==='SYSTEM';});
@@ -579,7 +582,7 @@ function _processDWOExcel(file){
         if(item.isTest){skipped++;doMainRow(i+1);return;}
         if(AppState.workOrders.find(function(w){return w.wo_number===item.woNumber;})){skipped++;doMainRow(i+1);return;}
         var row=item.row;
-        var statusNum=statusMap[String(row['Status']||'').trim()];if(statusNum===undefined)statusNum=7;
+        var _stKey=statusMap[String(row['Status']||'').trim()];var _stObj=getStatusByKey(_stKey||'in_progress')||getStatusByKey('in_progress');var statusNum=_stObj?_stObj.num:undefined;if(statusNum===undefined){showToast('Import stopped: no In Progress status is set up');return;}
         var mode=String(row['Form Mode']||'Time Materials').trim().toLowerCase().indexOf('quoted')>=0?'quoted':'time_materials';
         var poRaw=String(row['Purchase Order Number']||'').trim();
         var poResult=typeof validatePONumber==='function'?validatePONumber(poRaw):{po:poRaw||null,needsFlag:false};
