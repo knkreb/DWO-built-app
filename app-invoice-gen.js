@@ -1,4 +1,6 @@
-// app-invoice-gen.js — Customer invoice generation workflow (v4.94, slice 1)
+// app-invoice-gen.js — Customer invoice generation workflow (v4.94 slice 1, v4.95 slice 2)
+// Slice 2 (v4.95): information-only checks (steps 4-6: vendor invoices, billable time, days accepted),
+// last-run timestamp, safe-to-invoice cutoff, unprocessed dollar total, resume at the saved step.
 // Spec: docs/specs/invoice-generation-workflow.md
 // Slice 1 covers: in-progress review (step 2), scope pick + move to Batch Invoice Process (step 3),
 // run state in invoice_runs (one active run), progress bar + batch counter ribbon, drop/cancel/finish,
@@ -86,6 +88,84 @@ function invBtn(label, onclick, kind, disabled) {
     + bg + ';color:' + col + ';cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';font-weight:600;opacity:' + (disabled ? '0.5' : '1') + '">' + label + '</button>';
 }
 
+// ---------- slice 2: staleness checks (information only, never blocking) ----------
+function invDay(v) {
+  if (!v) return null;
+  var s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  var d = new Date(s); if (isNaN(d.getTime())) return null;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function invDaysAgo(day) {
+  if (!day) return null;
+  var p = day.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]), t = new Date();
+  t = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return Math.round((t - d) / 86400000);
+}
+function invAgoText(n) { return n === 0 ? 'today' : n + ' day' + (n === 1 ? '' : 's') + ' ago'; }
+function invDateWithAgo(day) {
+  if (!day) return '<span style="color:var(--text-muted)">no data</span>';
+  return '<b>' + fmtDate(day) + '</b> <span style="color:var(--text-muted)">(' + invAgoText(invDaysAgo(day)) + ')</span>';
+}
+
+// Loads every date the checks need. Cached on INV_STATE.checks; pass true to force a reload.
+function invLoadChecks(force) {
+  if (INV_STATE.checks && !force) return Promise.resolve(INV_STATE.checks);
+  return Promise.all([
+    sb.get('vendor_import_history', '?active=eq.true&select=imported_at&order=imported_at.desc&limit=1'),
+    sb.get('hours_entries', '?active=eq.true&billable=eq.true&select=entry_date&order=entry_date.desc&limit=1'),
+    sb.get('hours_entries', '?active=eq.true&billable=eq.true&select=modified_at&order=modified_at.desc&limit=1'),
+    sb.get('day_review', '?or=(sync_status.is.null,sync_status.neq.accepted)&select=id,review_date,tech_id,sync_status,clock_in&order=review_date.asc'),
+    sb.get('day_review', '?sync_status=eq.accepted&select=review_date&order=review_date.desc&limit=1'),
+    sb.get('invoice_runs', '?exported_at=not.is.null&select=exported_at&order=exported_at.desc&limit=1')
+  ]).then(function(r) {
+    function first(x, f) { return (x.ok && x.data && x.data.length) ? x.data[0][f] : null; }
+    var notAccepted = (r[3].ok && r[3].data) ? r[3].data : [];
+    var ids = notAccepted.map(function(d){ return d.id; });
+    var withHours = ids.length
+      ? sb.get('hours_entries', '?active=eq.true&day_review_id=in.(' + ids.join(',') + ')&select=day_review_id')
+      : Promise.resolve({ ok: true, data: [] });
+    return withHours.then(function(h) {
+      var hasHours = {}; ((h.ok && h.data) || []).forEach(function(e){ hasHours[e.day_review_id] = true; });
+      var worked = notAccepted.filter(function(d){ return d.clock_in || hasHours[d.id]; });
+      var acceptedThrough;
+      if (worked.length) {
+        var p = worked[0].review_date.split('-'), d0 = new Date(+p[0], +p[1] - 1, +p[2] - 1);
+        acceptedThrough = d0.getFullYear() + '-' + String(d0.getMonth() + 1).padStart(2, '0') + '-' + String(d0.getDate()).padStart(2, '0');
+      } else acceptedThrough = first(r[4], 'review_date');
+      INV_STATE.checks = {
+        vendorImported: invDay(first(r[0], 'imported_at')),
+        timeThrough: invDay(first(r[1], 'entry_date')),
+        timeModified: first(r[2], 'modified_at'),
+        acceptedThrough: acceptedThrough,
+        unacceptedWorked: worked,
+        lastRun: first(r[5], 'exported_at')
+      };
+      return INV_STATE.checks;
+    });
+  });
+}
+
+// Safe-to-invoice cutoff = the OLDEST of the dates that say how current the data is.
+function invCutoff(c) {
+  var days = [c.vendorImported, c.timeThrough, c.acceptedThrough, invDay(c.lastRun)].filter(Boolean).sort();
+  return days.length ? days[0] : null;
+}
+
+function invUnprocessed() {
+  var ready = AppState.workOrders.filter(invIsReady);
+  return { count: ready.length, total: ready.reduce(function(s, w){ return s + invProj(w); }, 0) };
+}
+
+function invSummaryHtml(c) {
+  var u = invUnprocessed(), cut = invCutoff(c);
+  return '<div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:12px 16px;margin-bottom:18px;font-size:13px;line-height:1.7">'
+    + '<div><span style="color:var(--text-muted)">Last invoice run exported:</span> ' + (c.lastRun ? '<b>' + fmtDateWithTime(c.lastRun) + '</b> <span style="color:var(--text-muted)">(' + invAgoText(invDaysAgo(invDay(c.lastRun))) + ')</span>' : '<span style="color:var(--text-muted)">no run yet</span>') + '</div>'
+    + '<div><span style="color:var(--text-muted)">Ready to bill (Completed):</span> <b>' + u.count + ' work order' + (u.count === 1 ? '' : 's') + ' &middot; ' + invMoney(u.total) + '</b></div>'
+    + '<div><span style="color:var(--text-muted)">Safe-to-invoice cutoff:</span> ' + invDateWithAgo(cut)
+    + ' <span style="color:var(--text-muted);font-size:12px">(oldest of vendor import, billable time, days accepted, last run)</span></div></div>';
+}
+
 // ---------- ribbon: progress bar + batch counter ----------
 function invBatchStats() {
   var wos = AppState.workOrders.filter(invInBatch);
@@ -137,7 +217,7 @@ function initInvoicingPanel() {
   var el = invHost(); if (!el) return;
   el.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
   Promise.all([loadWorkOrders(), loadCustomers(), invLoadActiveRun()]).then(function() {
-    return _ensureProjectedCache();
+    return Promise.all([_ensureProjectedCache(), invLoadChecks(true)]);
   }).then(function() {
     INV_STATE.view = 'entry';
     invRender();
@@ -154,7 +234,7 @@ function invRender() {
 }
 
 function invRefreshAndRender() {
-  return Promise.all([loadWorkOrders(), invLoadActiveRun()]).then(function() {
+  return Promise.all([loadWorkOrders(), invLoadActiveRun(), invLoadChecks(true)]).then(function() {
     return _ensureProjectedCache();
   }).then(function() { invRender(); if (typeof renderDesktopGrid === 'function') renderDesktopGrid(); });
 }
@@ -166,6 +246,7 @@ function invEntryHtml() {
     + '<div style="font-size:22px;font-weight:700;margin-bottom:6px">Customer Invoice Generation</div>'
     + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Build and review customer invoices by reconciling billable time and materials from the field.</div>';
   out += invSetupWarning();
+  if (INV_STATE.checks) out += invSummaryHtml(INV_STATE.checks);
   if (run) {
     var wos = invRunWOs(run), inB = wos.filter(invInBatch).length;
     out += invRibbonHtml(run.step, run.steps_done);
@@ -317,7 +398,7 @@ function invStartRun() {
     var custIds = INV_STATE.scopeType === 'customers' ? Object.keys(INV_STATE.custSel).filter(function(k){ return k !== '_none'; }) : [];
     return sb.post('invoice_runs', {
       started_by: AppState.userEmail, scope_type: INV_STATE.scopeType, customer_ids: custIds,
-      wo_ids: ids, step: 3, steps_done: [1, 2, 3], modified_by: AppState.userEmail
+      wo_ids: ids, step: 4, steps_done: [1, 2, 3], modified_by: AppState.userEmail
     }).then(function(r) {
       if (!r.ok || !r.data || !r.data.length) { showToast('Could not start the run (is another run active?)'); return; }
       AppState.invRun = r.data[0];
@@ -341,11 +422,17 @@ function invStartRun() {
 // ---------- run screen ----------
 function invRunHtml() {
   var run = AppState.invRun;
+  if (run.step <= 6) return invCheckHtml(run.step < 4 ? 4 : run.step);
+  return invRunListHtml();
+}
+
+function invRunListHtml() {
+  var run = AppState.invRun;
   var wos = invRunWOs(run);
   var inB = wos.filter(invInBatch);
   var out = '<div style="padding:20px 0">' + invRibbonHtml(run.exported_at ? 10 : 9, run.steps_done);
   out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Invoice run &mdash; started ' + fmtDateWithTime(run.started_at) + '</div>'
-    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Steps 4&ndash;8 (staleness checks, coalescing, line-item review) arrive in a later build. '
+    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Steps 7&ndash;8 (coalescing, line-item review) arrive in a later build. '
     + 'You can edit any work order below while the run is open. Export to Zed Axis is available now.</div>';
   out += invWoTable(inB, {
     empty: 'No work orders remain in Batch Invoice Process.',
@@ -424,4 +511,55 @@ function invCancelRun() {
       INV_STATE.view = 'entry'; invRefreshAndRender();
     });
   });
+}
+
+// ---------- steps 4-6: information-only checks ----------
+function invCheckHtml(step) {
+  var run = AppState.invRun, c = INV_STATE.checks || {};
+  var inB = invRunWOs(run).filter(invInBatch);
+  var tot = inB.reduce(function(s, w){ return s + invProj(w); }, 0);
+  var out = '<div style="max-width:900px;padding:20px 0">' + invRibbonHtml(step, run.steps_done);
+  var body = '', shortcut = '';
+  if (step === 4) {
+    out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Step 4 &mdash; Vendor invoices: last imported</div>';
+    body = '<div style="font-size:15px;margin:10px 0">' + invDateWithAgo(c.vendorImported) + '</div>'
+      + '<div style="font-size:13px;color:var(--text-muted)">Information only. If parts invoices are missing, import them before you export.</div>';
+    shortcut = invBtn('Open Invoices &amp; Import', "desktopNav('invoices')");
+  } else if (step === 5) {
+    out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Step 5 &mdash; Billable time: last updated</div>';
+    body = '<div style="font-size:15px;margin:10px 0">Billable time entered through ' + invDateWithAgo(c.timeThrough) + '</div>'
+      + '<div style="font-size:13px;color:var(--text-muted)">Last edit to a billable time entry: ' + (c.timeModified ? fmtDateWithTime(c.timeModified) : 'none') + '. Information only.</div>';
+    shortcut = invBtn('Open Time &amp; Billing Reconciliation', "desktopNav('reconcile')");
+  } else {
+    var un = c.unacceptedWorked || [];
+    out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Step 6 &mdash; Days accepted</div>';
+    body = '<div style="font-size:15px;margin:10px 0">Days accepted through ' + invDateWithAgo(c.acceptedThrough) + '</div>'
+      + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">' + un.length + ' worked day' + (un.length === 1 ? '' : 's')
+      + ' not yet accepted. A day that is only submitted does not count as accepted. Information only.</div>'
+      + (un.length ? '<table class="dt-table" style="width:100%;max-width:520px"><thead><tr><th>Date</th><th>Tech</th><th>Status</th></tr></thead><tbody>'
+        + un.slice(0, 60).map(function(d) {
+          var t = findTechAny(d.tech_id);
+          return '<tr><td>' + fmtDate(d.review_date) + '</td><td>' + escHtml(t ? t.name : '---') + '</td><td>' + escHtml(d.sync_status || 'pending') + '</td></tr>';
+        }).join('') + '</tbody></table>' + (un.length > 60 ? '<div style="font-size:12px;color:var(--text-muted)">Showing the oldest 60.</div>' : '') : '');
+    shortcut = invBtn('Open Daily Review', "desktopNav('dailyreview')");
+  }
+  out += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">' + inB.length + ' work orders in this run &middot; ' + invMoney(tot)
+    + ' &middot; safe-to-invoice cutoff ' + invDateWithAgo(invCutoff(c)) + '</div>';
+  out += body + '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">'
+    + (step > 4 ? invBtn('&larr; Previous', 'invGoStep(' + (step - 1) + ', false)') : invBtn('&larr; Back', 'invBackToEntry()'))
+    + shortcut
+    + invBtn('Refresh', 'invRefreshChecks()')
+    + invBtn(step === 6 ? 'Continue to export &rarr;' : 'Next &rarr;', 'invGoStep(' + (step === 6 ? 9 : step + 1) + ', true)', 'primary')
+    + invBtn('Cancel run', 'invCancelRun()', 'danger') + '</div></div>';
+  return out;
+}
+
+function invRefreshChecks() { invLoadChecks(true).then(invRender); }
+
+// Moves the saved run step. markDone = the step being left counts as done (Next); false = Previous.
+function invGoStep(n, markDone) {
+  var run = AppState.invRun; if (!run) return;
+  var done = (run.steps_done || []).slice();
+  if (markDone && run.step >= 4 && done.indexOf(run.step) < 0) done.push(run.step);
+  invPatchRun({ step: n, steps_done: done }).then(function() { invRender(); });
 }
