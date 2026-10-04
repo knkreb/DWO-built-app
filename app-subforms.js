@@ -515,6 +515,8 @@ function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6){
   sb.post('export_history',{exported_by:AppState.userEmail,wo_count:wos.length,wo_ids:woIds,filename:filename});
   var updates=wos.map(function(wo){
     var newCount=(wo.invoice_suffix_count||0)+1;
+    /* MOVED TO app-invoice-gen.js (invAcceptWOs) — v4.97 — 2026-10-04
+       Multi-bill return to In Progress, suffix increment and export-field clear now happen at ACCEPTANCE, not export.
     if(wo.multi_bill){
       var _ipSt=getStatusByKey('in_progress')||(AppState.statuses||[]).filter(function(x){return x.category==='active';})[0];
       var _ipNum=_ipSt?_ipSt.num:wo.status;
@@ -524,6 +526,10 @@ function _buildXLSX(wos,woIds,now,s1,s2,s3,s4,s5,s6){
         if(idx>=0)AppState.workOrders[idx]=wo;
       });
     } else {
+    */
+    {
+      // multi-bill work orders now stay in Batch Invoice Process like any other until accepted; their suffix count is NOT bumped here
+      if(wo.multi_bill) newCount=(wo.invoice_suffix_count||0);
       var _exportSt = getStatusByKey('batch_invoice') || getStatusByKey('invoiced');
       var _sList = (AppState.statuses&&AppState.statuses.length)?AppState.statuses:[];
       if (!_exportSt) _exportSt = _sList.filter(function(s){return s.category==='processed';}).sort(function(a,b){return a.sort_order-b.sort_order;})[0];

@@ -7,6 +7,9 @@
 // and the Zed Axis export launch (step 9). Steps 4-8, 10 (acceptance) and 11 come in later slices.
 //
 // ORIGIN: initInvoicingPanel() MOVED here from app-core.js — v4.94 — 2026-10-04.
+// ORIGIN: the multi-bill return to In Progress (suffix count +1, export fields cleared) MOVED here from
+//   runExport in app-subforms.js — v4.97 — 2026-10-04. It now happens at acceptance (invAcceptWOs), not export.
+// Slice 4 (v4.97): step 10 acceptance checklist, accept from the work order list, auto-finish when none remain.
 //
 // Customization rule: statuses are found by system_key or category, never by number or name.
 //   ready to bill = category 'completed'; in-run = system_key 'batch_invoice'.
@@ -25,6 +28,7 @@ function invSetupWarning() {
   var hasCompletedCat = (AppState.statuses || []).some(function(s){ return s.category === 'completed' && s.active !== false; });
   if (!hasCompletedCat) missing.push('a status in the Completed category');
   if (invStatusNum('batch_invoice') == null) missing.push('the "batch_invoice" status');
+  if (invStatusNum('invoiced') == null) missing.push('the "invoiced" status');
   if (!missing.length) return '';
   return '<div style="background:#c0392b18;border:1px solid #c0392b;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;color:#c0392b">'
     + '<b>Setup needed:</b> invoice generation needs ' + missing.join(' and ') + '. Add or restore it in Settings &rarr; Statuses before starting a run.</div>';
@@ -196,7 +200,7 @@ function invWoTable(wos, opts) {
   var head = '<tr>' + (opts.check ? '<th></th>' : '') + '<th>WO</th><th>Customer</th><th>Title</th><th>Status</th><th>Created</th><th>Age</th><th style="text-align:right">Amount</th><th></th></tr>';
   var rows = wos.map(function(wo) {
     var st = getStatus(wo.status), days = invAgeDays(wo);
-    var tick = opts.check ? '<td><input type="checkbox" ' + (opts.check(wo) ? 'checked ' : '') + 'onchange="invToggleWO(\'' + wo.id + '\',this.checked)"></td>' : '';
+    var tick = opts.check ? ((opts.checkable && !opts.checkable(wo)) ? '<td></td>' : '<td><input type="checkbox" ' + (opts.check(wo) ? 'checked ' : '') + 'onchange="' + (opts.toggleFn || 'invToggleWO') + '(\'' + wo.id + '\',this.checked)"></td>') : '';
     return '<tr>' + tick
       + '<td style="font-weight:600">' + escHtml(wo.wo_number) + '</td>'
       + '<td>' + escHtml(invCustName(wo)) + '</td>'
@@ -423,6 +427,7 @@ function invStartRun() {
 function invRunHtml() {
   var run = AppState.invRun;
   if (run.step <= 6) return invCheckHtml(run.step < 4 ? 4 : run.step);
+  if (run.step === 10) return invAcceptHtml();
   return invRunListHtml();
 }
 
@@ -430,7 +435,7 @@ function invRunListHtml() {
   var run = AppState.invRun;
   var wos = invRunWOs(run);
   var inB = wos.filter(invInBatch);
-  var out = '<div style="padding:20px 0">' + invRibbonHtml(run.exported_at ? 10 : 9, run.steps_done);
+  var out = '<div style="padding:20px 0">' + invRibbonHtml(9, run.steps_done);
   out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Invoice run &mdash; started ' + fmtDateWithTime(run.started_at) + '</div>'
     + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Steps 7&ndash;8 (coalescing, line-item review) arrive in a later build. '
     + 'You can edit any work order below while the run is open. Export to Zed Axis is available now.</div>';
@@ -444,10 +449,11 @@ function invRunListHtml() {
   if (left > 0) out += '<div style="font-size:12px;color:var(--text-muted);margin-top:8px">' + left + ' work order' + (left === 1 ? ' has' : 's have') + ' left this run (dropped or moved to another status).</div>';
   out += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
     + invBtn('Export to Zed Axis', 'invRunExport()', 'primary', !inB.length)
+    + invBtn('Accept exports &rarr;', 'invGoStep(10, true)', '', !inB.some(function(w){ return w.exported_at; }))
     + invBtn('Finish run', 'invFinishRun()', '', inB.length > 0)
     + invBtn('Cancel run', 'invCancelRun()', 'danger')
     + invBtn('&larr; Back', 'invBackToEntry()') + '</div>';
-  if (inB.length) out += '<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Finish run is available once every work order has left Batch Invoice Process. Acceptance (moving exported work orders to Invoiced) is a later build.</div>';
+  if (inB.length) out += '<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Finish run is available once every work order has left Batch Invoice Process. Accept exports once you have verified the invoices in QBO.</div>';
   out += '</div>';
   return out;
 }
@@ -562,4 +568,107 @@ function invGoStep(n, markDone) {
   var done = (run.steps_done || []).slice();
   if (markDone && run.step >= 4 && done.indexOf(run.step) < 0) done.push(run.step);
   invPatchRun({ step: n, steps_done: done }).then(function() { invRender(); });
+}
+
+// ---------- step 10: acceptance (positive confirmation after verifying in QBO) ----------
+function invAcceptHtml() {
+  var run = AppState.invRun;
+  var inB = invRunWOs(run).filter(invInBatch);
+  var exported = inB.filter(function(w){ return !!w.exported_at; });
+  var picked = exported.filter(function(w){ return INV_STATE.accSel && INV_STATE.accSel[w.id]; });
+  var out = '<div style="padding:20px 0">' + invRibbonHtml(10, run.steps_done);
+  out += '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Step 10 &mdash; Accept the export</div>'
+    + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Zed Axis sends nothing back, so check each invoice made it through to QBO and tick it off. '
+    + 'Accepted work orders move to Invoiced. Anything you leave unticked stays in Batch Invoice Process and keeps showing in the counter. '
+    + 'Multi-bill work orders can return to In Progress instead.</div>';
+  out += invWoTable(inB, {
+    empty: 'No work orders remain in Batch Invoice Process.',
+    check: function(wo){ return !!(INV_STATE.accSel && INV_STATE.accSel[wo.id]); },
+    checkable: function(wo){ return !!wo.exported_at; },
+    toggleFn: 'invToggleAcc',
+    actions: function(wo){ return (wo.multi_bill ? '<span style="font-size:11px;color:#8e44ad;margin-right:6px">multi-bill</span>' : '') + (wo.exported_at ? '' : '<span style="font-size:11px;color:var(--text-muted)">not exported</span>'); }
+  });
+  out += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">'
+    + invBtn('&larr; Back to export', 'invGoStep(9, false)')
+    + invBtn('Accept all exported (' + exported.length + ')', 'invAcceptRunAll()', '', !exported.length)
+    + invBtn('Accept ticked (' + picked.length + ')', 'invAcceptRunTicked()', 'primary', !picked.length)
+    + invBtn('Cancel run', 'invCancelRun()', 'danger') + '</div></div>';
+  return out;
+}
+
+function invToggleAcc(id, on) {
+  if (!INV_STATE.accSel) INV_STATE.accSel = {};
+  if (on) INV_STATE.accSel[id] = true; else delete INV_STATE.accSel[id];
+  invRender();
+}
+
+function invAcceptRunAll() {
+  var run = AppState.invRun; if (!run) return;
+  invAcceptWOs(invRunWOs(run).filter(function(w){ return invInBatch(w) && w.exported_at; }));
+}
+
+function invAcceptRunTicked() {
+  var run = AppState.invRun; if (!run) return;
+  invAcceptWOs(invRunWOs(run).filter(function(w){ return invInBatch(w) && w.exported_at && INV_STATE.accSel && INV_STATE.accSel[w.id]; }));
+}
+
+// Accepts exported work orders: normal ones become Invoiced; multi-bill ones may return to In Progress with the
+// billing suffix count increased (one prompt covers all multi-bill work orders in the batch).
+function invAcceptWOs(wos, after) {
+  var invoicedNum = invStatusNum('invoiced');
+  if (invoicedNum == null) { showToast('Invoiced status is not set up'); return; }
+  wos = (wos || []).filter(function(w){ return invInBatch(w) && w.exported_at; });
+  if (!wos.length) { showToast('No exported work orders to accept'); return; }
+  var multi = wos.filter(function(w){ return w.multi_bill; });
+  var ipNum = invStatusNum('in_progress');
+  if (ipNum == null) { var ip = (AppState.statuses || []).filter(function(s){ return s.category === 'active' && s.active !== false; })[0]; ipNum = ip ? ip.num : null; }
+  var returnMulti = false;
+  if (multi.length) {
+    if (ipNum == null) { showToast('No In Progress status is set up for multi-bill work orders'); return; }
+    returnMulti = confirm(multi.length + ' multi-bill work order' + (multi.length === 1 ? '' : 's') + ' (' + multi.map(function(w){ return w.wo_number; }).join(', ')
+      + ').\n\nOK = return to In Progress for the next invoice (billing suffix goes up by one).\nCancel = mark as Invoiced (final invoice).');
+  }
+  if (!confirm('Accept ' + wos.length + ' work order' + (wos.length === 1 ? '' : 's') + '? Only do this after verifying them in QBO.')) return;
+  Promise.all(wos.map(function(wo) {
+    var upd = (wo.multi_bill && returnMulti)
+      ? { status: ipNum, invoice_suffix_count: (wo.invoice_suffix_count || 0) + 1, exported_at: null, exported_by: null, modified_by: AppState.userEmail }
+      : { status: invoicedNum, modified_by: AppState.userEmail };
+    return sb.patch('work_orders', wo.id, upd).then(function(r) {
+      if (r.ok) Object.keys(upd).forEach(function(k){ if (k !== 'modified_by') wo[k] = upd[k]; });
+      return r.ok;
+    });
+  })).then(function(results) {
+    var ok = results.filter(Boolean).length, failed = results.length - ok;
+    INV_STATE.accSel = {};
+    showToast(ok + ' accepted' + (failed ? ' — ' + failed + ' failed and stayed in Batch Invoice Process' : ''));
+    if (typeof renderDesktopGrid === 'function') renderDesktopGrid();
+    invMaybeAutoFinish().then(function() { if (after) after(); else invRender(); });
+  });
+}
+
+// The run is finished once every work order in it has been accepted or returned.
+function invMaybeAutoFinish() {
+  var run = AppState.invRun;
+  if (!run || invRunWOs(run).some(invInBatch)) return Promise.resolve(false);
+  var done = (run.steps_done || []).slice();
+  [9, 10, 11].forEach(function(n){ if (done.indexOf(n) < 0) done.push(n); });
+  return invPatchRun({ status: 'finished', finished_at: new Date().toISOString(), step: 11, steps_done: done }).then(function() {
+    showToast('Every work order accepted or returned — run finished');
+    INV_STATE.view = 'entry';
+    return true;
+  });
+}
+
+// Entry point from the Work Orders list (batch bar): accept the selected work orders that are exported and in Batch Invoice Process.
+function invAcceptSelected() {
+  var wos = selIds().map(invFindWO).filter(Boolean);
+  var ok = wos.filter(function(w){ return invInBatch(w) && w.exported_at; });
+  if (!ok.length) { showToast('Select exported work orders that are in Batch Invoice Process'); return; }
+  if (ok.length < wos.length) showToast((wos.length - ok.length) + ' selected work order(s) skipped — not exported or not in Batch Invoice Process');
+  invLoadActiveRun().then(function() {
+    invAcceptWOs(ok, function() {
+      if (typeof clearSelection === 'function') clearSelection();
+      if (typeof renderDesktopGrid === 'function') renderDesktopGrid();
+    });
+  });
 }
