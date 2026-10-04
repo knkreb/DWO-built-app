@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.95';
+const APP_VERSION = '4.96';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -622,10 +622,10 @@ function loadWoFlags() {
   return sb.get('wo_flags','?select=*&active=eq.true&order=sort_order.asc').then(function(r){
     if(r.ok && r.data && r.data.length) AppState.woFlags = r.data;
     else AppState.woFlags = [
-      {system_key:'needs_paperwork', name:'Needs Entry Work', color:'#e67e22', blocks_export:true},
-      {system_key:'needs_parts',     name:'Needs Parts',      color:'#2980b9', blocks_export:false},
-      {system_key:'needs_review',    name:'Needs Review',     color:'#8e44ad', blocks_export:true},
-      {system_key:'needs_po',        name:'Needs PO',         color:'#c0392b', blocks_export:true},
+      {system_key:'needs_paperwork', name:'Needs Entry Work', color:'#e67e22'},
+      {system_key:'needs_parts',     name:'Needs Parts',      color:'#2980b9'},
+      {system_key:'needs_review',    name:'Hold - Other (explain)', color:'#8e44ad'},
+      {system_key:'needs_po',        name:'Needs PO',         color:'#c0392b'},
     ];
   });
 }
@@ -920,7 +920,7 @@ function filterWOList() {
   }
   var c = document.getElementById('wo-list-items'); if (!c) return;
   if (!wos.length) { c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">No work orders found</div>'; return; }
-  var _fd = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paperwork',color:'#e67e22'},{system_key:'needs_parts',name:'Parts',color:'#2980b9'},{system_key:'needs_review',name:'Review',color:'#8e44ad'},{system_key:'needs_po',name:'PO',color:'#c0392b'}];
+  var _fd = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paperwork',color:'#e67e22'},{system_key:'needs_parts',name:'Parts',color:'#2980b9'},{system_key:'needs_review',name:'Hold',color:'#8e44ad'},{system_key:'needs_po',name:'PO',color:'#c0392b'}];
   c.innerHTML = wos.map(function(wo){
     var st = getStatus(wo.status);
     var cust = getCustName(wo.customers)||'(no customer)';
@@ -1009,7 +1009,7 @@ function renderWODetail(wo) {
   }) : [
     {key:'flag_needs_paperwork', note:'flag_needs_paperwork_note', label:'Needs Paperwork', color:'#e67e22'},
     {key:'flag_needs_parts',     note:'flag_needs_parts_note',     label:'Needs Parts',     color:'#2980b9'},
-    {key:'flag_needs_review',    note:'flag_needs_review_note',    label:'Needs Review',    color:'#8e44ad'},
+    {key:'flag_needs_review',    note:'flag_needs_review_note',    label:'Hold - Other (explain)', color:'#8e44ad'},
     {key:'flag_needs_po',        note:'flag_needs_po_note',        label:'Needs PO',        color:'#c0392b'},
   ];
   var activeFlags = flagDefs.filter(function(f){ return wo[f.key]; });
@@ -1118,7 +1118,7 @@ function renderWODetail(wo) {
 
     // Flags at bottom
     out += '<div style="margin-bottom:8px">';
-    var flagDefs2 = AppState.woFlags.length ? AppState.woFlags.map(function(f){ return {key:'flag_'+f.system_key,note:'flag_'+f.system_key+'_note',label:f.name,color:f.color}; }) : [{key:'flag_needs_paperwork',note:'flag_needs_paperwork_note',label:'Needs Entry Work',color:'#e67e22'},{key:'flag_needs_parts',note:'flag_needs_parts_note',label:'Needs Parts',color:'#2980b9'},{key:'flag_needs_review',note:'flag_needs_review_note',label:'Needs Review',color:'#8e44ad'},{key:'flag_needs_po',note:'flag_needs_po_note',label:'Needs PO',color:'#c0392b'}];
+    var flagDefs2 = AppState.woFlags.length ? AppState.woFlags.map(function(f){ return {key:'flag_'+f.system_key,note:'flag_'+f.system_key+'_note',label:f.name,color:f.color}; }) : [{key:'flag_needs_paperwork',note:'flag_needs_paperwork_note',label:'Needs Entry Work',color:'#e67e22'},{key:'flag_needs_parts',note:'flag_needs_parts_note',label:'Needs Parts',color:'#2980b9'},{key:'flag_needs_review',note:'flag_needs_review_note',label:'Hold - Other (explain)',color:'#8e44ad'},{key:'flag_needs_po',note:'flag_needs_po_note',label:'Needs PO',color:'#c0392b'}];
     var inactiveFlags2 = flagDefs2.filter(function(f){ return !wo[f.key]; });
     if (inactiveFlags2.length && !isLocked) {
       out += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">';
@@ -1302,8 +1302,17 @@ function openNewWO() {
 
 function setWOFlag(flagKey, noteKey, label) {
   var wo = AppState.currentWO; if(!wo) return;
+  // Hold - Other (explain) requires a written reason before it can be set (v4.96)
+  if (flagKey === 'flag_needs_review' && typeof woHoldAskReason === 'function') {
+    woHoldAskReason(label, function(note){ _applyWOFlag(wo, flagKey, noteKey, label, note); });
+    return;
+  }
   var note = prompt('What is needed? (optional note for ' + label + ')') ;
   if (note === null) return; // cancelled
+  _applyWOFlag(wo, flagKey, noteKey, label, note);
+}
+
+function _applyWOFlag(wo, flagKey, noteKey, label, note) {
   var updates = {modified_by: AppState.userEmail};
   updates[flagKey] = true;
   if (note.trim()) updates[noteKey] = note.trim();
@@ -2319,8 +2328,8 @@ function renderDesktopGrid() {
     var projStr = proj!=null ? '$'+proj.toFixed(2) : '---';
     var custObj2 = AppState.customers.find(function(c){ return c.id===wo.customer_id; });
     var showPOBadge = custObj2 && custObj2.po_required===true && !wo.po_number;
-    var _fd = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paper',color:'#e67e22'},{system_key:'needs_parts',name:'Parts',color:'#2980b9'},{system_key:'needs_review',name:'Review',color:'#8e44ad'},{system_key:'needs_po',name:'PO',color:'#c0392b'}];
-    var flagBadgeHtml = _fd.map(function(f){ return wo['flag_'+f.system_key]?'<span title="'+escHtml(wo['flag_'+f.system_key+'_note']||'')+'" style="margin-left:3px;font-size:10px;background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+';border-radius:3px;padding:1px 4px">⚑ '+f.name+'</span>':''; }).join('');
+    var _fd = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paper',color:'#e67e22'},{system_key:'needs_parts',name:'Parts',color:'#2980b9'},{system_key:'needs_review',name:'Hold',color:'#8e44ad'},{system_key:'needs_po',name:'PO',color:'#c0392b'}];
+    var flagBadgeHtml = _fd.map(function(f){ return wo['flag_'+f.system_key]?'<span title="'+escHtml(wo['flag_'+f.system_key+'_note']||'')+'" style="margin-left:3px;font-size:10px;background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+';border-radius:3px;padding:1px 4px">⚑ '+f.name+((f.system_key==='needs_review'&&wo.flag_needs_review_note&&typeof woHoldReasonShort==='function')?': '+escHtml(woHoldReasonShort(wo,40)):'')+'</span>':''; }).join('');
     var isLocked = isProcessedStatus(wo.status);
     return '<tr style="background:'+(isLocked?'var(--bg)':st.color+'33')+';opacity:'+(isLocked?'0.55':'1')+'"'+(selected?' class="selected"':'')+' onclick="desktopRowClick(event,\''+wo.id+'\')">'
       + '<td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox"'+(selected?' checked':'')+' onchange="toggleRowSelect(\''+wo.id+'\',this.checked)"></td>'
@@ -2424,8 +2433,8 @@ function showExportReview(wos) {
         status='caution'; label='TC origin — review parts'; icon='ti-alert-triangle';
       } else if (wo.flag_needs_paperwork||wo.flag_needs_parts||wo.flag_needs_review||wo.flag_needs_po) {
         var flagLabels=[];
-        var _ef = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paperwork'},{system_key:'needs_parts',name:'Parts'},{system_key:'needs_review',name:'Review'},{system_key:'needs_po',name:'PO'}];
-        _ef.forEach(function(f){ if(wo['flag_'+f.system_key]) flagLabels.push(f.name); });
+        var _ef = AppState.woFlags.length ? AppState.woFlags : [{system_key:'needs_paperwork',name:'Paperwork'},{system_key:'needs_parts',name:'Parts'},{system_key:'needs_review',name:'Hold'},{system_key:'needs_po',name:'PO'}];
+        _ef.forEach(function(f){ if(wo['flag_'+f.system_key]) flagLabels.push(f.name + ((f.system_key==='needs_review'&&wo.flag_needs_review_note)?' ('+wo.flag_needs_review_note+')':'')); });
         status='caution'; label='Flags: '+flagLabels.join(', '); icon='ti-flag';
       } else if (poUnknown) {
         status='caution'; label='PO req not set'; icon='ti-help';
@@ -5258,13 +5267,12 @@ function renderSettings(containerId) {
   html += '<div class="settings-tab-content'+(activeTab==='workorders'?' active':'')+'" id="stab-workorders">';
   html += '<div class="settings-block"><div class="settings-block-header" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Work Order Flags</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body">';
   if(AppState.woFlags.length){
-    html += '<table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Key</th><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Name</th><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Color</th><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Blocks Export</th></tr></thead><tbody>';
+    html += '<table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Key</th><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Name</th><th style="padding:4px 8px;text-align:left;color:var(--text-muted);font-size:11px">Color</th></tr></thead><tbody>';
     AppState.woFlags.forEach(function(f){
       html += '<tr style="border-bottom:1px solid var(--border)">'
         +'<td style="padding:5px 8px;font-size:11px;font-family:monospace;color:var(--text-muted)">'+escHtml(f.system_key)+'</td>'
         +'<td style="padding:4px 8px"><input type="text" value="'+escHtml(f.name)+'" style="font-size:13px;border:1px solid transparent;border-radius:3px;padding:2px 5px;background:transparent;width:100%" onfocus="this.style.border=\'1px solid var(--header-bg)\';this.style.background=\'var(--bg)\'" onblur="this.style.border=\'1px solid transparent\';this.style.background=\'transparent\';saveWOFlagField(\''+f.id+'\',\'name\',this.value)"></td>'
         +'<td style="padding:4px 8px"><input type="color" value="'+f.color+'" style="width:36px;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;cursor:pointer" onchange="saveWOFlagField(\''+f.id+'\',\'color\',this.value)"></td>'
-        +'<td style="padding:4px 8px;text-align:center"><input type="checkbox"'+(f.blocks_export?' checked':'')+' onchange="saveWOFlagField(\''+f.id+'\',\'blocks_export\',this.checked)"></td>'
         +'<td style="padding:4px 8px"><button style="font-size:11px;padding:2px 8px;border:1px solid var(--danger);border-radius:3px;color:var(--danger);background:none;cursor:pointer" onclick="deactivateWOFlag(\''+f.id+'\',\''+escHtml(f.name)+'\')">x Deactivate</button></td>'
         +'</tr>';
     });

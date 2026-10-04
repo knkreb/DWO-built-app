@@ -200,7 +200,7 @@ function invWoTable(wos, opts) {
     return '<tr>' + tick
       + '<td style="font-weight:600">' + escHtml(wo.wo_number) + '</td>'
       + '<td>' + escHtml(invCustName(wo)) + '</td>'
-      + '<td>' + escHtml(wo.title) + '</td>'
+      + '<td>' + escHtml(wo.title) + (typeof woFlagChipsHtml === 'function' ? '<div>' + woFlagChipsHtml(wo) + '</div>' : '') + '</td>'
       + '<td><span class="badge" style="background:' + st.color + '">' + escHtml(st.name) + '</span>' + (wo.exported_at ? ' <span style="font-size:11px;color:#1e8449">exported</span>' : '') + '</td>'
       + '<td>' + fmtDate(wo.created_at) + '</td>'
       + '<td style="color:' + (days > 30 ? '#c0392b' : 'inherit') + ';font-weight:' + (days > 30 ? '600' : '400') + '">' + days + 'd</td>'

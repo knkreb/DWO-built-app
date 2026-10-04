@@ -342,6 +342,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   }
   html += mbSectionCardEnd();
 
+  // POs needed reminder — admin only (v4.96, app-po-reminder.js)
+  if (AppState.userRole === 'admin' && typeof poReminderRender === 'function') {
+    html += mbSectionCardStart('poreminder', 'POs Needed', '<span id="mb-badge-poreminder">…</span>', '');
+    html += '<div id="mb-dt-po-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -367,6 +374,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   if (taskShell && typeof tasksRenderSection === 'function') {
     tasksRenderSection(taskShell, dateTasks, locTasks, tech, false);
   }
+
+  // Populate POs-needed reminder (admin only)
+  if (AppState.userRole === 'admin' && typeof poReminderRender === 'function') poReminderRender('mb-dt-po-shell');
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
