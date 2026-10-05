@@ -284,6 +284,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += '</div>';
   }
 
+  // Invoice run not finished reminder — admin only, filled after render (v4.98, app-invoice-gen.js)
+  if (AppState.userRole === 'admin' && typeof invRunReminderRender === 'function') html += '<div id="mb-invrun-shell" style="display:none"></div>';
+
   var tech = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   function _isMyTask(t) {
     if (t.assignee_type === 'company') return true;
@@ -374,6 +377,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
   if (taskShell && typeof tasksRenderSection === 'function') {
     tasksRenderSection(taskShell, dateTasks, locTasks, tech, false);
   }
+
+  // Populate invoice run reminder (admin only)
+  if (AppState.userRole === 'admin' && typeof invRunReminderRender === 'function') invRunReminderRender('mb-invrun-shell');
 
   // Populate POs-needed reminder (admin only)
   if (AppState.userRole === 'admin' && typeof poReminderRender === 'function') poReminderRender('mb-dt-po-shell');

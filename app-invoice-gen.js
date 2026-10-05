@@ -10,6 +10,7 @@
 // ORIGIN: the multi-bill return to In Progress (suffix count +1, export fields cleared) MOVED here from
 //   runExport in app-subforms.js — v4.97 — 2026-10-04. It now happens at acceptance (invAcceptWOs), not export.
 // Slice 4 (v4.97): step 10 acceptance checklist, accept from the work order list, auto-finish when none remain.
+// v4.98: Daily Dashboard reminder for an unfinished run (spec 3d) — invRunReminderRender / invOpenRunFromDashboard.
 //
 // Customization rule: statuses are found by system_key or category, never by number or name.
 //   ready to bill = category 'completed'; in-run = system_key 'batch_invoice'.
@@ -224,6 +225,17 @@ function initInvoicingPanel() {
     return Promise.all([_ensureProjectedCache(), invLoadChecks(true)]);
   }).then(function() {
     INV_STATE.view = 'entry';
+    var resume = INV_STATE.autoResume, wantStep = INV_STATE.autoStep;
+    INV_STATE.autoResume = false; INV_STATE.autoStep = null;
+    if (resume && AppState.invRun) {
+      INV_STATE.view = 'run';
+      var run = AppState.invRun;
+      if (wantStep === 10 && run.step !== 10) {
+        var done = (run.steps_done || []).slice(); if (done.indexOf(9) < 0) done.push(9);
+        return invPatchRun({ step: 10, steps_done: done });
+      }
+    }
+  }).then(function() {
     invRender();
   });
 }
@@ -671,4 +683,35 @@ function invAcceptSelected() {
       if (typeof renderDesktopGrid === 'function') renderDesktopGrid();
     });
   });
+}
+
+// ---------- Daily Dashboard reminder: invoice run not finished (spec 3d, admin only) ----------
+function invRunReminderRender(shellId) {
+  var shell = document.getElementById(shellId); if (!shell) return;
+  invLoadActiveRun().then(function(run) {
+    if (!run) { shell.style.display = 'none'; shell.innerHTML = ''; return; }
+    return _ensureProjectedCache().then(function() {
+      var inB = invRunWOs(run).filter(invInBatch);
+      var tot = inB.reduce(function(s, w){ return s + invProj(w); }, 0);
+      var exported = !!run.exported_at;
+      var msg = exported
+        ? 'Invoice export from <b>' + fmtDate(run.exported_at) + '</b> still has <b>' + inB.length + '</b> work order' + (inB.length === 1 ? '' : 's') + ' awaiting acceptance.'
+        : 'Invoice run started <b>' + fmtDate(run.started_at) + '</b>, stopped at step <b>' + run.step + '</b> of ' + INV_STEPS.length + ' (' + escHtml(INV_STEPS[run.step - 1] || '') + ').';
+      shell.style.display = '';
+      shell.innerHTML = '<div style="background:#fff0e6;border:1.5px solid #e67e22;border-radius:var(--radius);padding:12px 16px;margin-bottom:20px">'
+        + '<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:6px">&#9888; ' + (exported ? 'Invoice export not fully accepted' : 'Invoice run not finished') + '</div>'
+        + '<div style="font-size:13px;margin-bottom:4px">' + msg + '</div>'
+        + '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Started ' + fmtDateWithTime(run.started_at) + ' &middot; step ' + run.step + ' of ' + INV_STEPS.length
+        + ' &middot; ' + inB.length + ' work order' + (inB.length === 1 ? '' : 's') + ' in Batch Invoice Process &middot; ' + invMoney(tot) + '</div>'
+        + '<button onclick="invOpenRunFromDashboard(' + (exported ? 'true' : 'false') + ')" style="font-size:12px;padding:6px 14px;border:none;border-radius:var(--radius-sm);background:#c0392b;color:#fff;font-weight:600;cursor:pointer">'
+        + (exported ? 'Open acceptance checklist' : 'Resume run') + '</button></div>';
+    });
+  });
+}
+
+// Opens the workflow at the right place: the saved step to resume, or the acceptance checklist after an export.
+function invOpenRunFromDashboard(toAcceptance) {
+  INV_STATE.autoResume = true;
+  INV_STATE.autoStep = toAcceptance ? 10 : null;
+  desktopNav('invoicing');
 }
