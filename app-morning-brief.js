@@ -352,6 +352,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += mbSectionCardEnd();
   }
 
+  // PO dollar/expiration threshold warnings — admin only (v4.99, app-po-tracker.js)
+  if (AppState.userRole === 'admin' && typeof poWarningReminderRender === 'function') {
+    html += mbSectionCardStart('powarn', 'PO Warnings', '<span id="mb-badge-powarn">…</span>', '');
+    html += '<div id="mb-dt-powarn-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -383,6 +390,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate POs-needed reminder (admin only)
   if (AppState.userRole === 'admin' && typeof poReminderRender === 'function') poReminderRender('mb-dt-po-shell');
+
+  // Populate PO dollar/expiration warnings (admin only)
+  if (AppState.userRole === 'admin' && typeof poWarningReminderRender === 'function') poWarningReminderRender('mb-dt-powarn-shell');
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {

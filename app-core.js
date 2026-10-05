@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.98';
+const APP_VERSION = '4.99';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1192,6 +1192,14 @@ function setWOStatus(num) {
   if (wasBatch) {
     AppState.batchStatusMode = false;
     var ids = selIds(); if(!ids.length) return;
+    if (statusCat(num)==='cancelled' && typeof poBlocksWOChange==='function') {
+      var blockedCount = ids.filter(poBlocksWOChange).length;
+      if (blockedCount) {
+        ids = ids.filter(function(id){ return !poBlocksWOChange(id); });
+        showToast(blockedCount+' locked to a PO — skipped');
+        if (!ids.length) return;
+      }
+    }
     var promises = ids.map(function(id) {
       return sb.patch('work_orders',id,{status:num,modified_by:AppState.userEmail}).then(function() {
         var wo = AppState.workOrders.find(function(w){ return w.id===id; }); if(wo) wo.status=num;
@@ -1204,6 +1212,10 @@ function setWOStatus(num) {
   var isAdmin = AppState.userRole==='admin';
   var fromCat = statusCat(wo.status);
   var toCat = statusCat(num);
+  if (toCat==='cancelled' && typeof poBlocksWOChange==='function' && poBlocksWOChange(wo.id)) {
+    showToast('Locked to a PO — untie the PO before cancelling');
+    return;
+  }
   var allowed = allowedTransitions(fromCat, isAdmin);
   if (allowed.indexOf(toCat) < 0) {
     showToast('Transition not allowed: '+fromCat+' → '+toCat);
@@ -1282,6 +1294,7 @@ function openNewWO() {
   document.getElementById('f-wo-number').value = woNum;
   document.getElementById('f-customer-input').value = '';
   document.getElementById('f-customer-id').value = '';
+  if (typeof poFieldSetMode==='function') poFieldSetMode('text');
   // Populate status dropdown with draft/active statuses
   var statusSel = document.getElementById('f-status');
   if (statusSel) {
@@ -2026,6 +2039,10 @@ function openEditWO() {
   document.getElementById('f-po-number').value = wo.po_number||'';
   document.getElementById('f-work-description').value = wo.work_description||'';
   document.getElementById('f-wo-number').value = wo.wo_number;
+  if (typeof poFieldSetMode==='function') {
+    if (wo.purchase_order_id) poFieldSetMode('picker', wo.purchase_order_id);
+    else poFieldSetMode('text');
+  }
   pushScreen('screen-wo-form', 'Edit '+wo.wo_number);
 }
 
@@ -2034,8 +2051,9 @@ function saveWO(saveMode) {
   var custId = document.getElementById('f-customer-id').value;
   var title = document.getElementById('f-title').value.trim();
   var formMode = document.getElementById('f-form-mode').value;
-  var po = document.getElementById('f-po-number').value.trim();
-  var poResult = validatePONumber(po);
+  var poTrackedId = document.getElementById('f-po-id').value || null;
+  var po = poTrackedId ? (document.getElementById('f-po-number').value||'').trim() : document.getElementById('f-po-number').value.trim();
+  var poResult = poTrackedId ? {po:po, needsFlag:false} : validatePONumber(po);
   po = poResult.po;
   var autoFlagPO = poResult.needsFlag;
   var desc = document.getElementById('f-work-description').value.trim();
@@ -2043,7 +2061,7 @@ function saveWO(saveMode) {
   var cust = AppState.customers.find(function(c){ return c.id===custId; });
   var flag = cust && cust.qbo_customer_id==='SYSTEM';
   if (AppState.editingWOId) {
-    var updates = {customer_id:custId,customer_flag:flag,title:title,form_mode:formMode,po_number:po||null,work_description:desc||null,modified_by:AppState.userEmail};
+    var updates = {customer_id:custId,customer_flag:flag,title:title,form_mode:formMode,po_number:po||null,purchase_order_id:poTrackedId,work_description:desc||null,modified_by:AppState.userEmail};
     // Auto-clear flag_needs_po if PO number is now provided
     if (po && AppState.currentWO && AppState.currentWO.flag_needs_po) {
       updates.flag_needs_po = false;
@@ -2076,7 +2094,7 @@ function saveWO(saveMode) {
     var statusEl = document.getElementById('f-status');
     var selectedStatusNum = statusEl ? parseInt(statusEl.value)||defaultStatusNum : defaultStatusNum;
     var newWOFlagPO = autoFlagPO || (!po && custForNewWO && custForNewWO.po_required===true);
-    sb.post('work_orders',{wo_number:woNum,title:title,customer_id:custId,customer_flag:flag,form_mode:formMode,po_number:po||null,work_description:desc||null,status:selectedStatusNum,flag_needs_po:newWOFlagPO||false,flag_needs_po_note:autoFlagPO?'PO required — "need" detected':null,created_by:AppState.userEmail,modified_by:AppState.userEmail})
+    sb.post('work_orders',{wo_number:woNum,title:title,customer_id:custId,customer_flag:flag,form_mode:formMode,po_number:po||null,purchase_order_id:poTrackedId,work_description:desc||null,status:selectedStatusNum,flag_needs_po:newWOFlagPO||false,flag_needs_po_note:autoFlagPO?'PO required — "need" detected':null,created_by:AppState.userEmail,modified_by:AppState.userEmail})
     .then(function(r){
       if(r.ok&&r.data&&r.data.length){
         // Increment WO counter only after confirmed successful save
@@ -2187,6 +2205,8 @@ function initDesktop() {
   var dv = document.getElementById('desktop-version'); if(dv) dv.textContent = 'v' + APP_VERSION;
   if(AppState.userRole === 'admin') {
     var brNav = document.getElementById('sidebar-bugreports'); if(brNav) brNav.style.display='';
+    var poNav = document.getElementById('sidebar-potracker'); if(poNav) poNav.style.display='';
+    if (typeof poRefreshLockedWOIds==='function') poRefreshLockedWOIds();
   }
   var savedCol = localStorage.getItem('dwo_sort_col');
   var savedDir = localStorage.getItem('dwo_sort_dir');
@@ -2211,7 +2231,7 @@ function initDesktopStatusFilter() {
 function switchDesktopPanel(panel) { desktopNav(panel); }
 
 function desktopNav(panel) {
-  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','invoicing','exports','settings','morningbrief','endofday','tasks','bugreports'].forEach(function(p) {
+  ['wo','timecard','truckstock','customers','vendors','locations','dailyreview','reconcile','invoices','invoicing','potracker','exports','settings','morningbrief','endofday','tasks','bugreports'].forEach(function(p) {
     var el = document.getElementById('desktop-panel-'+p);
     // Don't hide dailyreview when navigating to reconcile — they share the same panel
     // But do hide dailyreview when navigating away from reconcile to something else
@@ -2245,6 +2265,7 @@ function desktopNav(panel) {
   }
   if (panel==='invoices') initInvoicesPanel();
   if (panel==='invoicing') initInvoicingPanel();
+  if (panel==='potracker' && typeof renderPOPanel==='function') renderPOPanel('potracker-panel-body');
   if (panel==='settings') renderSettings('settings-body-desktop');
   if (panel==='exports') renderExportsPanel();
   if (panel==='morningbrief') { initMorningBriefDesktop(); if (typeof loadAlerts === 'function') loadAlerts(); }
@@ -5338,6 +5359,12 @@ function renderSettings(containerId) {
   });
   html += '</select></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Used to calculate start/end of day travel distance. Set your home site in Site Manager first.</div>';
+  html += '</div></div>';
+  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Purchase Orders</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
+  html += '<div class="settings-row"><div class="settings-row-label">Default dollar warning mode</div><select class="settings-row-input" onchange="saveSetting(\'po_default_warning_mode\',this.value)"><option value="percent"'+((AppState.settings.po_default_warning_mode||'percent')==='percent'?' selected':'')+'>% consumed</option><option value="dollar"'+(AppState.settings.po_default_warning_mode==='dollar'?' selected':'')+'>$ remaining</option></select></div>';
+  html += '<div class="settings-row"><div class="settings-row-label">Default dollar warning value</div><input class="settings-row-input" type="number" step="0.01" value="'+(AppState.settings.po_default_warning_value||'20')+'" onchange="saveSetting(\'po_default_warning_value\',this.value)"></div>';
+  html += '<div class="settings-row"><div class="settings-row-label">Default expiration warning (days)</div><input class="settings-row-input" type="number" step="1" min="0" value="'+(AppState.settings.po_default_expiration_warning_days||'30')+'" onchange="saveSetting(\'po_default_expiration_warning_days\',this.value)"></div>';
+  html += '<div style="font-size:11px;color:var(--text-muted)">Pre-fills new POs in the PO Tracker module. Each PO can override these individually.</div>';
   html += '</div></div>';
   html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">QBO Items</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   AppState.qboItems.forEach(function(q){ html += '<div class="lookup-item"><span class="lookup-item-name">'+escHtml(q.name)+'</span><span class="lookup-item-badge">'+escHtml(q.zed_axis_name)+'</span></div>'; });

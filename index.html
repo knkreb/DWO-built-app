@@ -538,6 +538,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')"><span class="sidebar-icon">🏪</span> Vendors</div>
       <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Sites</div>
       <div class="sidebar-item" id="sidebar-invoicing" onclick="desktopNav('invoicing')"><span class="sidebar-icon">💰</span> Customer Invoice Generation</div>
+      <div class="sidebar-item" id="sidebar-potracker" onclick="desktopNav('potracker')" style="display:none"><span class="sidebar-icon">🧾</span> Purchase Orders</div>
       <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
       <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
       <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Feature Req/Bugs</div>
@@ -668,6 +669,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div id="invoicing-panel-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
       </div>
 
+      <!-- Purchase Orders panel -->
+      <div id="desktop-panel-potracker" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:16px;font-weight:700">Purchase Orders</div>
+          <button class="btn-dark" style="font-size:13px;padding:7px 14px" onclick="poOpenEditSheet(null)">+ New PO</button>
+        </div>
+        <div id="potracker-panel-body" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+      </div>
+
       <!-- Settings panel -->
       <div id="desktop-panel-exports" style="display:none;flex-direction:column;height:100%;overflow:hidden">
         <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:10px">
@@ -745,7 +755,14 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       <div class="form-row"><label class="form-label">Job Title *</label><input type="text" id="f-title" autocomplete="off" placeholder="Brief description of work"></div>
       <div class="form-row-2">
         <div><label class="form-label">Form Mode *</label><select id="f-form-mode"><option value="time_materials">Time &amp; Materials</option><option value="quoted">Quoted</option></select></div>
-        <div><label class="form-label">PO Number</label><input type="text" id="f-po-number" autocomplete="off" placeholder="Optional"></div>
+        <div>
+          <label class="form-label">PO Number <span id="f-po-mode-toggle" style="font-weight:400;font-size:11px;color:var(--header-bg);cursor:pointer;text-decoration:underline" onclick="poFieldToggleMode()">Use PO picker</span></label>
+          <input type="text" id="f-po-number" autocomplete="off" placeholder="Optional">
+          <div id="f-po-tracked-display" style="display:none;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;background:var(--bg);cursor:pointer" onclick="poFieldOpenPicker()">
+            <span id="f-po-tracked-label" style="color:var(--text-muted)">Tap to choose a PO…</span>
+          </div>
+          <input type="hidden" id="f-po-id">
+        </div>
       </div>
       <div class="form-row"><label class="form-label">Starting Status</label><select id="f-status"></select></div>
       <div class="form-row"><label class="form-label">Work Description</label><textarea id="f-work-description" autocomplete="off" placeholder="Internal notes"></textarea></div>
@@ -914,6 +931,22 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   </div>
 </div>
 
+<!-- PO EDIT/DETAIL SHEET -->
+<div class="sheet-overlay" id="po-edit-sheet" onclick="closePOEditSheet(event)">
+  <div class="bottom-sheet" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto">
+    <div class="sheet-header"><h3 id="po-edit-sheet-title">New PO</h3><button class="sheet-close" onclick="closePOEditSheet()">✕</button></div>
+    <div id="po-edit-sheet-body" style="padding:16px"></div>
+  </div>
+</div>
+
+<!-- PO PICKER SHEET (used from the work order form) -->
+<div class="sheet-overlay" id="po-picker-sheet" onclick="closePOPickerSheet(event)">
+  <div class="bottom-sheet" onclick="event.stopPropagation()" style="max-height:85vh;overflow-y:auto">
+    <div class="sheet-header"><h3>Select a PO</h3><button class="sheet-close" onclick="closePOPickerSheet()">✕</button></div>
+    <div id="po-picker-sheet-body" style="padding:16px"></div>
+  </div>
+</div>
+
 <!-- ALERTS PANEL -->
 <div class="sheet-overlay" id="alerts-panel-sheet" onclick="closeAlertsPanel(event)">
   <div class="bottom-sheet" style="max-height:85vh">
@@ -1062,8 +1095,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=10"></script>
-<script src="app-morning-brief.js?v=127"></script>
-<script src="app-core.js?v=140"></script>
+<script src="app-morning-brief.js?v=128"></script>
+<script src="app-core.js?v=141"></script>
 <script src="app-sites-travel.js?v=1"></script>
 <script src="app-users.js?v=1"></script>
 <script src="app-alerts.js?v=4"></script>
@@ -1072,6 +1105,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 <script src="app-invoice-gen.js?v=5"></script>
 <script src="app-wo-flags.js?v=1"></script>
 <script src="app-po-reminder.js?v=1"></script>
+<script src="app-po-tracker.js?v=1"></script>
 <script src="app-reports.js?v=112"></script>
 <script src="app-filters.js?v=105"></script>
 <script src="app-tasks.js?v=8"></script>
