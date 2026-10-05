@@ -53,6 +53,11 @@ function poCustomersFor(poId) {
 }
 
 function poCustomerNames(poId) { return poCustomersFor(poId).map(getCustName).join(', ') || '—'; }
+function poCustomerStackHtml(poId) {
+  var names = poCustomersFor(poId).map(getCustName);
+  if (!names.length) return '—';
+  return '<div class="po-cust-stack">' + names.map(function(n) { return '<span>' + escHtml(n) + '</span>'; }).join('') + '</div>';
+}
 
 function poChangeOrdersFor(poId, activeOnly) {
   var list = (AppState.poChangeOrders || []).filter(function(c) { return c.purchase_order_id === poId && (!activeOnly || c.active !== false); });
@@ -142,22 +147,22 @@ function poRenderPanelBody(containerId) {
     return;
   }
 
-  html += '<table class="dt-table" style="width:100%"><thead><tr><th>PO #</th><th>Description</th><th>Customer(s)</th><th>Type</th><th>Pending</th><th>Billed</th><th>Remaining $</th><th>Remaining %</th><th>Status</th><th></th></tr></thead><tbody>';
+  html += '<table class="po-grid-table"><thead><tr><th>PO #</th><th>Description</th><th>Customer(s)</th><th>Type</th><th>Pending</th><th>Billed</th><th>Remaining $</th><th>Remaining %</th><th>Status</th><th></th></tr></thead><tbody>';
   list.forEach(function(po) {
     var ws = poWarningState(po);
     var isDollar = po.po_type === 'dollar';
     var l = poLedgerFor(po.id);
-    html += '<tr style="cursor:pointer" onclick="poOpenEditSheet(\'' + po.id + '\')">'
+    html += '<tr style="cursor:pointer" onclick="poOpenEditScreen(\'' + po.id + '\')">'
       + '<td style="font-weight:600">' + escHtml(po.po_number) + (po.locked ? ' <span title="Locked to a work order" style="font-size:11px">🔒</span>' : '') + '</td>'
       + '<td>' + escHtml(po.description) + '</td>'
-      + '<td style="font-size:12px;color:var(--text-muted)">' + escHtml(poCustomerNames(po.id)) + '</td>'
+      + '<td style="font-size:12px;color:var(--text-muted)">' + poCustomerStackHtml(po.id) + '</td>'
       + '<td>' + (isDollar ? 'Dollar' : 'Standing PO' + (po.expiration_date ? ' · exp ' + po.expiration_date : '')) + '</td>'
       + '<td>' + (isDollar ? poFmtMoney(l.pending) : '—') + '</td>'
       + '<td>' + (isDollar ? poFmtMoney(l.billed) : '—') + '</td>'
       + '<td>' + (isDollar ? poFmtMoney(poRemaining(po)) : '—') + '</td>'
       + '<td>' + (isDollar ? Math.round(poRemainingPct(po)) + '%' : '—') + '</td>'
       + '<td>' + poStatusBadge(po.status) + poWarnBadge(ws) + '</td>'
-      + '<td><button onclick="event.stopPropagation();poOpenEditSheet(\'' + po.id + '\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer">Open</button></td>'
+      + '<td><button onclick="event.stopPropagation();poOpenEditScreen(\'' + po.id + '\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer">Open</button></td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -182,36 +187,33 @@ function poWarningReminderRender(shellId) {
       shell.innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:10px;border:1px dashed var(--border);border-radius:var(--radius);text-align:center">No POs nearing their limit or expiration.</div>';
       return;
     }
-    var html = '<table class="dt-table" style="width:100%"><thead><tr><th>PO #</th><th>Description</th><th>Customer(s)</th><th>Status</th><th></th></tr></thead><tbody>';
+    var html = '<table class="po-grid-table"><thead><tr><th>PO #</th><th>Description</th><th>Customer(s)</th><th>Status</th><th></th></tr></thead><tbody>';
     flagged.forEach(function(po) {
       var ws = poWarningState(po);
       html += '<tr><td style="font-weight:600">' + escHtml(po.po_number) + '</td>'
         + '<td>' + escHtml(po.description) + '</td>'
-        + '<td style="font-size:12px;color:var(--text-muted)">' + escHtml(poCustomerNames(po.id)) + '</td>'
+        + '<td style="font-size:12px;color:var(--text-muted)">' + poCustomerStackHtml(po.id) + '</td>'
         + '<td>' + poWarnBadge(ws) + '</td>'
-        + '<td><button onclick="poOpenEditSheet(\'' + po.id + '\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer">Open</button></td></tr>';
+        + '<td><button onclick="poOpenEditScreen(\'' + po.id + '\')" style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer">Open</button></td></tr>';
     });
     html += '</tbody></table>';
     shell.innerHTML = html;
   });
 }
 
-// ── Edit / detail sheet ────────────────────────────────────────────────────
-function poOpenEditSheet(poId) {
-  var sheet = document.getElementById('po-edit-sheet');
-  var title = document.getElementById('po-edit-sheet-title');
-  var body = document.getElementById('po-edit-sheet-body');
-  if (!sheet || !body) return;
+// ── Edit / detail screen (full screen, same pattern as the work order form) ─
+function poOpenEditScreen(poId) {
+  var body = document.getElementById('po-form-body');
+  if (!body) return;
   AppState.poEditingId = poId;
-  title.textContent = poId ? 'Edit PO' : 'New PO';
+  pushScreen('screen-po-form', poId ? 'Edit PO' : 'New PO');
   var render = function() { body.innerHTML = poRenderEditForm(poId ? poGet(poId) : null); };
   if (!AppState.poLoaded) { poLoadAll().then(render); } else render();
-  sheet.classList.add('open');
 }
 
-function closePOEditSheet(event) {
-  if (event && event.target.id !== 'po-edit-sheet') return;
-  document.getElementById('po-edit-sheet').classList.remove('open');
+function poSetScreenTitle(t) {
+  var el = document.getElementById('header-title-text');
+  if (el) el.textContent = t;
 }
 
 function poRenderEditForm(po) {
@@ -263,7 +265,7 @@ function poRenderEditForm(po) {
   // Account assignment
   html += '<div class="form-row"><label class="form-label">Account(s) *</label>';
   html += '<input type="search" placeholder="Search customers…" oninput="poFilterAccountList(this.value)" style="width:100%;margin-bottom:6px">';
-  html += '<div id="po-f-account-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px">';
+  html += '<div id="po-f-account-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px">';
   allCust.forEach(function(c) {
     html += '<label class="po-acct-row" data-name="' + escHtml((c.name || '').toLowerCase()) + '" style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">'
       + '<input type="checkbox" class="po-acct-chk" value="' + c.id + '"' + (checkedIds.indexOf(c.id) >= 0 ? ' checked' : '') + '> ' + escHtml(getCustName(c)) + '</label>';
@@ -273,7 +275,7 @@ function poRenderEditForm(po) {
   // Lock + create WO — new POs only, per the lock-at-creation decision
   if (isNew) {
     html += '<div class="form-row" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">'
-      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600"><input type="checkbox" id="po-f-lock" onchange="poToggleLockFields(this.checked)"> Lock this work order to this PO</label>'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600"><input type="checkbox" class="po-lock-chk" id="po-f-lock" onchange="poToggleLockFields(this.checked)"> Lock this work order to this PO</label>'
       + '<div id="po-f-lock-fields" style="display:none;margin-top:8px;padding:10px;background:var(--bg);border-radius:var(--radius-sm)">'
       + '<div class="form-row"><label class="form-label">Customer for new WO</label><select id="po-f-lock-customer"><option value="">— Select —</option>' + allCust.map(function(c) { return '<option value="' + c.id + '">' + escHtml(getCustName(c)) + '</option>'; }).join('') + '</select></div>'
       + '<div class="form-row"><label class="form-label">WO Title</label><input type="text" id="po-f-lock-title" placeholder="Brief description of work"></div>'
@@ -295,7 +297,7 @@ function poRenderEditForm(po) {
     html += '</div>';
   }
 
-  html += '<div style="display:flex;gap:8px;margin-top:14px"><button class="save-btn" onclick="poSaveFromSheet()">' + (isNew ? 'Create PO' : 'Save Changes') + '</button></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:14px"><button class="save-btn" onclick="poSaveForm()">' + (isNew ? 'Create PO' : 'Save Changes') + '</button></div>';
 
   if (po) html += poRenderChangeOrdersBlock(po);
 
@@ -318,7 +320,7 @@ function poFilterAccountList(q) {
   });
 }
 
-function poSaveFromSheet() {
+function poSaveForm() {
   var isNew = !AppState.poEditingId;
   var poNumber = document.getElementById('po-f-number').value.trim();
   var description = document.getElementById('po-f-description').value.trim();
@@ -374,8 +376,10 @@ function poSaveFromSheet() {
   savePromise.then(function(poId) {
     if (!poId) return;
     showToast(isNew ? 'PO created' : 'PO saved');
+    AppState.poEditingId = poId;
+    poSetScreenTitle('Edit PO');
     return poLoadAll().then(function() {
-      poOpenEditSheet(poId);
+      document.getElementById('po-form-body').innerHTML = poRenderEditForm(poGet(poId));
       if (document.getElementById('potracker-panel-body')) poRenderPanelBody('potracker-panel-body');
     });
   }).catch(function() {});
@@ -426,7 +430,7 @@ function poUntieLock(poId) {
     if (!r.ok) { showToast('Error untying PO'); return; }
     var idx = AppState.purchaseOrders.findIndex(function(p) { return p.id === poId; });
     if (idx >= 0) { AppState.purchaseOrders[idx].locked = false; AppState.purchaseOrders[idx].locked_work_order_id = null; }
-    poRefreshLockedWOIds().then(function() { showToast('PO untied'); poOpenEditSheet(poId); });
+    poRefreshLockedWOIds().then(function() { showToast('PO untied'); poRerenderForm(); });
   });
 }
 
@@ -441,9 +445,14 @@ function poSetStatus(poId, status) {
     var idx = AppState.purchaseOrders.findIndex(function(p) { return p.id === poId; });
     if (idx >= 0) AppState.purchaseOrders[idx].status = status;
     showToast('Status updated');
-    poOpenEditSheet(poId);
+    poRerenderForm();
     if (document.getElementById('potracker-panel-body')) poRenderPanelBody('potracker-panel-body');
   });
+}
+
+function poRerenderForm() {
+  var body = document.getElementById('po-form-body');
+  if (body && AppState.poEditingId) body.innerHTML = poRenderEditForm(poGet(AppState.poEditingId));
 }
 
 // ── Change orders ──────────────────────────────────────────────────────────
@@ -487,7 +496,7 @@ function poAddChangeOrder(poId) {
     if (!r.ok || !r.data || !r.data.length) { showToast('Error adding change order'); return; }
     AppState.poChangeOrders.push(r.data[0]);
     showToast('Change order added');
-    poLoadAll().then(function() { poOpenEditSheet(poId); });
+    poLoadAll().then(poRerenderForm);
   });
 }
 
@@ -501,7 +510,7 @@ function poEditChangeOrder(coId) {
     if (!r.ok) { showToast('Error updating change order'); return; }
     c.description = newDesc.trim(); c.amount = newAmt;
     showToast('Change order updated');
-    poLoadAll().then(function() { poOpenEditSheet(c.purchase_order_id); });
+    poLoadAll().then(poRerenderForm);
   });
 }
 
@@ -512,7 +521,7 @@ function poDeleteChangeOrder(coId) {
     if (!r.ok) { showToast('Error deleting change order'); return; }
     c.active = false;
     showToast('Change order deleted');
-    poLoadAll().then(function() { poOpenEditSheet(c.purchase_order_id); });
+    poLoadAll().then(poRerenderForm);
   });
 }
 
@@ -568,9 +577,9 @@ function poFieldToggleMode() {
 function poFieldOpenPicker() {
   var custId = document.getElementById('f-customer-id').value;
   if (!custId) { showToast('Choose a customer first'); return; }
-  var sheet = document.getElementById('po-picker-sheet');
-  var body = document.getElementById('po-picker-sheet-body');
+  var body = document.getElementById('po-picker-body');
   var currentWOId = AppState.editingWOId;
+  pushScreen('screen-po-picker', 'Select a PO');
   var render = function() {
     var list = (AppState.purchaseOrders || []).filter(function(p) {
       if (p.status === 'cancelled') return false;
@@ -578,9 +587,9 @@ function poFieldOpenPicker() {
       return poCustomersFor(p.id).some(function(c) { return c.id === custId; });
     });
     var html;
-    if (!list.length) html = '<div style="padding:20px;text-align:center;color:var(--text-muted)">No tracked POs available for this customer.</div>';
+    if (!list.length) html = '<div style="padding:30px;text-align:center;color:var(--text-muted)">No tracked POs available for this customer.</div>';
     else {
-      html = '<table class="dt-table" style="width:100%"><thead><tr><th>PO #</th><th>Description</th><th>Type</th><th>Remaining</th><th></th></tr></thead><tbody>';
+      html = '<table class="po-grid-table"><thead><tr><th>PO #</th><th>Description</th><th>Type</th><th>Remaining</th><th></th></tr></thead><tbody>';
       list.forEach(function(p) {
         var isDollar = p.po_type === 'dollar';
         html += '<tr><td style="font-weight:600">' + escHtml(p.po_number) + '</td><td>' + escHtml(p.description) + '</td>'
@@ -593,15 +602,9 @@ function poFieldOpenPicker() {
     body.innerHTML = html;
   };
   if (!AppState.poLoaded) poLoadAll().then(render); else render();
-  sheet.classList.add('open');
 }
 
 function poFieldSelect(poId) {
   poFieldSetMode('picker', poId);
-  closePOPickerSheet();
-}
-
-function closePOPickerSheet(event) {
-  if (event && event.target.id !== 'po-picker-sheet') return;
-  document.getElementById('po-picker-sheet').classList.remove('open');
+  goBack();
 }
