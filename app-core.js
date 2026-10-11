@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '4.99';
+const APP_VERSION = '5.00';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1508,7 +1508,7 @@ function dtPartsEditRow(e, isNew) {
   return '<div class="dt-edit-row dt-parts-grid" data-eid="'+id+'" data-type="parts">'
     + '<input class="dt-input" type="date" name="transaction_date" value="'+defDate+'" tabindex="1">'
     + '<select class="dt-input" name="qbo_item_id" tabindex="2"><option value="">— QBO Item —</option>'+qboOptions+'</select>'
-    + '<input class="dt-input" type="text" name="description" value="'+escHtml(defDesc)+'" placeholder="Description" tabindex="3">'
+    + '<input class="dt-input" type="text" name="description" spellcheck="true" autocorrect="on" autocapitalize="sentences" value="'+escHtml(defDesc)+'" placeholder="Description" tabindex="3">'
     + '<input class="dt-input" type="number" name="qty" value="'+defQty+'" min="1" step="1" tabindex="4" style="width:50px" oninput="dtRecalcSell(this)">'
     + '<input class="dt-input dt-right" type="number" name="cost" value="'+(defCost||'')+'" min="0" step="0.01" placeholder="0.00" tabindex="5" oninput="dtRecalcSell(this)">'
     + '<input class="dt-input dt-right" type="number" name="margin" value="'+defMargin.toFixed(2)+'" min="0" max="1" step="0.01" tabindex="6" oninput="dtRecalcSell(this)">'
@@ -2750,11 +2750,17 @@ var ReconcileState = {
   pendingMoves: {}
 };
 
+// v5.00 — global wrapper so billing column / Bill this time / reconcileCreateEntry can reach it.
+// (The nested rcElapsedMin inside renderReconcileBody was out of scope for them -> "Error loading billing data".)
+function rcElapsedMin(stop) { return drElapsedMin(stop); }
+
 function initReconcilePanel() {
   // Reconcile reuses the Field Travel Log panel — set mode then hand off
   DRState.mode = 'reconcile';
   if (!DRState.tech) DRState.tech = drGetDefaultTech();
   if (!DRState.selectedDate) DRState.selectedDate = drTodayStr();
+  // v5.00 — cold start: drLoadWeek needs weekStart (previously only set by renderDailyReviewPanel)
+  if (!DRState.weekStart) DRState.weekStart = drGetMonday(new Date(DRState.selectedDate + 'T12:00:00'));
 
   // If the Field Travel Log shell is already built, just switch mode and re-render
   var shell = document.getElementById('dr-shell');

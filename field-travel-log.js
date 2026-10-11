@@ -111,7 +111,7 @@ function drBuildShell() {
   html += '</div></div>';
   html += '</div></div>';
   // Billing column — shown in reconcile mode, hidden in travel mode
-  html += '<div id="dr-billing-col" style="display:none;flex-direction:column;overflow-y:auto;border-left:.5px solid var(--border)">';
+  html += '<div id="dr-billing-col" style="display:none;flex:1;min-width:0;flex-direction:column;overflow-y:auto;border-left:.5px solid var(--border)">';
   html += '<div id="dr-billing-summary" style="padding:10px 14px;border-bottom:.5px solid var(--border);display:flex;gap:20px;flex-shrink:0"></div>';
   html += '<div id="dr-billing-body" style="padding:14px;flex:1"></div>';
   html += '</div>';
@@ -2754,7 +2754,10 @@ function tbSelectWO(woId) {
   var stop = DRState.stops[idx];
   if (!stop) return;
   var ht = AppState.hoursTypes && AppState.hoursTypes[0];
-  var actualHours = parseFloat((drElapsedMin(stop) / 60).toFixed(2));
+  // v5.00 — second+ allocation pre-fills only the REMAINING GPS time, not the full stop time
+  var gpsHours = drElapsedMin(stop) / 60;
+  var alreadyAlloc = (stop.allocations || []).reduce(function(s, a){ return s + (parseFloat(a.hours) || 0); }, 0);
+  var actualHours = parseFloat(Math.max(0, gpsHours - alreadyAlloc).toFixed(2));
   var alloc = {
     custId: TBState.pendingCustId,
     customerName: TBState.pendingCustName,
