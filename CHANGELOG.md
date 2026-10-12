@@ -63,7 +63,7 @@ New module `app-po-tracker.js` (spec: `docs/specs/dwo-spec-2026-10-05-po-tracker
 - Fixed: Time & Billing Reconciliation showed "Error loading billing data" and "+ Bill this time" failed — rcElapsedMin was a nested function out of scope; added a global wrapper.
 - Fixed: Time & Billing Reconciliation blank on first open (cold start) — DRState.weekStart now set in initReconcilePanel.
 - Reconcile billing column now fills the remaining width.
-- Desktop Daily Dashboard and End of Day queue widened from 700px to 1100px max.
+- Desktop Daily Dashboard and End of Day queue widened to 1100px max (inner wrappers 700px and outer containers 800px both raised).
 - Work Orders "Clear filters" button is now amber.
 - Spell check/autocorrect enabled on the Parts & Services description fields.
 - Sidebar: "Sites" renamed "Sites/Locations"; sidebar icons removed.
