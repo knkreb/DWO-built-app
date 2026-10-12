@@ -245,7 +245,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     return !(d.work_orders && isProcessedStatus(d.work_orders.status));
   });
   var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
-  var html = '<div style="max-width:700px">';
+  var html = '<div style="max-width:1100px">';
   html += '<div style="font-size:22px;font-weight:700;margin-bottom:4px">Daily Dashboard</div>';
   html += '<div style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">' + dateStr + '</div>';
 
@@ -742,7 +742,7 @@ function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isD
 
   var hiddenCount = exceptions.length - visibleExceptions.length;
 
-  var html = '<div style="padding:16px' + (isDesktop ? ';max-width:700px' : '') + '">';
+  var html = '<div style="padding:16px' + (isDesktop ? ';max-width:1100px' : '') + '">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
   html += '<div style="font-size:20px;font-weight:700">Exceptions Queue</div>';
   html += '<button onclick="_eodToggleShowAll()" style="font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer">' + (_eodShowAll ? 'Active Only' : 'Show All' + (hiddenCount > 0 ? ' (' + hiddenCount + ' hidden)' : '')) + '</button>';

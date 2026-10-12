@@ -532,23 +532,23 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div class="desktop-layout">
     <div class="sidebar">
       <div style="font-size:10px;font-weight:600;color:var(--text-muted);padding:8px 16px 4px;letter-spacing:0.06em;text-transform:uppercase">Daily Workflow</div>
-      <div class="sidebar-item" id="sidebar-morningbrief" onclick="desktopNav('morningbrief')"><span class="sidebar-icon">🌅</span> Daily Dashboard</div>
-      <div class="sidebar-item" id="sidebar-tasks" onclick="desktopNav('tasks')"><span class="sidebar-icon">✅</span> Tasks</div>
-      <div class="sidebar-item active" id="sidebar-wo" onclick="desktopNav('wo')"><span class="sidebar-icon">📋</span> Work Orders</div>
-      <div class="sidebar-item" id="sidebar-dailyreview" onclick="desktopNav('dailyreview')"><span class="sidebar-icon">🗺️</span> Field Travel Log</div>
-      <div class="sidebar-item" id="sidebar-endofday" onclick="desktopNav('endofday')"><span class="sidebar-icon">🌙</span> End of Day</div>
+      <div class="sidebar-item" id="sidebar-morningbrief" onclick="desktopNav('morningbrief')">Daily Dashboard</div>
+      <div class="sidebar-item" id="sidebar-tasks" onclick="desktopNav('tasks')">Tasks</div>
+      <div class="sidebar-item active" id="sidebar-wo" onclick="desktopNav('wo')">Work Orders</div>
+      <div class="sidebar-item" id="sidebar-dailyreview" onclick="desktopNav('dailyreview')">Field Travel Log</div>
+      <div class="sidebar-item" id="sidebar-endofday" onclick="desktopNav('endofday')">End of Day</div>
       <div style="height:1px;background:var(--border);margin:4px 0"></div>
-      <div class="sidebar-item" id="sidebar-timecard" onclick="desktopNav('timecard')"><span class="sidebar-icon">⏱️</span> Timecard</div>
-      <div class="sidebar-item" id="sidebar-truckstock" onclick="desktopNav('truckstock')"><span class="sidebar-icon">🚛</span> Truck Stock</div>
-      <div class="sidebar-item" id="sidebar-customers" onclick="desktopNav('customers')"><span class="sidebar-icon">👥</span> Customers</div>
-      <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')"><span class="sidebar-icon">🏪</span> Vendors</div>
-      <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')"><span class="sidebar-icon">📍</span> Sites</div>
-      <div class="sidebar-item" id="sidebar-invoicing" onclick="desktopNav('invoicing')"><span class="sidebar-icon">💰</span> Customer Invoice Generation</div>
-      <div class="sidebar-item" id="sidebar-potracker" onclick="desktopNav('potracker')" style="display:none"><span class="sidebar-icon">🧾</span> Purchase Orders</div>
-      <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')"><span class="sidebar-icon">📤</span> Exports</div>
-      <div class="sidebar-item" onclick="openBugReportSheet()"><span class="sidebar-icon">🐛</span> Report an Issue</div>
-      <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none"><span class="sidebar-icon">📊</span> Feature Req/Bugs</div>
-      <div class="sidebar-item" id="sidebar-settings" onclick="desktopNav('settings')"><span class="sidebar-icon">⚙️</span> Settings</div>
+      <div class="sidebar-item" id="sidebar-timecard" onclick="desktopNav('timecard')">Timecard</div>
+      <div class="sidebar-item" id="sidebar-truckstock" onclick="desktopNav('truckstock')">Truck Stock</div>
+      <div class="sidebar-item" id="sidebar-customers" onclick="desktopNav('customers')">Customers</div>
+      <div class="sidebar-item" id="sidebar-vendors" onclick="desktopNav('vendors')">Vendors</div>
+      <div class="sidebar-item" id="sidebar-locations" onclick="desktopNav('locations')">Sites/Locations</div>
+      <div class="sidebar-item" id="sidebar-invoicing" onclick="desktopNav('invoicing')">Customer Invoice Generation</div>
+      <div class="sidebar-item" id="sidebar-potracker" onclick="desktopNav('potracker')" style="display:none">Purchase Orders</div>
+      <div class="sidebar-item" id="sidebar-exports" onclick="desktopNav('exports')">Exports</div>
+      <div class="sidebar-item" onclick="openBugReportSheet()">Report an Issue</div>
+      <div class="sidebar-item" id="sidebar-bugreports" onclick="desktopNav('bugreports')" style="display:none">Feature Req/Bugs</div>
+      <div class="sidebar-item" id="sidebar-settings" onclick="desktopNav('settings')">Settings</div>
       <div class="sidebar-footer">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px" id="sidebar-user"></div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px" id="sidebar-last-export"></div>
@@ -583,7 +583,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
             <option value="needs_review">⚑ Hold</option>
             <option value="needs_po">⚑ PO</option>
           </select>
-          <button class="btn-outline" onclick="clearDesktopGridFilters()" title="Reset all filters and searches">Clear filters</button>
+          <button class="btn-outline" style="background:var(--amber);color:var(--amber-dark);border-color:var(--amber);font-weight:600" onclick="clearDesktopGridFilters()" title="Reset all filters and searches">Clear filters</button>
           <button class="btn-outline" onclick="refreshWOData()" title="Reload latest data from server"><i style="font-style:normal">&#x21BA;</i> Refresh</button>
           <button class="btn-outline" onclick="exportAllFiltered()" title="Export all WOs matching current filter">📋 Export Filtered</button>
           <button class="btn-dark" onclick="openNewWO()" style="margin-left:auto">+ New WO</button>
@@ -727,11 +727,11 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         </div>
       </div>
       <div id="desktop-panel-morningbrief" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
-        <div id="alerts-dashboard-card-desktop" style="display:none;max-width:800px;margin:24px 24px 0"></div>
-        <div id="desktop-morning-brief-body" style="padding:24px;max-width:800px"></div>
+        <div id="alerts-dashboard-card-desktop" style="display:none;max-width:1100px;margin:24px 24px 0"></div>
+        <div id="desktop-morning-brief-body" style="padding:24px;max-width:1100px"></div>
       </div>
       <div id="desktop-panel-endofday" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
-        <div id="desktop-end-of-day-body" style="padding:24px;max-width:800px"></div>
+        <div id="desktop-end-of-day-body" style="padding:24px;max-width:1100px"></div>
       </div>
       <div id="desktop-panel-bugreports" style="display:none;flex-direction:column;height:100%;overflow:hidden"></div>
       <div id="desktop-panel-settings" style="display:none;overflow-y:auto;flex:1">
@@ -857,7 +857,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
         <div><label class="form-label">QBO Item *</label><select id="p-qbo-item" style="font-size:16px;padding:10px;min-height:44px;width:100%"></select></div>
         <div><label class="form-label">Qty</label><input type="number" id="p-qty" value="1" step="1" min="1" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
       </div>
-      <div style="margin-bottom:6px"><label class="form-label">Description *</label><input type="text" id="p-description" autocomplete="off" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" placeholder="Part or service description" style="font-size:12px;width:100%;box-sizing:border-box"></div>
+      <div style="margin-bottom:6px"><label class="form-label">Description *</label><input type="text" id="p-description" autocomplete="off" spellcheck="true" autocorrect="on" autocapitalize="sentences" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" placeholder="Part or service description" style="font-size:12px;width:100%;box-sizing:border-box"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:6px" id="p-cost-rows">
         <div><label class="form-label">Cost</label><input type="number" id="p-cost" step="0.01" placeholder="0.00" autocomplete="off" oninput="calcLineItemTotals()" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
         <div id="p-margin-row"><label class="form-label">Margin</label><input type="number" id="p-margin" step="0.01" min="0.01" max="1" value="0.50" autocomplete="off" oninput="calcLineItemTotals()" onfocus="this.scrollIntoView({behavior:'smooth',block:'center'})" style="font-size:16px;padding:10px;min-height:44px;width:100%"></div>
@@ -1097,12 +1097,12 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=10"></script>
-<script src="app-morning-brief.js?v=128"></script>
-<script src="app-core.js?v=141"></script>
+<script src="app-morning-brief.js?v=130"></script>
+<script src="app-core.js?v=143"></script>
 <script src="app-sites-travel.js?v=1"></script>
 <script src="app-users.js?v=1"></script>
 <script src="app-alerts.js?v=4"></script>
-<script src="field-travel-log.js?v=130"></script>
+<script src="field-travel-log.js?v=131"></script>
 <script src="app-subforms.js?v=114"></script>
 <script src="app-invoice-gen.js?v=5"></script>
 <script src="app-wo-flags.js?v=1"></script>

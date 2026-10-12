@@ -57,3 +57,14 @@ New module `app-po-tracker.js` (spec: `docs/specs/dwo-spec-2026-10-05-po-tracker
 - **Dashboard:** new "PO Warnings" card lists POs at or past their dollar/expiration threshold (warn-only, never blocks time entry).
 - Settings → Billing gained three new keys: default PO warning mode/value and default PO expiration warning lead time.
 - **UI fixes (same build, before first use):** New/Edit PO and the PO picker are now full-screen (`screen-po-form`, `screen-po-picker`, same `pushScreen`/`goBack` pattern as the work order form) instead of bottom sheets. Fixed account/lock checkboxes stretching full-width (new `.po-acct-chk`/`.po-lock-chk` CSS, scoped like the existing desktop-grid checkbox rule). PO list, dashboard PO Warnings card, and the PO picker now use a bordered/structured `.po-grid-table` instead of the plain `dt-table` styling. Multiple customers on one PO now stack one per line (`poCustomerStackHtml`) instead of a comma-joined string.
+
+## v5.00 — Running change list batch
+- Fixed: second work-order allocation on the same stop pre-filled the full GPS time; it now pre-fills only the remaining time (GPS minus already allocated).
+- Fixed: Time & Billing Reconciliation showed "Error loading billing data" and "+ Bill this time" failed — rcElapsedMin was a nested function out of scope; added a global wrapper.
+- Fixed: Time & Billing Reconciliation blank on first open (cold start) — DRState.weekStart now set in initReconcilePanel.
+- Reconcile billing column now fills the remaining width.
+- Desktop Daily Dashboard and End of Day queue widened to 1100px max (inner wrappers 700px and outer containers 800px both raised).
+- Work Orders "Clear filters" button is now amber.
+- Spell check/autocorrect enabled on the Parts & Services description fields.
+- Sidebar: "Sites" renamed "Sites/Locations"; sidebar icons removed.
+- Not built: app rename to DynamIQ Work Order (name placement undecided).
