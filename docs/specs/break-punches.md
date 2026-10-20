@@ -33,14 +33,17 @@ The break toggle sits on the punch card, so the card has to read punch state cor
 
 Observed 2026-10-12: Kevin punched in on mobile; the desktop payroll alert showed Missing Clock-out for that punch, but the desktop punch card still said "Not clocked in today", even after a full reload.
 
-Leading hypothesis (not confirmed): the surfaces choose the technician differently.
-- Desktop dashboard (`initMorningBriefDesktop`): `AppState.userTechId || technicians[0].id`.
-- Desktop Punch In (`dbDesktopPunchIn`): `AppState.userTechId || MDRState.tech`, no fallback.
-- Mobile punch (`mdrClockIn`, `mdrUpsertDayReview`): `AppState.userTechId || drGetDefaultTech() || technicians[0].id`.
-- The payroll alert query has no tech filter at all.
-An admin login with no technician link (Kevin's) can therefore write the punch under one tech id and read it back under another. Check `AppState.userTechId` for Kevin's login and which `tech_id` the 9:00 AM punch row actually has.
+Checked against the live database 2026-10-20: Kevin's admin login IS linked to a technician record (Kevin Reb), and his punches are saved under it (including the open-looking 2026-10-12 punch, 9:00 AM Eastern). So a technician mismatch is not the cause for Kevin's own login. Only the Test Admin login has no technician link.
 
-Fix (if confirmed): one shared function that returns the current user's tech id, used by every punch read and write, so the card, the alert, mobile and desktop always agree. An admin with no technician link needs a defined behavior (ask Kevin which: pick a technician, or punch against a dedicated admin record).
+Leading hypothesis (not confirmed): the surfaces disagree about what "today" is.
+- Mobile / Field Travel Log (`drTodayStr`) use the **local** date.
+- Desktop Daily Dashboard (`initMorningBriefDesktop`, `dbDesktopPunchIn`, `dashClockOut`, `dashAddBreak` and others in `app-morning-brief.js`) use `new Date().toISOString().slice(0,10)`, which is the **UTC** date.
+- After 8 PM Eastern (EDT; 7 PM in winter) the UTC date is already tomorrow. The punch card looks for a `day_review` row with tomorrow's date and finds none ("Not clocked in today"), while the payroll alert (`review_date < today`) sees the same open punch as an earlier day and flags Missing Clock-out. A reload does not help. This matches the report exactly.
+- To confirm: note the time of day the original symptom was seen (an evening view fits), or after 8 PM Eastern while punched in, check that the desktop card flips to "Not clocked in today".
+
+Fix (if confirmed): one shared "today in local time" helper used by every punch, break and dashboard query. `new Date().toISOString().slice(0,10)` must not be used to mean today anywhere punch or break dates are read or written (11 places in `app-morning-brief.js` at last count; list them in the diagnosis). Breaks use `review_date` too, so the same helper applies to `day_breaks`.
+
+Separate and still true: a login with no technician record (Test Admin today, or any future office or external user) has no punch record to attach to. That is handled by the user types work (see the User types spec), not here.
 
 ## Schema (additive only)
 
@@ -93,7 +96,7 @@ Add one helper in the new module, for example `netOnClockMin(dayReview, breaks, 
 
 ## Open questions for Kevin before building
 
-1. What should an admin login with no technician link punch against (see Step 0)?
+1. (Answered 2026-10-20) Kevin tracks his own time and has a technician record. Users with no technician record are covered by the separate user types spec.
 2. Should an open break **today** raise an alert after some length of time (for example over 2 hours), or only show on the punch card?
 
 ## Suggested build slices (one at a time, Kevin says "okay to build" for each)
