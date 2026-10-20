@@ -1,3 +1,17 @@
+// ── Timezone-aware "today" (v5.06, bug 17) ───────────────────
+// Returns today's date (YYYY-MM-DD) in the Settings timezone. Replaces
+// new Date().toISOString().slice(0,10), which is the UTC date and flips
+// to tomorrow at 8 PM Eastern (7 PM in winter).
+function tzTodayStr() {
+  var tz = (typeof AppState !== 'undefined' && AppState.settings && AppState.settings.timezone) || 'America/New_York';
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch (e) {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+}
+
 // app-morning-brief.js — Morning Brief + End of Day module
 // Extracted from app-core.js during v4.38 modularization
 // Depends on: AppState, MDRState, sb, escHtml, showToast, pushScreen,
@@ -40,7 +54,7 @@ function initMorningBrief() {
   if (!shell) return;
   shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">Loading...</div>';
   if (typeof loadAlerts === 'function') loadAlerts();
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
 
   Promise.all([
@@ -218,7 +232,7 @@ function mbToggleSection(id) {
 function initMorningBriefDesktop() {
   var body = document.getElementById('desktop-morning-brief-body');
   if (!body) return;
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   body.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-muted)">Loading...</div>';
   var techId = AppState.userTechId || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   Promise.all([
@@ -442,7 +456,7 @@ function mbBuildWOOptions() {
 }
 
 function mbAddDispatch() {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var tech = AppState.userTechId || AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var woOptions = mbBuildWOOptions();
   var overlay = document.createElement('div');
@@ -487,7 +501,7 @@ function mbConfirmAddDispatch(techId, date, overlay) {
 }
 
 function mbAddDispatchDesktop() {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var techOptions = (AppState.technicians || []).map(function(t){
     return '<option value="' + t.id + '"' + (t.id === AppState.userTechId ? ' selected' : '') + '>' + escHtml(t.name) + '</option>';
   }).join('');
@@ -550,7 +564,7 @@ function mbRemoveDispatch(id) {
 }
 
 function mbMoveDispatch(id, dir) {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var tech = AppState.userTechId || AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   sb.get('dispatch_assignments', '?tech_id=eq.' + tech + '&scheduled_date=eq.' + today + '&order=sort_order.asc&select=id,sort_order').then(function(r) {
     if (!r.ok || !r.data) return;
@@ -572,7 +586,7 @@ function mbMoveDispatch(id, dir) {
 }
 
 function mbAddTask() {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var tech = AppState.userTechId || AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end';
@@ -645,7 +659,7 @@ function initEndOfDayDesktop() {
 }
 
 function _eodLoadQueue(container, tech, isDesktop) {
-  var today = new Date().toISOString().slice(0, 10);
+  var today = tzTodayStr();
   var systemStart = AppState.settings.system_start_date || '2026-07-15';
   Promise.all([
     sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=lte.' + today + '&review_date=gte.' + systemStart + '&order=review_date.desc&select=*'),
@@ -834,7 +848,7 @@ function eodConfirmClockOut(overlay) {
   if (!timeEl) return;
   var timeVal = timeEl.value;
   if (overlay) overlay.remove();
-  var today = MDRState.selectedDate || new Date().toISOString().slice(0,10);
+  var today = MDRState.selectedDate || tzTodayStr();
   var dt = new Date(today + 'T' + timeVal + ':00');
   var isBackdated = dt < new Date(new Date() - 60000);
   mdrUpsertDayReview({clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual'});
@@ -843,7 +857,7 @@ function eodConfirmClockOut(overlay) {
 }
 
 function dbDesktopPunchIn() {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   var techId = AppState.userTechId || MDRState.tech;
   if (!techId) { showToast('Cannot identify your technician account. Please reload.'); return; }
   var now = new Date();
@@ -883,7 +897,7 @@ function dbDesktopPunchIn() {
 }
 
 function dashClockOut() {
-  var today = new Date().toISOString().slice(0,10);
+  var today = tzTodayStr();
   MDRState.selectedDate = today;
   eodClockOut();
 }
@@ -913,7 +927,7 @@ function dashAddBreak() {
       var startEl = document.getElementById('dash-break-start');
       var endEl = document.getElementById('dash-break-end');
       if (!startEl || !endEl) return;
-      var today = new Date().toISOString().slice(0,10);
+      var today = tzTodayStr();
       var breakStart = new Date(today + 'T' + startEl.value + ':00').toISOString();
       var breakEnd = new Date(today + 'T' + endEl.value + ':00').toISOString();
       if (breakEnd <= breakStart) { showToast('End time must be after start time'); return; }
