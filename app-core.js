@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.01';
+const APP_VERSION = '5.02';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1304,7 +1304,7 @@ function openNewWO() {
   // Populate status dropdown with draft/active statuses
   var statusSel = document.getElementById('f-status');
   if (statusSel) {
-    var startStatuses = AppState.statuses.filter(function(s){ return s.category==='draft'||s.category==='active'; });
+    var startStatuses = AppState.statuses.filter(function(s){ return s.active!==false && (s.category==='draft'||s.category==='active'); }); // v5.02: retired statuses are not offered
     statusSel.innerHTML = startStatuses.map(function(s){
       var sel = s.name==='Work Ready' ? ' selected' : '';
       return '<option value="'+s.num+'"'+sel+'>'+String(s.num).padStart(2,'0')+' '+escHtml(s.name)+'</option>';
@@ -2049,6 +2049,7 @@ function openEditWO() {
   document.getElementById('f-po-number').value = wo.po_number||'';
   document.getElementById('f-work-description').value = wo.work_description||'';
   document.getElementById('f-wo-number').value = wo.wo_number;
+  if (typeof woStatusFieldFill === 'function') woStatusFieldFill(wo); // v5.02: Status shows the live status on Edit
   if (typeof poFieldSetMode==='function') {
     if (wo.purchase_order_id) poFieldSetMode('picker', wo.purchase_order_id);
     else poFieldSetMode('text');
@@ -2086,13 +2087,18 @@ function saveWO(saveMode) {
     // v5.01 quoted billing: quoted amount / cost warning, validated against the milestones
     var _qbErr = (typeof qbReadFormFields === 'function') ? qbReadFormFields(updates, AppState.currentWO) : '';
     if (_qbErr) { showToast(_qbErr); return; }
+    // v5.02: a changed Status is applied through setWOStatus (same rules as the Status sheet); check first so nothing half-saves
+    var _stNew = (typeof woStatusFieldSelected === 'function') ? woStatusFieldSelected() : null;
+    var _stErr = (_stNew != null && typeof woStatusFieldCheck === 'function') ? woStatusFieldCheck(AppState.currentWO, _stNew) : '';
+    if (_stErr) { showToast(_stErr); return; }
     sb.patch('work_orders',AppState.editingWOId, updates)
     .then(function(r){
       if(r.ok){
         var idx2=AppState.workOrders.findIndex(function(w){return w.id===AppState.editingWOId;});
         if(idx2>=0) AppState.workOrders[idx2]=Object.assign({},AppState.workOrders[idx2],updates,{customers:cust});
         AppState.currentWO=AppState.workOrders[idx2>=0?idx2:0];
-        if (typeof qbSyncAfterQuoteChange === 'function') qbSyncAfterQuoteChange(AppState.currentWO.id);
+        if (typeof qbPersistDraft === 'function') qbPersistDraft(AppState.currentWO.id); // v5.02: milestones table in the form (falls back to syncing the final row)
+        if (_stNew != null && AppState.currentWO.status !== _stNew && typeof setWOStatus === 'function') setWOStatus(_stNew); // v5.02: status changed on the form
         if(typeof renderDesktopGrid==='function') renderDesktopGrid();
         showToast('Saved');
         goBack(); // exit form
@@ -2121,6 +2127,7 @@ function saveWO(saveMode) {
         // Attach customer object so grid shows name immediately
         var newWO = Object.assign({},r.data[0],{customers:cust});
         AppState.workOrders.push(newWO);
+        if (typeof qbPersistDraft === 'function') qbPersistDraft(newWO.id); // v5.02: milestones entered on the new work order form
         if(typeof renderDesktopGrid==='function') renderDesktopGrid();
         if(typeof refreshAgingBar==='function') refreshAgingBar();
         showToast('Work order '+woNum+' created');

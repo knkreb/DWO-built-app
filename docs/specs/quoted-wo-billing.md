@@ -22,7 +22,7 @@ T&M work orders bill once, at completion. Quoted work orders bill a fixed price 
 ## 3. Work order attributes
 
 - Billing Type selectable at start, office or mobile. Mobile shows only type and quoted amount.
-- Selecting Quoted reveals Quoted Amount, Cost warning % and the Milestones table (desktop/office/admin only). T&M entry (hours, parts) stays available on every work order.
+- Selecting Quoted reveals Quoted Amount, Cost warning % and the Milestones table IN THE WORK ORDER ATTRIBUTES FORM (Edit WO Details / New WO), desktop/office/admin only; the table edits a draft and saves with the work order (v5.02, Kevin's decision 2026-10-19). The work order screen keeps a panel for actions only (Mark ready to bill, Bill now, Mark paid), the cost rollup and warnings, with a read-only milestone table. If the final milestone is already billed, "+ Add milestone" appends a new row that becomes the new final (change order). T&M entry (hours, parts) stays available on every work order.
 - Changing type mid-stream never deletes or blocks anything; warnings below cover gaps.
 
 ## 4. Milestones table

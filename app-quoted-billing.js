@@ -147,11 +147,13 @@ function qbSyncAfterQuoteChange(woId) {
 function qbOnModeChange() {
   var q = document.getElementById('f-form-mode') && document.getElementById('f-form-mode').value === 'quoted';
   var row = document.getElementById('f-quoted-row'); if (row) row.style.display = q ? '' : 'none';
+  if (typeof qbDraftRender === 'function') qbDraftRender();
 }
 function qbFillFormFields(wo) {
   var a = document.getElementById('f-quoted-amount'), w = document.getElementById('f-cost-warn');
   if (a) a.value = (wo && wo.quoted_amount != null) ? wo.quoted_amount : '';
   if (w) w.value = (wo && wo.cost_warn_pct != null) ? wo.cost_warn_pct : '';
+  if (typeof qbDraftInit === 'function') qbDraftInit(wo); // milestones table in the form (office/admin, desktop)
   qbOnModeChange();
 }
 // Adds quoted_amount / cost_warn_pct to a work order save. Returns an error string or ''.
@@ -165,6 +167,7 @@ function qbReadFormFields(updates, wo) {
   if (pct !== null && (isNaN(pct) || pct < 0 || pct > 100)) return 'Cost warning must be 0 to 100 (0 turns the early warning off).';
   updates.quoted_amount = amt === null ? null : qbR2(amt);
   updates.cost_warn_pct = pct;
+  if (qbDraftActive()) return qbDraftError(); // the milestones table in the form validates itself
   if (wo && amt !== null) return qbValidateQuoteChange(wo, qbR2(amt));
   return '';
 }
@@ -281,11 +284,11 @@ function qbPanelHtml(wo, hours, parts, isAdmin, isLocked) {
       + ' &middot; early warning at ' + (thr > 0 ? thr + '%' : 'off') + (wo.cost_warn_pct == null ? ' (Settings default)' : '') + '</div>';
   }
   if (Q > 0 && !ms.length) {
-    out += '<div style="padding:12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:13px;margin:6px 0">No milestones yet. ' + (isAdmin ? qbBtn('Set up milestones', "qbCreateFinal('" + wo.id + "')", 'primary') : 'Office sets these up.') + '</div>';
+    out += '<div style="padding:12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:13px;margin:6px 0">No milestones yet. ' + (isAdmin ? qbBtn('Set up milestones', 'qbEditMilestones()', 'primary') : 'Office sets these up.') + '</div>';
   } else if (!(Q > 0)) {
     out += '<div style="padding:12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:13px;margin:6px 0">Enter the quoted amount under Edit WO Details to set up milestones.</div>';
   } else {
-    out += '<table class="dt-table" style="width:100%"><thead><tr><th>#</th><th>Milestone</th><th>Trigger</th><th style="text-align:right">Amount</th><th>Status</th><th>Due</th><th></th></tr></thead><tbody>';
+    out += '<table class="dt-table" style="width:100%"><thead><tr><th>#</th><th>Milestone &amp; invoice line description</th><th>Trigger</th><th style="text-align:right">Amount</th><th>Status</th><th>Due</th><th></th></tr></thead><tbody>';
     ms.forEach(function(m, i) {
       var isFin = m === fin, locked = qbIsLocked(m);
       var amtTxt = qbMoney(m.amount) + (m.is_percent && !isFin ? ' <span style="color:var(--text-muted);font-size:11px">(' + (parseFloat(m.percent_value) || 0) + '%)</span>' : '')
@@ -295,8 +298,6 @@ function qbPanelHtml(wo, hours, parts, isAdmin, isLocked) {
         if (m.status === 'pending') acts += qbBtn('Mark ready to bill', "qbMarkReady('" + m.id + "')", 'primary');
         if (m.status === 'ready' && !qbIsExported(m)) acts += qbBtn('Bill now', "qbBillNow('" + m.id + "')", 'primary') + qbBtn('Back to pending', "qbSetStatus('" + m.id + "','pending')");
         if (m.status === 'billed') acts += qbBtn('Mark paid', "qbMarkPaid('" + m.id + "')");
-        if (!locked) acts += qbBtn('Edit', "qbOpenMsForm('" + wo.id + "','" + m.id + "')");
-        if (!locked && !isFin) acts += qbBtn('Delete', "qbDeleteMs('" + m.id + "')", 'danger');
       } else if (!isAdmin && m.status === 'pending' && !m.ready_requested_at) {
         acts += qbBtn('Request ready', "qbRequestReady('" + m.id + "')");
       }
@@ -308,12 +309,18 @@ function qbPanelHtml(wo, hours, parts, isAdmin, isLocked) {
         + '<td>' + (m.due_date ? fmtDate(m.due_date) : '') + '</td><td style="white-space:nowrap;text-align:right">' + acts + '</td></tr>';
     });
     out += '</tbody></table>';
-    if (isAdmin) out += '<div style="margin-top:8px">' + qbBtn('+ Add milestone', "qbOpenMsForm('" + wo.id + "','')") + '</div>';
+    if (isAdmin) out += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Milestones are set up under Edit WO Details. ' + qbBtn('Edit milestones', 'qbEditMilestones()') + '</div>';
   }
   out += '</div>';
   return out;
 }
 
+function qbRerender() { if (AppState.currentWO) renderWODetail(AppState.currentWO); }
+// Milestone setup lives in the work order attributes form (Edit WO Details)
+function qbEditMilestones() { if (AppState.currentWO && typeof openEditWO === 'function') openEditWO(); }
+
+/* SUPERSEDED v5.02 — 2026-10-19 — the add/edit/delete milestone modal below was replaced by the milestones table in the
+   work order attributes form (qbDraft* functions near the end of this file). Kept commented out per CLAUDE.md.
 // ---------- milestone create / edit / delete ----------
 function qbCreateFinal(woId) {
   var wo = qbFindWO(woId); if (!wo) return;
@@ -415,6 +422,8 @@ function qbDeleteMs(msId) {
       .then(function(){ showToast('Milestone deleted'); qbRerender(); });
   });
 }
+
+*/
 
 // ============================================================================
 // Status flow: pending -> ready -> billed -> paid
@@ -527,12 +536,21 @@ function qbAskSnooze(woId, msId) {
 // Quoted billing workflow (lives in the Customer Invoice Generation panel; view 'quoted')
 // confirm milestone -> review the invoice line -> export (Zed Axis) -> accept
 // ============================================================================
+// The work order screen is a full-screen layer over the desktop panels, so leave it before switching panels
+function qbGoToInvoicing() {
+  if (typeof showScreen === 'function') {
+    showScreen('screen-desktop');
+    if (typeof showHeader === 'function') showHeader(true, AppState.settings.company_name || 'ProMech', false);
+    AppState.screenStack = [];
+  }
+  desktopNav('invoicing');
+}
 function qbBillNow(msId) {
   qbCloseModal();
   if (AppState.deviceMode !== 'desktop') { showToast('Open Customer Invoice Generation on the desktop to bill'); return; }
   QB.sel = {}; QB.sel[msId] = true;
   INV_STATE.autoQuoted = true;
-  desktopNav('invoicing');
+  qbGoToInvoicing();
 }
 function qbOpenQueue() { INV_STATE.view = 'quoted'; qbRefreshView(); }
 function qbCloseQueue() { INV_STATE.view = 'entry'; if (typeof invRender === 'function') invRender(); }
@@ -780,7 +798,7 @@ function qbDashboardRender(shellId) {
     });
   });
 }
-function qbBillNow2() { INV_STATE.autoQuoted = true; QB.sel = {}; desktopNav('invoicing'); }
+function qbBillNow2() { INV_STATE.autoQuoted = true; QB.sel = {}; qbGoToInvoicing(); }
 
 // Entry card shown on the Customer Invoice Generation panel (app-invoice-gen.js invEntryHtml)
 function qbEntryCardHtml() {
@@ -798,4 +816,190 @@ function qbEntryCardHtml() {
     + '<span><b>' + ready.length + '</b> ready to bill (' + qbMoney(sum(ready)) + ')</span>'
     + '<span style="' + (exp.length ? 'color:#c0392b;font-weight:700' : '') + '"><b>' + exp.length + '</b> exported, awaiting acceptance (' + qbMoney(sum(exp)) + ')</span>'
     + (req.length ? '<span style="color:#b45309"><b>' + req.length + '</b> requested by the field</span>' : '') + '</div></div>';
+}
+
+// ============================================================================
+// Milestones table inside the work order attributes form (Edit WO Details / New WO)
+// Office/admin on desktop only; mobile keeps just billing type + quoted amount.
+// The table edits a DRAFT in memory. Nothing is written until the work order is saved (saveWO calls
+// qbReadFormFields to validate, then qbPersistDraft once the work order exists).
+// Rules: the LAST row is the final milestone (locked, always the positive remainder of the quote); earlier rows
+// can never use up the whole quote; billed/exported rows are read-only. If the final row is already billed, a
+// new row is added after it and becomes the new final (for a change order).
+// ============================================================================
+QB.draft = null;
+
+function qbDraftActive() { return !!QB.draft && qbIsAdmin() && AppState.deviceMode === 'desktop'; }
+function qbFormQ() { var a = document.getElementById('f-quoted-amount'); var v = a ? parseFloat(a.value) : NaN; return isNaN(v) ? 0 : qbR2(v); }
+function qbFormIsQuoted() { var m = document.getElementById('f-form-mode'); return !!m && m.value === 'quoted'; }
+function qbBlankRow(desc) {
+  return { id: null, description: desc || '', trigger_label: '', amount: '', is_percent: false, percent_value: null, due_date: '', status: 'pending', locked: false, exported: false };
+}
+
+function qbDraftInit(wo) {
+  QB.draft = { woId: wo ? wo.id : null, rows: [], removed: [] };
+  if (wo) {
+    qbMsFor(wo.id).forEach(function(m) {
+      QB.draft.rows.push({ id: m.id, description: m.description || '', trigger_label: m.trigger_label || '', amount: parseFloat(m.amount) || 0,
+        is_percent: !!m.is_percent, percent_value: m.percent_value, due_date: m.due_date || '', status: m.status, locked: qbIsLocked(m), exported: qbIsExported(m), orig: m });
+    });
+  }
+  qbDraftRender();
+}
+
+// Works out every row's amount and the problems with the draft. The last row takes the remainder.
+function qbDraftCalc(Q) {
+  var rows = QB.draft.rows, n = rows.length, amounts = [], errors = [], sumOthers = 0;
+  rows.forEach(function(r, i) {
+    if (i === n - 1) { amounts.push(null); return; }
+    var a = r.locked ? qbR2(r.amount) : (r.is_percent ? qbR2(Q * (parseFloat(r.percent_value) || 0) / 100) : qbR2(r.amount));
+    if (!r.locked) {
+      if (!(a > 0)) errors.push('Milestone ' + (i + 1) + ' needs an amount greater than zero.');
+      if (r.is_percent && !((parseFloat(r.percent_value) || 0) < 100)) errors.push('Milestone ' + (i + 1) + ': a percent must be under 100%.');
+    }
+    amounts.push(a); sumOthers += a;
+  });
+  sumOthers = qbR2(sumOthers);
+  var remaining = 0;
+  if (n) {
+    var fin = rows[n - 1];
+    if (fin.locked) {
+      var tot = qbR2(sumOthers + qbR2(fin.amount));
+      amounts[n - 1] = qbR2(fin.amount); remaining = qbR2(Q - tot);
+      if (remaining !== 0) errors.push('The final milestone is already billed, so the quote and milestones differ by ' + qbMoney(Math.abs(remaining)) + '. Add a milestone for the difference.');
+    } else {
+      remaining = qbR2(Q - sumOthers); amounts[n - 1] = remaining;
+      if (!(remaining > 0)) errors.push('Earlier milestones use up the whole quote (' + qbMoney(Q) + '). Leave something for the final milestone.');
+    }
+  }
+  rows.forEach(function(r, i) { if (!String(r.description || '').trim()) errors.push('Milestone ' + (i + 1) + ' needs a description.'); });
+  return { amounts: amounts, allocated: sumOthers, remaining: remaining, errors: errors };
+}
+
+// Returns the first problem as a message ('' when the draft can be saved)
+function qbDraftError() {
+  if (!qbDraftActive() || !qbFormIsQuoted()) return '';
+  var Q = qbFormQ(), rows = QB.draft.rows;
+  if (!(Q > 0)) return rows.some(function(r){ return !!r.id; }) ? 'The quoted amount can’t be blank while milestones exist.' : '';
+  return qbDraftCalc(Q).errors[0] || '';
+}
+
+function qbDraftAdd() {
+  var d = QB.draft; if (!d) return;
+  var n = d.rows.length;
+  if (!n) d.rows.push(qbBlankRow('Final billing'));
+  else if (d.rows[n - 1].locked) d.rows.push(qbBlankRow(''));      // billed final: the new row becomes the final
+  else d.rows.splice(n - 1, 0, qbBlankRow(''));                      // otherwise it goes before the final row
+  qbDraftRender();
+}
+function qbDraftDel(i) {
+  var d = QB.draft; if (!d) return;
+  var r = d.rows[i]; if (!r || r.locked) return;
+  if (i === d.rows.length - 1) { showToast('The final milestone closes the quote and can’t be deleted'); return; }
+  if (r.id) d.removed.push(r.id);
+  d.rows.splice(i, 1);
+  qbDraftRender();
+}
+function qbDraftSet(i, field, value) {
+  var r = QB.draft && QB.draft.rows[i]; if (!r) return;
+  if (field === 'amount') r.amount = value === '' ? '' : parseFloat(value);
+  else if (field === 'percent_value') r.percent_value = value === '' ? null : parseFloat(value);
+  else r[field] = value;
+  qbDraftRefresh();
+}
+function qbDraftTogglePct(i, on) {
+  var r = QB.draft && QB.draft.rows[i]; if (!r) return;
+  r.is_percent = !!on; r.percent_value = null; r.amount = '';
+  qbDraftRender();
+}
+
+// Updates the totals, computed amounts and message without rebuilding the inputs (keeps the cursor in place)
+function qbDraftRefresh() {
+  if (!qbDraftActive() || !qbFormIsQuoted()) return;
+  var Q = qbFormQ();
+  // Leaving the "enter the quoted amount" hint (or the amount going blank) needs a full render, not a number update
+  if (!(Q > 0) || !document.getElementById('qb-d-totals')) { qbDraftRender(); return; }
+  var d = QB.draft, calc = qbDraftCalc(Q), n = d.rows.length;
+  var t = document.getElementById('qb-d-totals');
+  if (t) t.innerHTML = 'Quote <b>' + qbMoney(Q) + '</b> &middot; allocated ' + qbMoney(calc.allocated) + ' &middot; final milestone <b>' + qbMoney(calc.amounts[n - 1]) + '</b>';
+  var f = document.getElementById('qb-d-fin'); if (f) f.textContent = qbMoney(calc.amounts[n - 1]);
+  d.rows.forEach(function(r, i) { var pc = document.getElementById('qb-d-pc-' + i); if (pc && r.is_percent) pc.textContent = '= ' + qbMoney(calc.amounts[i]); });
+  var e = document.getElementById('qb-d-err');
+  if (e) e.innerHTML = calc.errors.length ? '⚠ ' + escHtml(calc.errors[0]) : '';
+}
+
+function qbDraftRender() {
+  var wrap = document.getElementById('f-milestones-wrap'); if (!wrap) return;
+  if (!qbDraftActive() || !qbFormIsQuoted()) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = '';
+  var d = QB.draft, Q = qbFormQ();
+  var box = 'border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:12px 14px;margin-bottom:12px';
+  if (!(Q > 0)) {
+    wrap.innerHTML = '<div style="' + box + '"><div style="font-size:13px;font-weight:700;margin-bottom:4px">Billing milestones</div>'
+      + '<div style="font-size:12px;color:var(--text-muted)">Enter the quoted amount above to set up milestones.</div></div>';
+    return;
+  }
+  if (!d.rows.length) d.rows.push(qbBlankRow('Final billing'));
+  var n = d.rows.length;
+  var inp = 'font-size:13px;padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius-sm);box-sizing:border-box;width:100%';
+  var out = '<div style="' + box + '"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">'
+    + '<div style="font-size:13px;font-weight:700">Billing milestones</div><div id="qb-d-totals" style="font-size:12px;color:var(--text-muted)"></div></div>'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">The description is both the milestone name and the line that prints on the invoice, with the amount; each row becomes its own invoice. The last row is locked to whatever is left of the quote. Nothing saves until you press Save on this form.</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;font-size:11px;color:var(--text-muted);text-transform:uppercase">'
+    + '<th style="padding:3px 4px;width:24px">#</th><th style="padding:3px 4px">Milestone &amp; invoice line description</th><th style="padding:3px 4px">Trigger</th><th style="padding:3px 4px;width:210px">Amount</th><th style="padding:3px 4px;width:130px">Due</th><th style="width:70px"></th></tr></thead><tbody>';
+  d.rows.forEach(function(r, i) {
+    var isFin = i === n - 1;
+    var cell = 'padding:3px 4px;vertical-align:top;border-top:1px solid var(--border)';
+    var badge = r.id ? qbStatusBadge({ status: r.status, exported_at: r.exported ? 'x' : null }) : '';
+    if (r.locked) {
+      out += '<tr><td style="' + cell + '">' + (i + 1) + '</td><td style="' + cell + '">' + escHtml(r.description) + '</td><td style="' + cell + '">' + escHtml(r.trigger_label || '') + '</td>'
+        + '<td style="' + cell + ';white-space:nowrap">' + qbMoney(r.amount) + (isFin ? ' <span style="font-size:11px;color:var(--text-muted)">🔒 final</span>' : '') + '</td>'
+        + '<td style="' + cell + '">' + (r.due_date ? escHtml(fmtDate(r.due_date)) : '') + '</td><td style="' + cell + '">' + badge + '</td></tr>';
+      return;
+    }
+    var amtCell;
+    if (isFin) {
+      amtCell = '<span id="qb-d-fin" style="font-weight:700"></span> <span style="font-size:11px;color:var(--text-muted)">🔒 remainder</span>';
+    } else {
+      var val = r.is_percent ? (r.percent_value == null ? '' : r.percent_value) : (r.amount === '' ? '' : r.amount);
+      amtCell = '<div style="display:flex;gap:6px;align-items:center"><input type="number" min="0" step="0.01" value="' + escHtml(String(val)) + '" placeholder="' + (r.is_percent ? '%' : '$') + '" style="' + inp + ';width:90px" oninput="qbDraftSet(' + i + ',\'' + (r.is_percent ? 'percent_value' : 'amount') + '\',this.value)">'
+        + '<label style="font-size:11px;white-space:nowrap"><input type="checkbox" ' + (r.is_percent ? 'checked ' : '') + 'onchange="qbDraftTogglePct(' + i + ',this.checked)"> %</label>'
+        + '<span id="qb-d-pc-' + i + '" style="font-size:11px;color:var(--text-muted);white-space:nowrap"></span></div>';
+    }
+    out += '<tr><td style="' + cell + '">' + (i + 1) + '</td>'
+      + '<td style="' + cell + '"><input type="text" value="' + escHtml(r.description) + '" placeholder="e.g. Parts deposit - RTU replacement" style="' + inp + '" oninput="qbDraftSet(' + i + ',\'description\',this.value)"></td>'
+      + '<td style="' + cell + '"><input type="text" value="' + escHtml(r.trigger_label || '') + '" placeholder="Parts ordered, % complete…" style="' + inp + '" oninput="qbDraftSet(' + i + ',\'trigger_label\',this.value)"></td>'
+      + '<td style="' + cell + '">' + amtCell + '</td>'
+      + '<td style="' + cell + '"><input type="date" value="' + escHtml(r.due_date || '') + '" style="' + inp + '" oninput="qbDraftSet(' + i + ',\'due_date\',this.value)"></td>'
+      + '<td style="' + cell + ';text-align:right">' + (isFin ? '' : '<button type="button" onclick="qbDraftDel(' + i + ')" title="Remove this milestone" style="font-size:12px;padding:3px 8px;border:1px solid #c0392b;color:#c0392b;background:none;border-radius:var(--radius-sm);cursor:pointer">Remove</button>') + '</td></tr>';
+  });
+  out += '</tbody></table><div id="qb-d-err" style="font-size:12px;color:#c0392b;font-weight:600;margin-top:6px;min-height:16px"></div>'
+    + '<div style="margin-top:6px"><button type="button" onclick="qbDraftAdd()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;font-weight:600">+ Add milestone</button></div></div>';
+  wrap.innerHTML = out;
+  qbDraftRefresh();
+}
+
+// Writes the draft once the work order has been saved (saveWO calls this with the work order id)
+function qbPersistDraft(woId) {
+  if (!qbDraftActive()) return qbSyncAfterQuoteChange(woId);
+  var wo = qbFindWO(woId), d = QB.draft;
+  if (!wo || !qbIsQuoted(wo) || !(qbQ(wo) > 0)) { QB.draft = null; return Promise.resolve(); }
+  var calc = qbDraftCalc(qbQ(wo)), n = d.rows.length, now = new Date().toISOString(), ops = [];
+  d.removed.forEach(function(id) { ops.push(sb.patch('quoted_invoices', id, { active: false, deleted_at: now, deleted_by: AppState.userEmail })); });
+  d.rows.forEach(function(r, i) {
+    var sort = i + 1, isFin = i === n - 1, pct = !!r.is_percent && !isFin;
+    if (r.id && r.locked) {
+      if (((r.orig && r.orig.sort_order) || 0) !== sort) ops.push(qbPatchMs(r.id, { sort_order: sort }));
+      return;
+    }
+    var f = { description: String(r.description).trim(), trigger_label: String(r.trigger_label || '').trim() || null, amount: calc.amounts[i],
+      is_percent: pct, percent_value: pct ? r.percent_value : null, due_date: r.due_date || null, sort_order: sort };
+    if (r.id) ops.push(qbPatchMs(r.id, f));
+    else ops.push(sb.post('quoted_invoices', Object.assign({ work_order_id: woId, status: 'pending', po_number: wo.po_number || null, created_by: AppState.userEmail, modified_by: AppState.userEmail }, f)));
+  });
+  QB.draft = null;
+  return Promise.all(ops).then(function() { return qbRefreshWO(woId); }).then(function() {
+    if (AppState.currentWO && AppState.currentWO.id === woId) qbRerender();
+    if (QB.loaded) qbLoadAll(true);
+  });
 }
