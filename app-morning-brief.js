@@ -646,7 +646,7 @@ function initEndOfDayDesktop() {
 
 function _eodLoadQueue(container, tech, isDesktop) {
   var today = new Date().toISOString().slice(0, 10);
-  var systemStart = AppState.settings.system_start_date || '2024-01-01';
+  var systemStart = AppState.settings.system_start_date || '2026-07-15';
   Promise.all([
     sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=lte.' + today + '&review_date=gte.' + systemStart + '&order=review_date.desc&select=*'),
     sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=gte.' + systemStart + '&entry_date=lte.' + today + '&active=eq.true&select=hours,entry_date'),
