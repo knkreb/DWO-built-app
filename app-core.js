@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.00';
+const APP_VERSION = '5.01';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1041,13 +1041,13 @@ function renderWODetail(wo) {
     out += '<div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+escHtml(cust)+'</div>';
     out += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">';
     out += '<span class="badge" style="background:'+st.color+';font-size:11px;padding:3px 8px">'+String(wo.status).padStart(2,'0')+' '+st.name+'</span>';
-    out += '<span style="font-size:12px;color:var(--text-muted)">'+(wo.form_mode==='quoted'?'Quoted':'T&M')+'</span>';
+    out += '<span style="font-size:12px;color:var(--text-muted)">'+(wo.form_mode==='quoted'?'Quoted'+(wo.quoted_amount?' $'+parseFloat(wo.quoted_amount).toFixed(2):''):'T&M')+'</span>'+(typeof qbOkChip==='function'?qbOkChip(wo):'');
     if (wo.po_number) out += '<span style="font-size:12px;color:var(--text-muted)">PO: '+escHtml(wo.po_number)+'</span>';
     out += '</div></div>';
   } else {
     // Desktop: full header fields
     out += '<div class="field-group" style="border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px"><div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:15px;font-weight:700;color:var(--header-bg)">'+escHtml(wo.wo_number)+'</span><span style="font-size:15px;font-weight:600">'+escHtml(wo.title||'')+'</span></div><div style="font-size:13px;color:var(--text-muted);margin-top:2px">'+escHtml(cust)+'</div></div>';
-    out += '<div class="field-group"><div class="field-label">Mode</div><div class="field-value">'+(wo.form_mode==='quoted'?'Quoted':'T&M')+'</div></div>';
+    out += '<div class="field-group"><div class="field-label">Billing Type</div><div class="field-value">'+(wo.form_mode==='quoted'?'Quoted'+(wo.quoted_amount?' &middot; $'+parseFloat(wo.quoted_amount).toFixed(2):''):'T&M')+(typeof qbOkChip==='function'?qbOkChip(wo):'')+'</div></div>';
     out += '<div class="field-group"><div class="field-label">Status</div><div class="field-value"><span class="badge" style="background:'+st.color+';font-size:11px;padding:2px 7px">'+String(wo.status).padStart(2,'0')+' '+st.name+'</span></div></div>';
     out += '<div class="field-group"><div class="field-label">PO #</div><div class="field-value">'+(wo.po_number||'---')+'</div></div>';
     if (wo.created_at) out += '<div class="field-group"><div class="field-label">Created</div><div class="field-value">'+fmtDate(wo.created_at)+'</div></div>';
@@ -1129,6 +1129,9 @@ function renderWODetail(wo) {
     }
     out += '</div>';
 
+    /* RETIRED v5.01 — 2026-10-19 — Multi-Bill toggle replaced by Quoted billing milestones (app-quoted-billing.js).
+       T&M bills once at completion; only Quoted work orders split into several bills. The multi_bill column and
+       toggleMultiBill() are kept for now; nothing set the flag in live data.
     // Multi-bill toggle (admin only)
     if (isAdmin) {
       var mbOn=wo.multi_bill;
@@ -1139,6 +1142,7 @@ function renderWODetail(wo) {
         + '</button>'
         + '</div>';
     }
+    */
     // Action buttons
     out += '<button class="save-btn" style="min-height:48px;font-size:15px;margin-top:8px" onclick="AppState.batchStatusMode=false;openStatusSheet()">Save / Change Status</button>';
     if (isAdmin) out += '<button class="save-btn secondary" style="min-height:44px;font-size:14px" onclick="openEditWO()">Edit WO Details</button>';
@@ -1148,6 +1152,7 @@ function renderWODetail(wo) {
   if (AppState.deviceMode === 'desktop') {
     initWODetailSpreadsheet(wo);
   }
+  if (typeof qbAfterDetailRender === 'function') qbAfterDetailRender(wo); // v5.01 quoted billing: completion question + scroll to fix
 }
 
 // STATUS SHEET
@@ -1289,6 +1294,7 @@ function openNewWO() {
   // Note: counter is NOT incremented here — it increments only on successful save
   document.getElementById('f-title').value = '';
   document.getElementById('f-form-mode').value = 'time_materials';
+  if (typeof qbFillFormFields === 'function') qbFillFormFields(null); // v5.01 quoted billing fields
   document.getElementById('f-po-number').value = '';
   document.getElementById('f-work-description').value = '';
   document.getElementById('f-wo-number').value = woNum;
@@ -1391,6 +1397,9 @@ function renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTot
   });
   out += '</div>';
   out += '</div>';
+
+  // QUOTED BILLING PANEL (v5.01, app-quoted-billing.js) — milestones, cost rollup, warnings
+  if (wo.form_mode === 'quoted' && typeof qbPanelHtml === 'function') out += qbPanelHtml(wo, AppState.hoursEntries, AppState.lineItems, isAdmin, isLocked);
 
   // TOTALS + ACTIONS
   out += '<div class="dt-totals-bar">';
@@ -2036,6 +2045,7 @@ function openEditWO() {
   document.getElementById('f-customer-id').value = wo.customer_id||'';
   document.getElementById('f-title').value = wo.title;
   document.getElementById('f-form-mode').value = wo.form_mode;
+  if (typeof qbFillFormFields === 'function') qbFillFormFields(wo); // v5.01 quoted billing fields
   document.getElementById('f-po-number').value = wo.po_number||'';
   document.getElementById('f-work-description').value = wo.work_description||'';
   document.getElementById('f-wo-number').value = wo.wo_number;
@@ -2073,12 +2083,16 @@ function saveWO(saveMode) {
       var custForPO2 = AppState.customers.find(function(c){ return c.id===custId; });
       if (custForPO2 && custForPO2.po_required===true) { updates.flag_needs_po = true; }
     }
+    // v5.01 quoted billing: quoted amount / cost warning, validated against the milestones
+    var _qbErr = (typeof qbReadFormFields === 'function') ? qbReadFormFields(updates, AppState.currentWO) : '';
+    if (_qbErr) { showToast(_qbErr); return; }
     sb.patch('work_orders',AppState.editingWOId, updates)
     .then(function(r){
       if(r.ok){
         var idx2=AppState.workOrders.findIndex(function(w){return w.id===AppState.editingWOId;});
         if(idx2>=0) AppState.workOrders[idx2]=Object.assign({},AppState.workOrders[idx2],updates,{customers:cust});
         AppState.currentWO=AppState.workOrders[idx2>=0?idx2:0];
+        if (typeof qbSyncAfterQuoteChange === 'function') qbSyncAfterQuoteChange(AppState.currentWO.id);
         if(typeof renderDesktopGrid==='function') renderDesktopGrid();
         showToast('Saved');
         goBack(); // exit form
@@ -2094,7 +2108,10 @@ function saveWO(saveMode) {
     var statusEl = document.getElementById('f-status');
     var selectedStatusNum = statusEl ? parseInt(statusEl.value)||defaultStatusNum : defaultStatusNum;
     var newWOFlagPO = autoFlagPO || (!po && custForNewWO && custForNewWO.po_required===true);
-    sb.post('work_orders',{wo_number:woNum,title:title,customer_id:custId,customer_flag:flag,form_mode:formMode,po_number:po||null,purchase_order_id:poTrackedId,work_description:desc||null,status:selectedStatusNum,flag_needs_po:newWOFlagPO||false,flag_needs_po_note:autoFlagPO?'PO required — "need" detected':null,created_by:AppState.userEmail,modified_by:AppState.userEmail})
+    var _qbNew = {};
+    var _qbErrNew = (typeof qbReadFormFields === 'function') ? qbReadFormFields(_qbNew, null) : '';
+    if (_qbErrNew) { showToast(_qbErrNew); return; }
+    sb.post('work_orders',Object.assign({wo_number:woNum,title:title,customer_id:custId,customer_flag:flag,form_mode:formMode,po_number:po||null,purchase_order_id:poTrackedId,work_description:desc||null,status:selectedStatusNum,flag_needs_po:newWOFlagPO||false,flag_needs_po_note:autoFlagPO?'PO required — "need" detected':null,created_by:AppState.userEmail,modified_by:AppState.userEmail},_qbNew))
     .then(function(r){
       if(r.ok&&r.data&&r.data.length){
         // Increment WO counter only after confirmed successful save
@@ -2358,7 +2375,7 @@ function renderDesktopGrid() {
       + '<td>'+escHtml(cust)+'</td>'
       + '<td>'+escHtml(wo.title)+'</td>'
       + '<td><span class="badge" style="background:'+st.color+'">'+String(wo.status).padStart(2,'0')+' '+st.name+'</span></td>'
-      + '<td>'+(wo.form_mode==='quoted'?'Q':'T&M')+'</td>'
+      + '<td>'+(wo.form_mode==='quoted'?'Q':'T&M')+(typeof qbOkChip==='function'?qbOkChip(wo):'')+'</td>'
       + '<td>'+fmtDate(wo.created_at)+'</td>'
       + '<td>'+(wo.completed_at?fmtDate(wo.completed_at):'---')+'</td>'
       + '<td>'+fmtDateWithTime(wo.modified_at)+'</td>'
@@ -5355,6 +5372,8 @@ function renderSettings(containerId) {
   html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Billing Rules</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   html += '<div class="settings-row"><div class="settings-row-label">Minimum billable hours per WO</div><input class="settings-row-input" type="number" step="0.5" min="0" value="'+(AppState.settings.billing_minimum_hours||'2')+'" onchange="saveSetting(\'billing_minimum_hours\',this.value)"></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Advisory only — shown as a warning in Time & Billing Reconciliation before export. Not enforced at save time.</div>';
+  html += '<div class="settings-row"><div class="settings-row-label">Quoted work order cost warning (% of quote)</div><input class="settings-row-input" type="number" step="1" min="0" max="100" value="'+(AppState.settings.quoted_cost_warn_default_pct||'75')+'" onchange="saveSetting(\'quoted_cost_warn_default_pct\',this.value)"></div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Default for every Quoted work order; each work order can override it or turn the early warning off. The overrun at 100% always shows.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Start/end of day travel threshold (min)</div><input class="settings-row-input" type="number" step="5" min="0" value="'+(AppState.settings.billing_travel_threshold_min||'30')+'" onchange="saveSetting(\'billing_travel_threshold_min\',this.value)"></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">First and last drive segments longer than this are flagged in Time & Billing Reconciliation as potential billable travel. Default: 30 minutes.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Tech home site</div>';

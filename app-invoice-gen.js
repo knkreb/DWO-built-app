@@ -35,7 +35,8 @@ function invSetupWarning() {
     + '<b>Setup needed:</b> invoice generation needs ' + missing.join(' and ') + '. Add or restore it in Settings &rarr; Statuses before starting a run.</div>';
 }
 
-function invIsReady(wo) { return wo.active !== false && statusCat(wo.status) === 'completed'; }
+// v5.01: Quoted work orders bill by milestone in the separate Quoted billing workflow (app-quoted-billing.js), never in the T&M run
+function invIsReady(wo) { return wo.active !== false && statusCat(wo.status) === 'completed' && wo.form_mode !== 'quoted'; }
 function invIsActiveCat(wo) { return wo.active !== false && statusCat(wo.status) === 'active'; }
 function invInBatch(wo) { var b = invStatusNum('batch_invoice'); return b != null && wo.active !== false && wo.status === b; }
 
@@ -236,6 +237,9 @@ function initInvoicingPanel() {
       }
     }
   }).then(function() {
+    if (INV_STATE.autoQuoted) { INV_STATE.autoQuoted = false; INV_STATE.view = 'quoted'; } // v5.01: "Bill now" from a milestone
+    if (INV_STATE.view === 'quoted' && typeof qbRefreshView === 'function') return qbRefreshView();
+    if (typeof qbLoadAll === 'function') return qbLoadAll(true).then(function(){ invRender(); });
     invRender();
   });
 }
@@ -243,7 +247,8 @@ function initInvoicingPanel() {
 function invRender() {
   var el = invHost(); if (!el) return;
   var v = INV_STATE.view;
-  if (v === 'review') el.innerHTML = invReviewHtml();
+  if (v === 'quoted' && typeof qbQueueHtml === 'function') el.innerHTML = qbQueueHtml();
+  else if (v === 'review') el.innerHTML = invReviewHtml();
   else if (v === 'scope') el.innerHTML = invScopeHtml();
   else if (v === 'run' && AppState.invRun) el.innerHTML = invRunHtml();
   else el.innerHTML = invEntryHtml();
@@ -281,6 +286,7 @@ function invEntryHtml() {
     }
     out += '<div style="margin-bottom:22px">' + invBtn('Start invoice run', 'invOpenReview()', 'primary', !!invSetupWarning()) + '</div>';
   }
+  if (typeof qbEntryCardHtml === 'function') out += qbEntryCardHtml(); // v5.01 Quoted billing entry
   out += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Related tools</div>'
     + '<div style="display:flex;flex-direction:column;gap:12px;max-width:600px">'
     + '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;background:var(--surface)" onclick="desktopNav(\'reconcile\')">'

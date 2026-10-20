@@ -760,7 +760,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
       </div>
       <div class="form-row"><label class="form-label">Job Title *</label><input type="text" id="f-title" autocomplete="off" placeholder="Brief description of work"></div>
       <div class="form-row-2">
-        <div><label class="form-label">Form Mode *</label><select id="f-form-mode"><option value="time_materials">Time &amp; Materials</option><option value="quoted">Quoted</option></select></div>
+        <div><label class="form-label">Billing Type *</label><select id="f-form-mode" onchange="if(typeof qbOnModeChange==='function')qbOnModeChange()"><option value="time_materials">Time &amp; Materials</option><option value="quoted">Quoted</option></select></div>
         <div>
           <label class="form-label">PO Number <span id="f-po-mode-toggle" style="font-weight:400;font-size:11px;color:var(--header-bg);cursor:pointer;text-decoration:underline" onclick="poFieldToggleMode()">Use PO picker</span></label>
           <input type="text" id="f-po-number" autocomplete="off" placeholder="Optional">
@@ -769,6 +769,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
           </div>
           <input type="hidden" id="f-po-id">
         </div>
+      </div>
+      <div class="form-row-2" id="f-quoted-row" style="display:none">
+        <div><label class="form-label">Quoted Amount ($)</label><input type="number" id="f-quoted-amount" min="0" step="0.01" autocomplete="off" placeholder="Fixed price"></div>
+        <div><label class="form-label">Cost warning at % of quote</label><input type="number" id="f-cost-warn" min="0" max="100" step="1" autocomplete="off" placeholder="Settings default (0 = off)"></div>
       </div>
       <div class="form-row"><label class="form-label">Starting Status</label><select id="f-status"></select></div>
       <div class="form-row"><label class="form-label">Work Description</label><textarea id="f-work-description" autocomplete="off" placeholder="Internal notes"></textarea></div>
@@ -1097,14 +1101,15 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-item:hover{border-color:var(--header-bg)}
 </style>
 <script src="gps-engine.js?v=10"></script>
-<script src="app-morning-brief.js?v=130"></script>
-<script src="app-core.js?v=143"></script>
+<script src="app-morning-brief.js?v=131"></script>
+<script src="app-core.js?v=144"></script>
 <script src="app-sites-travel.js?v=1"></script>
 <script src="app-users.js?v=1"></script>
 <script src="app-alerts.js?v=4"></script>
 <script src="field-travel-log.js?v=131"></script>
 <script src="app-subforms.js?v=114"></script>
-<script src="app-invoice-gen.js?v=5"></script>
+<script src="app-invoice-gen.js?v=6"></script>
+<script src="app-quoted-billing.js?v=1"></script>
 <script src="app-wo-flags.js?v=1"></script>
 <script src="app-po-reminder.js?v=1"></script>
 <script src="app-po-tracker.js?v=2"></script>

@@ -359,6 +359,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += mbSectionCardEnd();
   }
 
+  // Quoted billing card — admin only (v5.01, app-quoted-billing.js)
+  if (AppState.userRole === 'admin' && typeof qbDashboardRender === 'function') {
+    html += mbSectionCardStart('qbilling', 'Quoted Billing', '<span id="mb-badge-qbilling">…</span>', '');
+    html += '<div id="mb-dt-qbilling-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -393,6 +400,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate PO dollar/expiration warnings (admin only)
   if (AppState.userRole === 'admin' && typeof poWarningReminderRender === 'function') poWarningReminderRender('mb-dt-powarn-shell');
+
+  // Populate Quoted billing card (admin only, v5.01)
+  if (AppState.userRole === 'admin' && typeof qbDashboardRender === 'function') qbDashboardRender('mb-dt-qbilling-shell');
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
