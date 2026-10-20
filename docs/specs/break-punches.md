@@ -97,7 +97,7 @@ Add one helper in the new module, for example `netOnClockMin(dayReview, breaks, 
 ## Open questions for Kevin before building
 
 1. (Answered 2026-10-20) Kevin tracks his own time and has a technician record. Users with no technician record are covered by the separate user types spec.
-2. Should an open break **today** raise an alert after some length of time (for example over 2 hours), or only show on the punch card?
+2. (Answered 2026-10-20) No alert for long breaks. An open break today shows only on the punch card with its timer; the payroll alert covers open breaks on previous days only.
 
 ## Suggested build slices (one at a time, Kevin says "okay to build" for each)
 
