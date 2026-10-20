@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.04';
+const APP_VERSION = '5.05';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -5392,7 +5392,7 @@ function renderSettings(containerId) {
   html += '</select></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Used to calculate start/end of day travel distance. Set your home site in Site Manager first.</div>';
   html += '</div></div>';
-  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Purchase Orders</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
+  html += '<div class="settings-block"><div class="settings-block-header open" onclick="toggleSettingsBlock(this)"><span class="settings-block-title">Customer Purchase Orders</span><span class="settings-block-chevron">v</span></div><div class="settings-block-body open">';
   html += '<div class="settings-row"><div class="settings-row-label">Default dollar warning mode</div><select class="settings-row-input" onchange="saveSetting(\'po_default_warning_mode\',this.value)"><option value="percent"'+((AppState.settings.po_default_warning_mode||'percent')==='percent'?' selected':'')+'>% consumed</option><option value="dollar"'+(AppState.settings.po_default_warning_mode==='dollar'?' selected':'')+'>$ remaining</option></select></div>';
   html += '<div class="settings-row"><div class="settings-row-label">Default dollar warning value</div><input class="settings-row-input" type="number" step="0.01" value="'+(AppState.settings.po_default_warning_value||'20')+'" onchange="saveSetting(\'po_default_warning_value\',this.value)"></div>';
   html += '<div class="settings-row"><div class="settings-row-label">Default expiration warning (days)</div><input class="settings-row-input" type="number" step="1" min="0" value="'+(AppState.settings.po_default_expiration_warning_days||'30')+'" onchange="saveSetting(\'po_default_expiration_warning_days\',this.value)"></div>';
