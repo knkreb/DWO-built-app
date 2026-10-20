@@ -226,7 +226,7 @@ function drLoadWeek() {
     .then(function(r) {
       if (!r.ok) { drShowLoadError(); return; }
       DRState.dayReviews = r.data || [];
-      var systemStart = AppState.settings.system_start_date || '2026-01-01';
+      var systemStart = AppState.settings.system_start_date || '2026-07-15';
       sb.get('day_review', '?tech_id=eq.' + DRState.tech + '&review_date=lt.' + startStr + '&review_date=gte.' + systemStart + '&status=neq.accepted&select=id&limit=1')
         .then(function(r2) {
           DRState.unreviewed = r2.ok && r2.data && r2.data.length > 0;

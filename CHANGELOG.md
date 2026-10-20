@@ -87,3 +87,10 @@ Quoted work orders now bill by milestone in their own lightweight workflow. Spec
 - **Fixed (v5.02):** selecting Quoted on the work order form showed only a hint until the work order was saved and reopened; typing the quoted amount now brings up the milestones table immediately.
 - The milestone description column is now labelled **Milestone & invoice line description** (on the work order form and the work order screen) so it is clear that this text is what prints on the invoice line.
 - **Status on the work order form now works the same for New and Edit.** (New WO also no longer offers retired statuses.) It was only filled in for New WO, so Edit showed a blank dropdown (or a stale "06 Work Ready"). Edit now shows the work order's live status; changing it and saving applies the change through the same code as the Status sheet (transition rules, PO lock on cancel, completion checks, completed date). Label changed from "Starting Status" to "Status". New module `app-wo-status-field.js`.
+
+## v5.03 — Fix: settings that silently failed to save
+- **Fixed: System go-live date (and any setting) showed "saved" but was blank after reload.** `saveSetting()` only updated an existing settings row; if the row was missing it changed nothing yet still reported success. It now creates the row when missing and shows an error toast if the save fails. The old function is commented out with a SUPERSEDED note.
+- Data: inserted the missing `system_start_date` row (2026-07-15).
+
+## v5.04 — Matching go-live fallback dates
+- The morning brief and the travel log each had a different built-in fallback for the system go-live date (2024-01-01 and 2026-01-01) used when the setting is empty. Both now fall back to 2026-07-15, the actual go-live date.

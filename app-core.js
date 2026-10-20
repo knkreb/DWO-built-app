@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.02';
+const APP_VERSION = '5.04';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -5568,7 +5568,21 @@ function saveBarcodeFormat(format, enabled) {
   saveSetting('barcode_formats', current.join(','));
 }
 
+/* SUPERSEDED — v5.03 — 2026-10-20 — update-only PATCH silently saved nothing when the settings row did not exist
 function saveSetting(key,value){ sb.patchWhere('settings','key=eq.'+key,{value:String(value)}).then(function(){AppState.settings[key]=String(value);showToast(key.replace(/_/g,' ')+' saved');}); }
+*/
+function saveSetting(key,value){
+  var v=String(value), label=key.replace(/_/g,' ');
+  function done(r){
+    if(r&&r.ok){AppState.settings[key]=v;showToast(label+' saved');}
+    else showToast('Error saving '+label);
+  }
+  sb.patchWhere('settings','key=eq.'+key,{value:v}).then(function(r){
+    // PATCH returns the updated rows; an empty array means the row does not exist yet, so create it
+    if(r.ok&&Array.isArray(r.data)&&r.data.length===0) return sb.post('settings',{key:key,value:v}).then(done);
+    done(r);
+  });
+}
 
 // XLS IMPORTS
 function _ensureXLSX(cb){ if(typeof XLSX!=='undefined'){cb();return;} var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=cb;s.onerror=function(){showToast('Could not load Excel library');};document.head.appendChild(s); }
