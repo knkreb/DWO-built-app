@@ -35,11 +35,13 @@ Observed 2026-10-12: Kevin punched in on mobile; the desktop payroll alert showe
 
 Checked against the live database 2026-10-20: Kevin's admin login IS linked to a technician record (Kevin Reb), and his punches are saved under it (including the open-looking 2026-10-12 punch, 9:00 AM Eastern). So a technician mismatch is not the cause for Kevin's own login. Only the Test Admin login has no technician link.
 
-Leading hypothesis (not confirmed): the surfaces disagree about what "today" is.
+Cause (strongly supported by the data, confirm with the 8 PM test below): the surfaces disagree about what "today" is.
 - Mobile / Field Travel Log (`drTodayStr`) use the **local** date.
 - Desktop Daily Dashboard (`initMorningBriefDesktop`, `dbDesktopPunchIn`, `dashClockOut`, `dashAddBreak` and others in `app-morning-brief.js`) use `new Date().toISOString().slice(0,10)`, which is the **UTC** date.
 - After 8 PM Eastern (EDT; 7 PM in winter) the UTC date is already tomorrow. The punch card looks for a `day_review` row with tomorrow's date and finds none ("Not clocked in today"), while the payroll alert (`review_date < today`) sees the same open punch as an earlier day and flags Missing Clock-out. A reload does not help. This matches the report exactly.
-- To confirm: note the time of day the original symptom was seen (an evening view fits), or after 8 PM Eastern while punched in, check that the desktop card flips to "Not clocked in today".
+- Evidence (2026-10-20): the 2026-10-12 punch row was created 10:31 AM Eastern, dated 10-12, and stayed open until the punch-out at 11:58 PM that night. The payroll alert only lists rows dated before the dashboard's "today", so it could only have listed a row dated 10-12 once the dashboard's "today" had become 10-13, which happens at 8 PM Eastern. So the symptom must have been seen between 8 PM and midnight. All of Kevin's punch rows since 10-01 have the correct date, so the saved data is fine; only the dashboard reading is wrong. The earlier timezone fix covered the Field Travel Log (it reads the timezone setting); the dashboards still use `toISOString()`.
+- The mobile morning brief (`initMorningBrief`, line 43) reads with the same UTC date, so the phone has the same problem after 8 PM.
+- To confirm: while punched in, open the desktop Daily Dashboard after 8 PM Eastern. Expect "Not clocked in today" on the card and a Missing Clock-out alert for today. Do not tap Punch In when it shows; that would create a punch for the wrong date.
 
 Fix (if confirmed): one shared "today in local time" helper used by every punch, break and dashboard query. `new Date().toISOString().slice(0,10)` must not be used to mean today anywhere punch or break dates are read or written (11 places in `app-morning-brief.js` at last count; list them in the diagnosis). Breaks use `review_date` too, so the same helper applies to `day_breaks`.
 
