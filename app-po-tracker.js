@@ -142,7 +142,7 @@ function poRenderPanelBody(containerId) {
   var html = '<div style="margin-bottom:12px"><input type="search" id="po-panel-search" placeholder="Search PO #, description, customer…" value="' + escHtml(q) + '" oninput="poRenderPanelBody(\'' + containerId + '\')" style="width:100%;max-width:360px;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>';
 
   if (!list.length) {
-    html += '<div style="padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:var(--radius)">No purchase orders yet.</div>';
+    html += '<div style="padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:var(--radius)">No customer purchase orders yet.</div>';
     el.innerHTML = html;
     return;
   }
@@ -247,10 +247,13 @@ function poRenderEditForm(po) {
       + '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Pending (live)</span><span>' + poFmtMoney(l.pending) + '</span></div>'
       + '<div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--border);padding-top:4px;margin-top:4px"><span>Remaining</span><span>' + poFmtMoney(poRemaining(po)) + ' (' + Math.round(poRemainingPct(po)) + '%)</span></div>'
       + '</div>';
+    /* MOVED TO app-po-edit.js — v5.05 — 2026-10-20 (replaced by the work orders table, poEditWoTableHtml)
     var bd = poBreakdownFor(po.id).filter(function(b) { return b.status !== 12; });
     if (bd.length) {
       html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Pending from:</div><div style="font-size:12px;margin-bottom:8px">' + bd.map(function(b) { return escHtml(b.wo_number) + ' (' + poFmtMoney(b.wo_total) + ')'; }).join(', ') + '</div>';
     }
+    */
+    html += poEditWoTableHtml(po);
   }
   html += '</div>'; // end dollar fields
 
@@ -263,6 +266,7 @@ function poRenderEditForm(po) {
   html += '</div>';
 
   // Account assignment
+  /* MOVED TO app-po-edit.js — v5.05 — 2026-10-20 (customer search + chips, poEditCustomerPickerHtml)
   html += '<div class="form-row"><label class="form-label">Account(s) *</label>';
   html += '<input type="search" placeholder="Search customers…" oninput="poFilterAccountList(this.value)" style="width:100%;margin-bottom:6px">';
   html += '<div id="po-f-account-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px">';
@@ -271,6 +275,8 @@ function poRenderEditForm(po) {
       + '<input type="checkbox" class="po-acct-chk" value="' + c.id + '"' + (checkedIds.indexOf(c.id) >= 0 ? ' checked' : '') + '> ' + escHtml(getCustName(c)) + '</label>';
   });
   html += '</div></div>';
+  */
+  html += poEditCustomerPickerHtml(checkedIds);
 
   // Lock + create WO — new POs only, per the lock-at-creation decision
   if (isNew) {
@@ -326,7 +332,10 @@ function poSaveForm() {
   var description = document.getElementById('po-f-description').value.trim();
   var type = isNew ? document.getElementById('po-f-type').value : poGet(AppState.poEditingId).po_type;
   if (!poNumber || !description) { showToast('PO number and description are required'); return; }
+  /* SUPERSEDED — v5.05 — 2026-10-20 (checkbox list replaced by the customer picker)
   var acctIds = Array.prototype.slice.call(document.querySelectorAll('.po-acct-chk:checked')).map(function(el) { return el.value; });
+  */
+  var acctIds = poPickedIds();
   if (!acctIds.length) { showToast('Select at least one account'); return; }
 
   var payload = { po_number: poNumber, description: description, modified_by: AppState.userEmail };

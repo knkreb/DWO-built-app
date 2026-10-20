@@ -94,3 +94,11 @@ Quoted work orders now bill by milestone in their own lightweight workflow. Spec
 
 ## v5.04 — Matching go-live fallback dates
 - The morning brief and the travel log each had a different built-in fallback for the system go-live date (2024-01-01 and 2026-01-01) used when the setting is empty. Both now fall back to 2026-07-15, the actual go-live date.
+
+## v5.05 — Customer Purchase Orders: edit screen redesign
+Spec: `docs/specs/po-edit-screen-and-sidebar-rename.md`.
+- Renamed Purchase Orders to **Customer Purchase Orders** everywhere it appears as a label (sidebar, panel heading, Settings block, empty state).
+- PO edit screen: the long customer checkbox list is replaced by a search box with click-to-add and removable chips.
+- PO edit screen: linked work orders now show as a table (WO #, Customer, Description, Status, Amount). Click a row to open the work order. **Unlink** removes a mis-allocated work order from the PO (confirmation first, with a stronger warning for invoiced work orders). Locked work orders keep using Untie.
+- New module `app-po-edit.js`; the old checkbox list and "Pending from" line are commented out in `app-po-tracker.js` with MOVED notes.
+- Database: `po_wo_breakdown` view gains `title` and `customer_id` columns (`supabase/migrations/v5.05_po_wo_breakdown_columns.sql`).
