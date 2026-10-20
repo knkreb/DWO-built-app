@@ -102,3 +102,8 @@ Spec: `docs/specs/po-edit-screen-and-sidebar-rename.md`.
 - PO edit screen: linked work orders now show as a table (WO #, Customer, Description, Status, Amount). Click a row to open the work order. **Unlink** removes a mis-allocated work order from the PO (confirmation first, with a stronger warning for invoiced work orders). Locked work orders keep using Untie.
 - New module `app-po-edit.js`; the old checkbox list and "Pending from" line are commented out in `app-po-tracker.js` with MOVED notes.
 - Database: `po_wo_breakdown` view gains `title` and `customer_id` columns (`supabase/migrations/v5.05_po_wo_breakdown_columns.sql`).
+
+## v5.06 — Bug 17: dashboards use the Settings timezone for "today"
+- Fixed the Daily Dashboard (desktop and mobile Morning Brief) and its punch, break, close-out and end-of-day paths computing "today" from the UTC date, which flips to tomorrow at 8 PM Eastern (7 PM in winter). With a punch still open, the desktop dashboard looked up tomorrow's day_review and showed "Not clocked in today."
+- New `tzTodayStr()` in `app-morning-brief.js` returns today's date in the Settings timezone (falls back to the device date if the zone is invalid). Replaced all 11 UTC "today" lookups in that file. `_eodWeekStart` left as is (parses at local noon, so it cannot shift a day).
+- Not changed (outside this fix, flagged): `app-tasks.js` (3 sites) and the fallback at `field-travel-log.js:4064` still use the UTC date.
