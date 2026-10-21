@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.07';
+const APP_VERSION = '5.08';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -666,15 +666,15 @@ function applyCompanyBranding(name, logo) {
   var headerLogoEl = document.getElementById('header-logo-img');
   if (name) {
     if (titleEl) titleEl.textContent = name;
-    if (headerTitleEl) headerTitleEl.textContent = name;
+    /* v5.08: header is Dynamiq-branded; was: if (headerTitleEl) headerTitleEl.textContent = name; */
   }
   if (logo) {
     if (logoEl) { logoEl.src = logo; logoEl.style.display = 'block'; if(markEl) markEl.style.display='none'; }
-    if (headerLogoEl) { headerLogoEl.src = logo; headerLogoEl.style.display = 'block'; }
+    /* v5.08: header keeps the Dynamiq mark; was: if (headerLogoEl) { headerLogoEl.src = logo; headerLogoEl.style.display = 'block'; } */
   } else {
     if (logoEl) logoEl.style.display = 'none';
     if (markEl) markEl.style.display = '';
-    if (headerLogoEl) headerLogoEl.style.display = 'none';
+    /* v5.08: header keeps the Dynamiq mark; was: if (headerLogoEl) headerLogoEl.style.display = 'none'; */
   }
 }
 
@@ -756,7 +756,7 @@ function showScreen(id) {
 }
 
 function showHeader(show, title, showBack) {
-  title = title || 'ProMech'; showBack = showBack || false;
+  title = title || 'Dynamiq'; showBack = showBack || false;
   var hd = document.getElementById('app-header'); hd.style.display = show ? 'flex' : 'none';
   var _ht = document.getElementById('header-title-text'); if(_ht) _ht.textContent = title;
   document.getElementById('btn-back').style.display = showBack ? '' : 'none';
@@ -776,7 +776,7 @@ function showMainScreen() {
   AppState.screenStack = [];
   resolveUserTechId(); // Set AppState.userTechId once from authenticated email
   var mv = document.getElementById('mobile-version'); if(mv) mv.textContent = 'v' + APP_VERSION;
-  if (AppState.deviceMode === 'desktop') { showScreen('screen-desktop'); showHeader(true,'ProMech',false); initDesktop(); }
+  if (AppState.deviceMode === 'desktop') { showScreen('screen-desktop'); showHeader(true,'Dynamiq',false); initDesktop(); }
   else { showScreen('screen-morning-brief'); showHeader(true,'Daily Dashboard',false); initMorningBrief(); if(typeof initMobileFilters==='function') initMobileFilters(); }
 }
 
@@ -823,15 +823,15 @@ function _goBackImpl() {
   showScreen(prev);
   // Top-level screens reached via hamburger/sidebar nav - no further back, header shows app title only
   var topLevel = ['screen-wo-list','screen-desktop','screen-mobile-truckstock','screen-mobile-timecard','screen-mobile-dailyreview','screen-settings-mobile'];
-  if (prev === 'screen-wo-list') { showHeader(true,'ProMech',false); filterWOList(); }
-  else if (prev === 'screen-desktop') { showHeader(true,'ProMech',false); if (typeof drRefreshHours === 'function') drRefreshHours(); }
+  if (prev === 'screen-wo-list') { showHeader(true,'Dynamiq',false); filterWOList(); }
+  else if (prev === 'screen-desktop') { showHeader(true,'Dynamiq',false); if (typeof drRefreshHours === 'function') drRefreshHours(); }
   else if (prev === 'screen-wo-detail') { showHeader(true, (AppState.currentWO && AppState.currentWO.wo_number) || 'WO', true); renderWODetail(AppState.currentWO); }
   else if (prev === 'screen-mobile-truckstock') { showHeader(true,'Truck Stock',true); renderMobileTSList(); }
   else if (prev === 'screen-mobile-timecard') { showHeader(true,'Timecard',true); renderMobileTimecard(); }
   else if (prev === 'screen-mobile-dailyreview') { showHeader(true,'Field Travel Log',true); if (typeof mdrRefreshHours === 'function') mdrRefreshHours(); }
   else if (prev === 'screen-settings-mobile') { showHeader(true,'Settings',true); }
   else if (prev === 'screen-morning-brief') { showHeader(true,'Daily Dashboard', AppState.screenStack.length > 0); }
-  else { showHeader(true,'ProMech', AppState.screenStack.length>0); }
+  else { showHeader(true,'Dynamiq', AppState.screenStack.length>0); }
 }
 
 function setTheme(t) { AppState.theme=t; document.documentElement.setAttribute('data-theme',t); document.getElementById('btn-theme').textContent=t==='dark'?'Dark':'Light'; localStorage.setItem('dwo_theme',t); }
@@ -880,7 +880,7 @@ function closeHamburger() {
 function hamburgerNav(dest) {
   closeHamburger();
   if (dest==='morningbrief') { AppState.screenStack = []; initMorningBrief(); showScreen('screen-morning-brief'); showHeader(true,'Daily Dashboard',false); }
-  else if (dest==='wo') { showScreen('screen-wo-list'); showHeader(true,'ProMech',false); if(typeof initMobileFilters==='function') initMobileFilters(); filterWOList(); }
+  else if (dest==='wo') { showScreen('screen-wo-list'); showHeader(true,'Dynamiq',false); if(typeof initMobileFilters==='function') initMobileFilters(); filterWOList(); }
   else if (dest==='dailyreview') { initMobileDailyReview(); pushScreen('screen-mobile-dailyreview','Field Travel Log'); }
   else if (dest==='endofday') { initEndOfDay(); pushScreen('screen-end-of-day','End of Day'); }
   else if (dest==='tasks') { initMobileTasks(); pushScreen('screen-mobile-tasks','Tasks'); } // v5.07
@@ -1279,7 +1279,7 @@ function _doSetWOStatus(wo, num, updates, toCat, fromCat) {
       if (AppState.deviceMode === 'mobile') {
         AppState.screenStack = [];
         showScreen('screen-wo-list');
-        showHeader(true, AppState.settings.company_name||'ProMech', false);
+        showHeader(true, 'Dynamiq', false); /* v5.08 was: company_name||'ProMech' */
         filterWOList();
       }
     } else showToast('Error saving status');
@@ -1985,12 +1985,12 @@ function goBackToGrid() {
   // Navigate back to the WO grid — pop screens until we hit the grid
   if (AppState.deviceMode === 'desktop') {
     showScreen('screen-desktop');
-    showHeader(true, AppState.settings.company_name || 'ProMech', false);
+    showHeader(true, 'Dynamiq', false); /* v5.08 was: company_name || 'ProMech' */
     switchDesktopPanel('wo');
   } else {
     // Mobile — pop back to WO list
     showScreen('screen-wo-list');
-    showHeader(true, AppState.settings.company_name || 'ProMech', false);
+    showHeader(true, 'Dynamiq', false); /* v5.08 was: company_name || 'ProMech' */
     filterWOList();
   }
   AppState.screenStack = [];
