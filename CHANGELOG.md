@@ -107,3 +107,12 @@ Spec: `docs/specs/po-edit-screen-and-sidebar-rename.md`.
 - Fixed the Daily Dashboard (desktop and mobile Morning Brief) and its punch, break, close-out and end-of-day paths computing "today" from the UTC date, which flips to tomorrow at 8 PM Eastern (7 PM in winter). With a punch still open, the desktop dashboard looked up tomorrow's day_review and showed "Not clocked in today."
 - New `tzTodayStr()` in `app-morning-brief.js` returns today's date in the Settings timezone (falls back to the device date if the zone is invalid). Replaced all 11 UTC "today" lookups in that file. `_eodWeekStart` left as is (parses at local noon, so it cannot shift a day).
 - Not changed (outside this fix, flagged): `app-tasks.js` (3 sites) and the fallback at `field-travel-log.js:4064` still use the UTC date.
+
+## v5.07 — Mobile UI batch
+Display, layout and menu changes only; no schema or data writes.
+- Mobile hamburger menu: icons removed (Alerts bell kept); "Sites" is now "Sites/Locations"; Customer Invoice Generation removed from the mobile menu (desktop task; its mobile screen never existed, commented out with a MOVED note).
+- Scrolling (Android): the hamburger menu now scrolls; the mobile Daily Dashboard and End of Day shells were clipped (`overflow:hidden`) and now scroll; `#app` uses `100dvh` so the bottom of each screen is not hidden behind the browser bar.
+- Tasks: the Tasks menu item was not wired on mobile. New minimal mobile Tasks screen (`initMobileTasks` in `app-tasks.js`) reuses the dashboard's task cards, claim/complete and quick-add; admin create/edit/delete stays desktop-only.
+- Truck Stock (mobile): the P-number banner ("PO # P26401 — ...") now shows at the top of the entry screen on open and on create, larger text (`showTSBanner`); the mobile list hides processed/cancelled entries (statuses 11, 12, 15, 99) so exported entries clear off the screen. Desktop list keeps full history.
+- Login screen shows the app version (new `app-mobile-ui.js`).
+- Smoke-tested in headless Chromium at 412px: menu, dashboard, End of Day and Tasks all scroll; login shows v5.07; Truck Stock filter and banner pass with mocked data. Not tested on a real Android device.

@@ -183,8 +183,32 @@ function tasksRefreshBrief() {
     initMorningBriefDesktop();
     initTasksPanel();
   } else {
+    // v5.07: if the mobile Tasks screen is the one showing, refresh it instead of the dashboard
+    var mt = document.getElementById('screen-mobile-tasks');
+    if (mt && !mt.classList.contains('hidden')) { initMobileTasks(); return; }
     initMorningBrief();
   }
+}
+
+// ── Mobile Tasks screen (v5.07) ───────────────────────────────
+// Minimal screen: today's date tasks + open location tasks, same cards and
+// claim/complete/add actions as the Daily Dashboard. Admin create/edit/delete stays desktop-only.
+function initMobileTasks() {
+  var shell = document.getElementById('mobile-tasks-shell');
+  if (!shell) return;
+  shell.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted)">Loading...</div>';
+  var today = (typeof tzTodayStr === 'function') ? tzTodayStr() : new Date().toISOString().slice(0, 10);
+  var tech = AppState.userTechId || (typeof MDRState !== 'undefined' && MDRState.tech) || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  Promise.all([
+    sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
+    sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)')
+  ]).then(function(res) {
+    var dateTasks = (res[0].ok ? res[0].data : []) || [];
+    var locTasks  = (res[1].ok ? res[1].data : []) || [];
+    tasksRenderSection(shell, dateTasks, locTasks, tech, true);
+  }).catch(function() {
+    shell.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Could not load tasks</div>';
+  });
 }
 
 // ── mbAddTask override ────────────────────────────────────────
