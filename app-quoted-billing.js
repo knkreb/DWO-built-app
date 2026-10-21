@@ -540,7 +540,7 @@ function qbAskSnooze(woId, msId) {
 function qbGoToInvoicing() {
   if (typeof showScreen === 'function') {
     showScreen('screen-desktop');
-    if (typeof showHeader === 'function') showHeader(true, AppState.settings.company_name || 'ProMech', false);
+    if (typeof showHeader === 'function') showHeader(true, 'Dynamiq', false); /* v5.08 was: company_name || 'ProMech' */
     AppState.screenStack = [];
   }
   desktopNav('invoicing');

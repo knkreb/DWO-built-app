@@ -116,3 +116,14 @@ Display, layout and menu changes only; no schema or data writes.
 - Truck Stock (mobile): the P-number banner ("PO # P26401 — ...") now shows at the top of the entry screen on open and on create, larger text (`showTSBanner`); the mobile list hides processed/cancelled entries (statuses 11, 12, 15, 99) so exported entries clear off the screen. Desktop list keeps full history.
 - Login screen shows the app version (new `app-mobile-ui.js`).
 - Smoke-tested in headless Chromium at 412px: menu, dashboard, End of Day and Tasks all scroll; login shows v5.07; Truck Stock filter and banner pass with mocked data. Not tested on a real Android device.
+
+## v5.08 — Dynamiq Work Order rebrand
+DWO is now Dynamiq Work Order. See `docs/specs/dynamiq-rebrand.md`.
+- New Dynamiq mark (navy hex nut with a D, red speed lines) and brand files in `brand/`; app icons and favicon in `icons/`; new `manifest.webmanifest` (name "Dynamiq Work Order", short name "Dynamiq") linked from `index.html`. The app had no manifest or icons before.
+- Login screen: large Providence Mechanical logo above the form (new vector, `brand/providence-mechanical-logo.svg`), small Dynamiq mark and name at the bottom. The old 80px company logo, wrench mark and company-name heading are commented out with a note. Dark theme shows the Providence logo on a white plate.
+- Header: white Dynamiq mark plus the title; the default title is now "Dynamiq". `applyCompanyBranding` no longer overwrites the header title or logo with the company name and logo (commented out with notes).
+- "ProMech" renamed to "Dynamiq" everywhere users see it: page title, iOS home-screen name, menu heading, mobile and desktop version footers, header title defaults (`showHeader` calls in `app-core.js` and `app-quoted-billing.js`). One code comment in `gps-engine.js` left as is.
+- Printable work-update and pricing reports get a small "Powered by Dynamiq" footer line; the report email text gets the same line under the sign-off. Report branding (company name, logo, address) still comes from Settings.
+- Brand colors saved as CSS variables `--dq-navy` and `--dq-red`.
+- Cache busters bumped: `app-core.js` 153, `app-quoted-billing.js` 5, `app-reports.js` 113.
+- Smoke-tested in headless Chromium: login at 390px and 1280px (light and dark), header, manifest and icon files load, no page errors. Not tested on a real phone, and the report footer needs a real work order to view.

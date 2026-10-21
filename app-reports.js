@@ -335,7 +335,7 @@ function _buildReportHTML(wo, hours, parts, type, toAddrs) {
     }
   }
 
-  out += '<div class="footer">'+companyName+' &nbsp;·&nbsp; Generated '+today+'</div>';
+  out += '<div class="footer">'+companyName+' &nbsp;·&nbsp; Generated '+today+'<br>Powered by Dynamiq</div>';
   out += '</div></body></html>';
   return out;
 }
@@ -348,7 +348,7 @@ function _openReportWindow(html, wo, toAddrs) {
   var subject = encodeURIComponent('Work Order ' + (wo.wo_number||'') + (wo.title ? ' — ' + wo.title : ''));
   var custObj = AppState.customers.find(function(c){return c.id===wo.customer_id;});
   var custName = (wo.customers&&wo.customers.name)||(custObj&&(custObj.display_name||custObj.name))||'';
-  var bodyText = 'Please find the attached report for Work Order '+(wo.wo_number||'')+(custName?' ('+custName+')':'')+'.\r\n\r\nThank you,\r\n'+(AppState.settings.company_name||'');
+  var bodyText = 'Please find the attached report for Work Order '+(wo.wo_number||'')+(custName?' ('+custName+')':'')+'.\r\n\r\nThank you,\r\n'+(AppState.settings.company_name||'')+'\r\n\r\nPowered by Dynamiq';
   var mailtoHref = 'mailto:' + (toAddrs||[]).join(',') + '?subject=' + subject + '&body=' + encodeURIComponent(bodyText);
 
   // Inject an action bar (hidden from print) before </body>
