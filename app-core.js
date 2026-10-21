@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.06';
+const APP_VERSION = '5.07';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -883,6 +883,7 @@ function hamburgerNav(dest) {
   else if (dest==='wo') { showScreen('screen-wo-list'); showHeader(true,'ProMech',false); if(typeof initMobileFilters==='function') initMobileFilters(); filterWOList(); }
   else if (dest==='dailyreview') { initMobileDailyReview(); pushScreen('screen-mobile-dailyreview','Field Travel Log'); }
   else if (dest==='endofday') { initEndOfDay(); pushScreen('screen-end-of-day','End of Day'); }
+  else if (dest==='tasks') { initMobileTasks(); pushScreen('screen-mobile-tasks','Tasks'); } // v5.07
   else if (dest==='timecard') { initMobileTimecard(); pushScreen('screen-mobile-timecard','Timecard'); }
   else if (dest==='truckstock') { initMobileTruckStock(); pushScreen('screen-mobile-truckstock','Truck Stock'); }
   else if (dest==='invoices') { pushScreen('screen-mobile-invoices','Invoices'); }
@@ -4023,7 +4024,8 @@ function initMobileTruckStock() {
 function renderMobileTSList() {
   var el = document.getElementById('screen-mobile-truckstock');
   if (!el) return;
-  var tsWOs = AppState.workOrders.filter(function(w){ return w.title && w.title.indexOf('Truck Stock') === 0 && !w.customer_id; });
+  /* v5.07: hide processed/cancelled entries (exported, invoiced, cancelled) from the mobile list; desktop list keeps full history */
+  var tsWOs = AppState.workOrders.filter(function(w){ return w.title && w.title.indexOf('Truck Stock') === 0 && !w.customer_id && !isProcessedStatus(w.status); });
   var html = '<div style="padding:12px">';
   html += '<button onclick="createTruckStockWO()" style="width:100%;padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;margin-bottom:12px">+ New Truck Stock Entry</button>';
   if (!tsWOs.length) {
@@ -4040,6 +4042,15 @@ function renderMobileTSList() {
   el.innerHTML = html;
 }
 
+// v5.07: show the Truck Stock P-number prominently at the top of the parts screen (used at the supply house)
+function showTSBanner(wo) {
+  var banner = document.getElementById('parts-wo-banner');
+  if (!banner || !wo) return;
+  banner.textContent = 'PO # ' + wo.wo_number + ' \u2014 ' + wo.title;
+  banner.style.display = 'block';
+  banner.style.fontSize = '18px';
+}
+
 function mobileOpenTSWO(id) {
   var wo = AppState.workOrders.find(function(w){ return w.id === id; });
   if (!wo) return;
@@ -4049,6 +4060,7 @@ function mobileOpenTSWO(id) {
     AppState.lineItems = lR.ok ? lR.data||[] : [];
     AppState.hoursEntries = [];
     AppState.quotedLines = [];
+    showTSBanner(wo); // v5.07
     openPartsList();
   });
 }
@@ -4070,8 +4082,11 @@ function openTSWO(id) {
     AppState.lineItems = lR.ok?lR.data||[]:[];
     AppState.hoursEntries=[]; AppState.quotedLines=[];
     // Show WO number prominently as PO reference
+    /* MOVED TO showTSBanner() — v5.07 — 2026-10-21
     var banner = document.getElementById('parts-wo-banner');
     if (banner) { banner.textContent = 'PO # ' + wo.wo_number + ' — ' + wo.title; banner.style.display = 'block'; }
+    */
+    showTSBanner(wo);
     openPartsList();
   });
 }
@@ -4104,6 +4119,7 @@ function createTruckStockWO() {
         AppState.hoursEntries=[]; AppState.lineItems=[]; AppState.quotedLines=[];
         AppState._isTruckStockEntry = true;
         showToast('Created '+woNum+' - use as PO with vendor');
+        showTSBanner(AppState.currentWO); // v5.07
         openPartsList();
       });
     } else showToast('Error creating truck stock WO');
