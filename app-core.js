@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.09';
+const APP_VERSION = '5.10';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1056,6 +1056,7 @@ function renderWODetail(wo) {
     if (wo.work_description) out += '<div class="field-group full-width"><div class="field-label">Notes</div><div class="field-value">'+escHtml(wo.work_description)+'</div></div>';
   }
   out += '</div>';
+  out += (typeof woNteShell==='function' ? woNteShell(wo) : ''); // v5.10 work order NTE block (app-wo-nte.js)
   if (AppState.deviceMode === 'desktop') {
     // DESKTOP: inline spreadsheet layout
     out += renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTotal, creditsTotal, quotedTotal, projected, isAdmin, isLocked, inactiveFlags);
@@ -4312,6 +4313,7 @@ function saveCustomerEdit(custId) {
       var c = AppState.customers.find(function(x){ return x.id===custId; });
       if (c) { c.name=name.trim(); c.display_name=display.trim()||null; c.email=email.trim()||null; c.phone=phone.trim()||null; }
       filterCustomerRows(); showToast('Customer updated');
+      if (c && typeof clAutoLink==='function') clAutoLink(c); // v5.10 link parent from the Parent:Child name
     } else showToast('Error saving customer');
   });
 }
@@ -4340,7 +4342,7 @@ function saveNewCustomer() {
   if(AppState.customers.find(function(c){return c.name===name;})){showToast('Customer already exists');return;}
   sb.post('customers',{name:name,display_name:displayName,email:email||null,phone:phone||null,created_by:AppState.userEmail,modified_by:AppState.userEmail})
   .then(function(r){
-    if(r.ok&&r.data&&r.data.length){AppState.customers=AppState.customers.concat(r.data);AppState.customers.sort(function(a,b){return a.name.localeCompare(b.name);});closeAddCustomerSheet();renderCustomerPanel();showToast('Customer added');}
+    if(r.ok&&r.data&&r.data.length){AppState.customers=AppState.customers.concat(r.data);AppState.customers.sort(function(a,b){return a.name.localeCompare(b.name);});closeAddCustomerSheet();renderCustomerPanel();showToast('Customer added');if(typeof clAutoLink==='function')clAutoLink(r.data[0]);}
     else showToast('Error saving customer');
   });
 }

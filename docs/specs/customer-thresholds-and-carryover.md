@@ -2,7 +2,7 @@
 
 Status: DRAFT from the 2026-10-21 design session with Kevin, updated the same evening with his decisions. Not yet reviewed in full by Kevin. Do not build until Kevin says "okay to build" and names the slice.
 
-Baseline: main at v5.08. Slice 1 is built as v5.09 (PR #10, not yet merged). Nothing else in this spec is built.
+Baseline: main at v5.08. Slice 1 is built as v5.09 and slice 2 (work order NTE, Limits sheet fixes, automatic parent link) as v5.10, both on PR #10 (not yet merged). Nothing else in this spec is built.
 
 ## Why
 Commercial customers limit what Kevin can do on a job: a not-to-exceed (NTE) cap on a diagnostic T&M call, an approval limit, or a dollar line that moves a job from repair and maintenance to capital expense on the customer's books. Kevin tracks this in his head today. With a second technician in the field, a job can run past a limit before anyone notices (example: a $5,500 repair trips a CapEx line). The app should warn live, and give the office a clean way to fix things after the fact.

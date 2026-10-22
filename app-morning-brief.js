@@ -380,6 +380,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += mbSectionCardEnd();
   }
 
+  // NTE warnings card — admin only (v5.10, app-wo-nte.js)
+  if (AppState.userRole === 'admin' && typeof woNteDashRender === 'function') {
+    html += mbSectionCardStart('wonte', 'NTE Warnings', '<span id="mb-badge-wonte">…</span>', '');
+    html += '<div id="mb-dt-wonte-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -417,6 +424,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate Quoted billing card (admin only, v5.01)
   if (AppState.userRole === 'admin' && typeof qbDashboardRender === 'function') qbDashboardRender('mb-dt-qbilling-shell');
+
+  // Populate NTE warnings card (admin only, v5.10)
+  if (AppState.userRole === 'admin' && typeof woNteDashRender === 'function') woNteDashRender('mb-dt-wonte-shell');
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
