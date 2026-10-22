@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.08';
+const APP_VERSION = '5.12';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1056,6 +1056,8 @@ function renderWODetail(wo) {
     if (wo.work_description) out += '<div class="field-group full-width"><div class="field-label">Notes</div><div class="field-value">'+escHtml(wo.work_description)+'</div></div>';
   }
   out += '</div>';
+  out += (typeof woNteShell==='function' ? woNteShell(wo) : ''); // v5.10 work order NTE block (app-wo-nte.js)
+  out += (typeof wocShell==='function' ? wocShell(wo) : ''); // v5.12 CapEx tag and warnings (app-wo-capex.js)
   if (AppState.deviceMode === 'desktop') {
     // DESKTOP: inline spreadsheet layout
     out += renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTotal, creditsTotal, quotedTotal, projected, isAdmin, isLocked, inactiveFlags);
@@ -1762,6 +1764,8 @@ function dtSaveHoursRow(row, wo, eid, isNew, addNext, showPrompt) {
         else { var idx=AppState.hoursEntries.findIndex(function(e){return e.id===eid;}); if(idx>=0) AppState.hoursEntries[idx]=entry; }
       }
       dtFlashSaved(row);
+      if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
+      if (typeof wocRefresh === 'function') wocRefresh(wo.id); // v5.12: CapEx bar follows spend too
       // Replace edit row with read row after brief flash
       setTimeout(function() {
         var e2 = AppState.hoursEntries.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
@@ -1812,6 +1816,8 @@ function dtSavePartsRow(row, wo, eid, isNew, addNext, showPrompt) {
         else { var idx=AppState.lineItems.findIndex(function(e){return e.id===eid;}); if(idx>=0) AppState.lineItems[idx]=entry; }
       }
       dtFlashSaved(row);
+      if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
+      if (typeof wocRefresh === 'function') wocRefresh(wo.id); // v5.12: CapEx bar follows spend too
       setTimeout(function() {
         var e2 = AppState.lineItems.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
         if (e2) row.outerHTML = dtPartsReadRow(e2);
@@ -1843,6 +1849,8 @@ function dtSoftDelete(table, id) {
       else if (row) row.remove();
       dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
       delete AppState.projectedCache[AppState.currentWO.id];
+      if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: deleting a line can move the NTE level back down
+      if (typeof wocRefresh === 'function') wocRefresh(AppState.currentWO.id); // v5.12: CapEx bar follows spend too
       showToast('Deleted');
     } else showToast('Error deleting');
   });
@@ -1858,6 +1866,8 @@ function dtUndoDelete(table, id) {
     if (row && entry) row.outerHTML = (table==='hours_entries') ? dtHoursReadRow(entry) : dtPartsReadRow(entry);
     dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
     delete AppState.projectedCache[AppState.currentWO.id];
+    if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: a restored line counts toward the NTE again
+    if (typeof wocRefresh === 'function') wocRefresh(AppState.currentWO.id); // v5.12: CapEx bar follows spend too
     showToast('Restored');
   });
 }
@@ -4146,12 +4156,15 @@ function filterCustomerRows() {
     var displayVal = dispPref==='name' ? escHtml(c.name) : escHtml(c.display_name||c.name);
     return '<tr style="border-bottom:1px solid var(--border)" id="cust-row-'+c.id+'">'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.name)+'</td>'
-      +'<td style="padding:6px 10px;font-weight:600">'+displayVal+'</td>'
+      /* v5.09 was: +'<td style="padding:6px 10px;font-weight:600">'+displayVal+'</td>' */
+      +'<td style="padding:6px 10px;font-weight:600">'+displayVal+(typeof clRowBadge==='function'?clRowBadge(c):'')+'</td>'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.email||'---')+'</td>'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.phone||'---')+'</td>'
       +'<td style="padding:6px 10px"><button style="background:'+porBg+';color:'+porColor+';border:1px solid '+porColor+';border-radius:4px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer" onclick="cyclePORequired(this.getAttribute(\'data-cid\'),this.getAttribute(\'data-por\'))" data-cid="'+c.id+'" data-por="'+por+'">'+porLabel+'</button></td>'
       +'<td style="padding:6px 8px;display:flex;gap:4px"><button style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer" data-cid2="'+c.id+'" onclick="editCustomerRow(this.getAttribute(\'data-cid2\'))">✎ Edit</button>'
-      +'<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-ccid="'+c.id+'" onclick="openCustomerContactsSheet(this.getAttribute(\'data-ccid\'))">Contacts</button></td>'
+      +'<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-ccid="'+c.id+'" onclick="openCustomerContactsSheet(this.getAttribute(\'data-ccid\'))">Contacts</button>'
+      /* v5.09 was: Contacts button then '</td>' with nothing after it; the Limits button below is new */
+      +(typeof clRowButton==='function'?clRowButton(c):'')+'</td>'
       +'</tr>';
   }).join('');
 }
@@ -4309,6 +4322,7 @@ function saveCustomerEdit(custId) {
       var c = AppState.customers.find(function(x){ return x.id===custId; });
       if (c) { c.name=name.trim(); c.display_name=display.trim()||null; c.email=email.trim()||null; c.phone=phone.trim()||null; }
       filterCustomerRows(); showToast('Customer updated');
+      if (c && typeof clAutoLink==='function') clAutoLink(c); // v5.10 link parent from the Parent:Child name
     } else showToast('Error saving customer');
   });
 }
@@ -4337,7 +4351,7 @@ function saveNewCustomer() {
   if(AppState.customers.find(function(c){return c.name===name;})){showToast('Customer already exists');return;}
   sb.post('customers',{name:name,display_name:displayName,email:email||null,phone:phone||null,created_by:AppState.userEmail,modified_by:AppState.userEmail})
   .then(function(r){
-    if(r.ok&&r.data&&r.data.length){AppState.customers=AppState.customers.concat(r.data);AppState.customers.sort(function(a,b){return a.name.localeCompare(b.name);});closeAddCustomerSheet();renderCustomerPanel();showToast('Customer added');}
+    if(r.ok&&r.data&&r.data.length){AppState.customers=AppState.customers.concat(r.data);AppState.customers.sort(function(a,b){return a.name.localeCompare(b.name);});closeAddCustomerSheet();renderCustomerPanel();showToast('Customer added');if(typeof clAutoLink==='function')clAutoLink(r.data[0]);}
     else showToast('Error saving customer');
   });
 }
