@@ -83,8 +83,8 @@ Reminders:
 When a limit is found blown at data-entry time, the office needs a tool to take one over-limit work order and split its hours and parts lines across two or more work order numbers so each fits its limit. Mechanics not designed yet (see open items). Must write to the audit trail and keep the original work order number traceable.
 
 ## Slices (each needs its own "okay to build")
-1. Parent link and limits settings home. BUILT as v5.09 (PR #10), migration applied, parent link applied to the data. Pending follow-up batch Kevin approved to hold: Limits sheet layout (section titles as headers with the checkbox inline, compact one-line rows, sheet capped at about 620px wide, opening from the top of the screen), parent shown read-only, automatic parent link on new or renamed customers, backfill script synced to the case-insensitive match that was applied.
-2. NTE: work order NTE table and copy-at-creation, work order editor and reset, "apply to open work orders", indicator, alerts, dashboard card.
+1. Parent link and limits settings home. BUILT as v5.09 (PR #10); follow-up batch (compact layout, read-only parent, automatic parent link, backfill script sync) built in v5.10.
+2. NTE: work order NTE table and copy-at-creation, editor and reset, "apply to open work orders", indicator, alerts, dashboard card. BUILT as v5.10 (migration applied).
 3. CapEx threshold and minimum, reusing the slice 2 engine.
 4. Carryover table, admin view, apply to T&M work order.
 5. Quoted work order handling, statuses, quote expiration and revert.
