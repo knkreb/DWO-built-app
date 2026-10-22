@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.08';
+const APP_VERSION = '5.09';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -4146,12 +4146,15 @@ function filterCustomerRows() {
     var displayVal = dispPref==='name' ? escHtml(c.name) : escHtml(c.display_name||c.name);
     return '<tr style="border-bottom:1px solid var(--border)" id="cust-row-'+c.id+'">'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.name)+'</td>'
-      +'<td style="padding:6px 10px;font-weight:600">'+displayVal+'</td>'
+      /* v5.09 was: +'<td style="padding:6px 10px;font-weight:600">'+displayVal+'</td>' */
+      +'<td style="padding:6px 10px;font-weight:600">'+displayVal+(typeof clRowBadge==='function'?clRowBadge(c):'')+'</td>'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.email||'---')+'</td>'
       +'<td style="padding:6px 10px;font-size:13px;color:var(--text-secondary)">'+escHtml(c.phone||'---')+'</td>'
       +'<td style="padding:6px 10px"><button style="background:'+porBg+';color:'+porColor+';border:1px solid '+porColor+';border-radius:4px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer" onclick="cyclePORequired(this.getAttribute(\'data-cid\'),this.getAttribute(\'data-por\'))" data-cid="'+c.id+'" data-por="'+por+'">'+porLabel+'</button></td>'
       +'<td style="padding:6px 8px;display:flex;gap:4px"><button style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer" data-cid2="'+c.id+'" onclick="editCustomerRow(this.getAttribute(\'data-cid2\'))">✎ Edit</button>'
-      +'<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-ccid="'+c.id+'" onclick="openCustomerContactsSheet(this.getAttribute(\'data-ccid\'))">Contacts</button></td>'
+      +'<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-ccid="'+c.id+'" onclick="openCustomerContactsSheet(this.getAttribute(\'data-ccid\'))">Contacts</button>'
+      /* v5.09 was: Contacts button then '</td>' with nothing after it; the Limits button below is new */
+      +(typeof clRowButton==='function'?clRowButton(c):'')+'</td>'
       +'</tr>';
   }).join('');
 }

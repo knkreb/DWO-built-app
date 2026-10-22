@@ -127,3 +127,12 @@ DWO is now Dynamiq Work Order. See `docs/specs/dynamiq-rebrand.md`.
 - Brand colors saved as CSS variables `--dq-navy` and `--dq-red`.
 - Cache busters bumped: `app-core.js` 153, `app-quoted-billing.js` 5, `app-reports.js` 113.
 - Smoke-tested in headless Chromium: login at 390px and 1280px (light and dark), header, manifest and icon files load, no page errors. Not tested on a real phone, and the report footer needs a real work order to view.
+
+## v5.09 — Customer limits, slice 1 (parent link and limits settings)
+- Spec: `docs/specs/customer-thresholds-and-carryover.md`, slice 1. Settings only: no NTE or CapEx warnings, alerts or indicators fire yet (slices 2 and 3).
+- Diagnosed first: `customers.parent_customer_id` (self-referencing FK) already existed but was unused (0 rows set, no code read it), so no new parent column. 96 active customers have QBO "Parent:Child" names.
+- New module `app-customer-limits.js`. Customers screen: a "Limits" button per row (admin only) opens a sheet with an optional parent account picker (one level only; a customer with sites under it cannot get a parent) and the per-customer NTE and CapEx settings (on/off, amount, two warning levels each with percent-or-dollar type, spent-or-remaining direction and value, plus the CapEx minimum to bill as capital). A site with a parent shows "Limits set on the parent" instead. List rows show "PARENT · n" on parents and "↳ parent name" under sites.
+- `app-core.js`: two small hooks in `filterCustomerRows` (original line kept in a comment) and the version bump.
+- New migration `supabase/migrations/v5.09_customer_limits.sql` (new table `customer_thresholds`, admin-only RLS, audit and modified triggers). MUST BE RUN before the Limits sheet works. Additive only.
+- Optional `supabase/migrations/v5.09_customer_parent_backfill.sql`: preview then apply, sets parents from the QBO names (92 customers under 20 parents match; 4 left for hand entry: two "(deleted)" names and the "iHeartmedia" spelling mismatch). Not run automatically.
+- Cache busters: `app-core.js` 154, new `app-customer-limits.js` 1. Syntax-checked with `node --check`; helper logic (parent eligibility, validation, badges) tested with a small script. NOT tested in a browser or against the live database: the migration has not been run.
