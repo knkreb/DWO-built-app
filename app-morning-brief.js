@@ -395,6 +395,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += mbSectionCardEnd();
   }
 
+  // Quotes card — admin only (v5.15, app-quote-tracking.js)
+  if (AppState.userRole === 'admin' && typeof qtDashRender === 'function') {
+    html += mbSectionCardStart('quotes', 'Quotes', '<span id="mb-badge-quotes">…</span>', '');
+    html += '<div id="mb-dt-quotes-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -438,6 +445,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate CapEx watch card (admin only, v5.12)
   if (AppState.userRole === 'admin' && typeof wocDashRender === 'function') wocDashRender('mb-dt-wocapex-shell');
+
+  // Populate quotes card (admin only, v5.15)
+  if (AppState.userRole === 'admin' && typeof qtDashRender === 'function') qtDashRender('mb-dt-quotes-shell');
 
   // NTE badges on the dispatch rows (admin only, v5.11)
   if (typeof woNteBadgesFill === 'function') woNteBadgesFill(body);

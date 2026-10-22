@@ -1,6 +1,6 @@
 # Spec: Quote tracking, and carryover on quoted work orders
 
-Status: DRAFT from the 2026-10-22 design talk with Kevin. Not yet reviewed in full by Kevin. Do not build until Kevin says "okay to build" and names the slice (5a or 5b).
+Status: Slice 5a BUILT as v5.15 (migration written, not yet applied; pending Kevin's test). Slice 5b not authorized: do not build until Kevin says "okay to build" and names it.
 
 Baseline: main at v5.12; PR #12 carries v5.13 (carryover ledger) and v5.14 (edit applications), not yet merged. Related: `customer-thresholds-and-carryover.md` (section 3), `quoted-wo-billing.md`.
 
@@ -39,7 +39,7 @@ New table `quote_tracking`, one row per tracked quoted work order (`work_order_i
 
 ## Open items
 - Does carryover go on quoted work orders for customers with an NTE at all? Assumed yes here (Kevin's own example, P26500 quoted at $2,000 under an NTE, is the origin side); confirm before 5b.
-- A daily database check needs a scheduled job. Check that the Supabase project can run one (pg_cron) before building the alerts; if not, alerts are raised when the dashboard loads and the card and badges still work.
+- Alerts as built (5a): raised on save and when the admin opens the Daily Dashboard. pg_cron is available but not installed; a daily job is written in the migration, commented out, and needs Kevin's OK to enable.
 - Who may mark an outcome: admin only, as written. Say if a tech should be able to.
 - Customers' own quote or approval rules are Kevin's to manage (see the purchasing-rules note in the carryover spec).
 
