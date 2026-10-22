@@ -118,6 +118,7 @@ function qtStop() {
     QT.busy = false;
     if (!r.ok) { showToast(qtErr(r, 'Error saving. Nothing was changed.')); return; }
     showToast('Quote tracking stopped'); qtRefresh(wo.id);
+    if (typeof coRefresh === 'function') coRefresh(wo.id);
   });
 }
 
@@ -207,6 +208,7 @@ function qtFormSave() {
     qtFormClose();
     showToast(f.mode === 'sent' ? 'Quote marked sent' : f.mode === 'accepted' ? 'Quote accepted' : f.mode === 'rejected' ? 'Quote rejected' : 'Quote updated');
     qtRefresh(wo.id);
+    if (typeof coRefresh === 'function') coRefresh(wo.id); // v5.17: accepting / rejecting changes carryover applied to this quote
   });
 }
 
