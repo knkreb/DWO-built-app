@@ -2,7 +2,7 @@
 
 Status: DRAFT from the 2026-10-21 design session with Kevin, updated the same evening with his decisions. Not yet reviewed in full by Kevin. Do not build until Kevin says "okay to build" and names the slice.
 
-Baseline: main at v5.08. Slice 1 is built as v5.09, slice 2 (work order NTE, Limits sheet fixes, automatic parent link) as v5.10, NTE follow-ups as v5.11, and slice 3 (CapEx) as v5.12, all on PR #10 (not yet merged). Nothing else in this spec is built.
+Baseline: main at v5.12 (PR #10 merged 2026-10-22: slice 1 v5.09, slice 2 v5.10, NTE follow-ups v5.11, slice 3 CapEx v5.12). Slice 4 (carryover ledger) is built as v5.13. Nothing else after it in this spec is built.
 
 ## Why
 Commercial customers limit what Kevin can do on a job: a not-to-exceed (NTE) cap on a diagnostic T&M call, an approval limit, or a dollar line that moves a job from repair and maintenance to capital expense on the customer's books. Kevin tracks this in his head today. With a second technician in the field, a job can run past a limit before anyone notices (example: a $5,500 repair trips a CapEx line). The app should warn live, and give the office a clean way to fix things after the fact.
@@ -62,6 +62,15 @@ Work order:
 Built as v5.12 (slice 3): `work_order_capex` table, views `wo_spend` and `wo_capex_status`, alert types `capex_level_1`, `capex_level_2`, `capex_below_min`, `app-wo-capex.js`, and the "CapEx Watch" dashboard card. Not built: a CapEx badge on the Daily Dashboard dispatch rows.
 
 ## 3. Carryover tab
+
+### Slice 4 as built (v5.13; Kevin, 2026-10-22)
+The carryover tab is a LEDGER. It records money left off a job and where it was later applied. **The app never adds a charge to a work order or changes its hours or parts; Kevin adjusts the work order himself.** Example: P26500, full price $2,500, quoted $2,000 to stay under the customer's limit, so $500 goes on carryover referencing P26500. Later $250 is added to open work order P26505 by hand, and $250 is recorded against the $500: balance $250, and the reference "P26500 > P26505" is on record both ways. The entry stays open until the balance reaches $0, then it is resolved.
+- Entry (`carryover`): owner customer (the parent, or the customer itself), originating work order (required, may be quoted), amount, note, who and when. Status `outstanding` / `committed_pending` / `resolved` (all three kept; the database sets it from the balance, `committed_pending` is used when quoted work orders arrive in slice 5).
+- Application (`carryover_allocations`): carryover, work order, amount, note, who and when. A balance can be applied across several work orders. The amount cannot exceed the balance, and the work order must belong to the same customer group (the database enforces both). Applications go on open T&M work orders (active or completed, not quoted).
+- Entered by hand, admin only. Added from the originating work order ("Add carryover"); applications recorded from the work order or from the ledger. Edit and remove are allowed (amount cannot go below what is applied; an entry with applications cannot be removed until they are); everything is audited and removing an application puts the amount back.
+- Where: a "Carryover" button beside "Limits" on the Customers screen opens the ledger for that customer's group. On every work order, admin sees a carryover block: the outstanding balance for the group (the prompt), Add carryover, Record application (open T&M only), what was carried over from this job, and what was applied to it. Nothing here appears on anything customer-facing.
+- Not in this slice: applying to quoted work orders and `committed_pending` flow with quote accepted/rejected/expired (slice 5); snooze, the Daily Dashboard card and the contextual flag beyond the work order block (slice 6).
+
 Purpose: when a job is deliberately quoted or billed under a customer's approval limit, the shorted remainder is tracked so it can be billed on another work order instead of lost. Example: real price $2,200, approval limit $2,000, quoted at $1,950, $250 carried over. Live case: one customer with a $1,700 limit and two jobs of about $2,200 and $2,500.
 
 New standalone table (not columns on customers), one row per carryover event:
@@ -103,13 +112,12 @@ When a limit is found blown at data-entry time, the office needs a tool to take 
 2. NTE: work order NTE table and copy-at-creation, editor and reset, "apply to open work orders", indicator, alerts, dashboard card. BUILT as v5.10 (migration applied).
 2b. NTE follow-ups (Kevin, 2026-10-22, "okay to build"). BUILT as v5.11, see section 1b below.
 3. CapEx tag, threshold and capital minimum, reusing the slice 2 engine. BUILT as v5.12 (Kevin, 2026-10-22, "okay to build"); migration `v5.12_work_order_capex.sql` not yet applied.
-4. Carryover table, admin view, apply to T&M work order.
+4. Carryover ledger: entries and applications by hand, admin view, work order block. BUILT as v5.13 (Kevin, 2026-10-22, "okay to build"); migration `v5.13_carryover.sql`.
 5. Quoted work order handling, statuses, quote expiration and revert.
 6. Dashboard card, contextual flag, snooze.
 7. Split work order cleanup tool.
 
 ## Open items
-- Exact status set for carryover allocations (proposed above; Kevin not yet confirmed).
 - Dashboard card layout and what each row shows.
 - Resolution window and escalation for low-volume customers with no live work order to flag against.
 - Split work order tool mechanics (what moves, how numbers are assigned, PO and invoice effects).

@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.12';
+const APP_VERSION = '5.13';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1058,6 +1058,7 @@ function renderWODetail(wo) {
   out += '</div>';
   out += (typeof woNteShell==='function' ? woNteShell(wo) : ''); // v5.10 work order NTE block (app-wo-nte.js)
   out += (typeof wocShell==='function' ? wocShell(wo) : ''); // v5.12 CapEx tag and warnings (app-wo-capex.js)
+  out += (typeof coShell==='function' ? coShell(wo) : ''); // v5.13 carryover ledger block, admin only (app-carryover.js)
   if (AppState.deviceMode === 'desktop') {
     // DESKTOP: inline spreadsheet layout
     out += renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTotal, creditsTotal, quotedTotal, projected, isAdmin, isLocked, inactiveFlags);

@@ -33,7 +33,8 @@ function clRowBadge(c) {
 }
 function clRowButton(c) {
   if (!clIsAdmin()) return '';
-  return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>';
+  /* v5.13 was: return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>'; */
+  return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>' + (typeof coRowButton === 'function' ? coRowButton(c) : ''); // v5.13: Carryover button next to Limits (app-carryover.js)
 }
 
 // ── Sheet ────────────────────────────────────────────────────────────────
