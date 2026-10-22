@@ -7,6 +7,7 @@
 // Admin only. The entry belongs to the "owner" customer (the parent, or the customer itself), so any site under
 // the same parent can absorb it. Applications go on open T&M work orders (active or completed, not quoted);
 // quoted work orders and committed_pending come in a later slice. Balance and status are kept by the database.
+// v5.14: applications can be edited (amount, note, work order) and removed from the work order block as well as the ledger.
 // Uses wonIsAdmin, wonMoney, wonIsTM, wonOwnerId, wonOpenTMForOwner from app-wo-nte.js (loaded before this file).
 
 var CO = { owner: null, entries: [], allocs: [], busy: false, token: 0, form: null };
@@ -122,7 +123,7 @@ function coAllocLine(a, withRemove) {
   return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;border-top:1px dashed var(--border)">'
     + '<span style="flex:1;min-width:0">Applied to <a href="#" style="color:var(--header-bg);font-weight:600" onclick="coOpenWO(\'' + a.work_order_id + '\');return false">' + escHtml(num || 'work order') + '</a>'
     + ' <b>' + wonMoney(a.amount) + '</b> <span style="color:var(--text-muted)">· ' + escHtml(fmtDate(a.created_at)) + ' · ' + escHtml(coWho(a.created_by)) + (a.note ? ' · ' + escHtml(a.note) : '') + '</span></span>'
-    + (withRemove ? coBtn('Remove', 'var(--danger)', 'coRemoveAlloc(\'' + a.id + '\')') : '') + '</div>';
+    + (withRemove ? coBtn('Edit', 'var(--text-muted)', 'coOpenForm(\'editapp\',\'' + a.id + '\')') + ' ' + coBtn('Remove', 'var(--danger)', 'coRemoveAlloc(\'' + a.id + '\')') : '') + '</div>';
 }
 
 function coEntryHtml(e) {
@@ -194,6 +195,20 @@ function coOpenForm(mode, entryId, woId) {
     h += '<div style="font-size:12px;color:var(--text-muted)">' + wonMoney(e.applied) + ' is already applied, so the amount cannot go below that.</div>'
       + coField('Amount carried over ($)', '<input type="number" min="0" step="0.01" id="cof-amt" value="' + escHtml(String(e.amount)) + '" style="' + CO_IN + '">')
       + coField('Note (optional)', '<input type="text" id="cof-note" value="' + escHtml(e.note || '') + '" style="' + CO_IN + '">');
+  } else if (mode === 'editapp') {
+    var ap = CO.allocs.find(function(x) { return x.id === entryId; }), src = ap ? coEntry(ap.carryover_id) : null;
+    if (!ap || !src) { coFormClose(); showToast('That application is no longer there'); return; }
+    var maxAmt = Math.round(((parseFloat(src.balance) || 0) + (parseFloat(ap.amount) || 0)) * 100) / 100;
+    var ewos = wonOpenTMForOwner(CO.owner).slice();
+    if (!ewos.some(function(w) { return w.id === ap.work_order_id; })) { var cur = coWoById(ap.work_order_id); if (cur) ewos.push(cur); } // keep the current work order even if it is no longer open
+    ewos.sort(function(a, b) { return String(a.wo_number).localeCompare(String(b.wo_number), undefined, { numeric: true }); });
+    title = 'Edit application · ' + (src.label || '');
+    h += '<div style="font-size:12px;color:var(--text-muted)">From <b>' + escHtml(src.label || '') + '</b>. Up to <b>' + wonMoney(maxAmt) + '</b> can go on this application (what is left plus what it holds now). Changing it does not change any work order; adjust the work order itself as needed.</div>'
+      + coField('Applied to work order', '<select id="cof-wo" style="' + CO_IN + '">' + ewos.map(function(w) {
+          return '<option value="' + w.id + '"' + (w.id === ap.work_order_id ? ' selected' : '') + '>' + escHtml(w.wo_number + ' — ' + (w.title || '') + ' (' + (getStatus(w.status).name || '') + ')') + '</option>';
+        }).join('') + '</select>')
+      + coField('Amount applied ($)', '<input type="number" min="0" step="0.01" id="cof-amt" value="' + escHtml(String(ap.amount)) + '" style="' + CO_IN + '">')
+      + coField('Note (optional)', '<input type="text" id="cof-note" value="' + escHtml(ap.note || '') + '" style="' + CO_IN + '">');
   } else {
     var avail = CO.entries.filter(function(x) { return (parseFloat(x.balance) || 0) > 0; });
     if (entryId) avail = avail.filter(function(x) { return x.id === entryId; });
@@ -234,6 +249,13 @@ function coFormSave() {
     req = sb.post('carryover', { customer_id: CO.owner, origin_work_order_id: wo.id, label: wo.wo_number, amount: amt, note: note, created_by: me, modified_by: me });
   } else if (f.mode === 'edit') {
     req = sb.patch('carryover', f.entryId, { amount: amt, note: note, modified_by: me });
+  } else if (f.mode === 'editapp') {
+    var ap = CO.allocs.find(function(x) { return x.id === f.entryId; }), src = ap ? coEntry(ap.carryover_id) : null, newWo = (document.getElementById('cof-wo') || {}).value;
+    if (!ap || !src || !newWo) { coFormErr('That application is no longer there'); return; }
+    var maxAmt = Math.round(((parseFloat(src.balance) || 0) + (parseFloat(ap.amount) || 0)) * 100) / 100;
+    if (amt > maxAmt + 0.004) { coFormErr('That is more than the ' + wonMoney(maxAmt) + ' available on this carryover'); return; }
+    var tgt = coWoById(newWo);
+    req = sb.patch('carryover_allocations', f.entryId, { work_order_id: newWo, amount: amt, note: note, label: (src.label || '') + ' > ' + (tgt ? tgt.wo_number : ''), modified_by: me });
   } else {
     var e = coEntry((document.getElementById('cof-entry') || {}).value), woId = (document.getElementById('cof-wo') || {}).value;
     if (!e || !woId) { coFormErr('Choose the carryover and the work order'); return; }
@@ -246,7 +268,7 @@ function coFormSave() {
     CO.busy = false; if (b) b.disabled = false;
     if (!r.ok) { coFormErr(coErr(r, 'Error saving. Nothing was changed.')); return; }
     coFormClose();
-    showToast(f.mode === 'apply' ? 'Application recorded' : f.mode === 'edit' ? 'Carryover updated' : 'Carryover added');
+    showToast(f.mode === 'apply' ? 'Application recorded' : f.mode === 'editapp' ? 'Application updated' : f.mode === 'edit' ? 'Carryover updated' : 'Carryover added');
     coReloadAll();
   });
 }
@@ -321,7 +343,8 @@ function coDraw(box, wo) {
   });
   applied.forEach(function(a) {
     var src = CO.entries.find(function(e) { return e.id === a.carryover_id; });
-    h += '<div style="font-size:12px;margin-top:5px"><b>' + wonMoney(a.amount) + '</b> carryover applied to this job from ' + escHtml(src ? src.label || '' : '') + ' <span style="color:var(--text-muted)">· ' + escHtml(fmtDate(a.created_at)) + ' · ' + escHtml(coWho(a.created_by)) + '</span></div>';
+    h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin-top:5px"><span style="flex:1;min-width:0"><b>' + wonMoney(a.amount) + '</b> carryover applied to this job from ' + escHtml(src ? src.label || '' : '') + ' <span style="color:var(--text-muted)">· ' + escHtml(fmtDate(a.created_at)) + ' · ' + escHtml(coWho(a.created_by)) + (a.note ? ' · ' + escHtml(a.note) : '') + '</span></span>'
+      + coBtn('Edit', CO_COL, 'coOpenForm(\'editapp\',\'' + a.id + '\')') + coBtn('Remove', 'var(--danger)', 'coRemoveAlloc(\'' + a.id + '\')') + '</div>';
   });
   box.innerHTML = h + '</div>';
 }
