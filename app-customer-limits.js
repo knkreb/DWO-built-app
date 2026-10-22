@@ -337,11 +337,14 @@ function clSave() {
   var err = clValidate(limits);
   if (err) { clErr(err); return; }
   var body = Object.assign({}, limits, { label: clName(c), modified_by: AppState.userEmail });
+  if (CL.saving) return; // v5.16: ignore a second Save tap / Enter while the first is saving (it opened the apply picker twice)
+  CL.saving = true;
   var prevRow = CL.row; // v5.11: the limits as they were before this save, to tell whether the NTE changed
   var req = CL.row
     ? sb.patch('customer_thresholds', CL.row.id, body)
     : sb.post('customer_thresholds', Object.assign({ customer_id: c.id, created_by: AppState.userEmail }, body));
   req.then(function(r) {
+    CL.saving = false;
     if (!r.ok) { clErr('Error saving limits. Nothing was changed.'); return; }
     showToast('Saved');
     closeCustomerLimits();

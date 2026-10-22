@@ -184,3 +184,9 @@ Spec: `docs/specs/quote-tracking-and-quoted-carryover.md`, slice 5a. Migration: 
 - `app-core.js`: `qtShell` hook after `coShell`, two Settings fields (Billing Rules), version 5.15. `app-morning-brief.js`: Quotes card and populate call.
 - Not built: carryover on quoted work orders (slice 5b).
 - Cache busters: `app-core.js` 160, `app-morning-brief.js` 137, new `app-quote-tracking.js` 1. `node --check` passes. Migration run on a scratch local Postgres with stub tables (non-quoted refused, stale and expired alerts, no duplicates, quote_check_all, bad dates refused); screens driven with a stub script. NOT tested in a browser or on the real database.
+
+## v5.16 — Login Enter key, and the double apply-to-open-work-orders prompt
+No database change. Requested by Kevin 2026-10-22.
+- Login: pressing Enter in the password field now signs in. Cause: after any version update the page shows "App updated, please sign in again" and returned early, before the Enter listener was registered, so Enter did nothing until a reload. The listener is now registered before that return (`app-core.js`); the old Enter line is commented out. Ignored while the Sign In button is already working.
+- Double prompt: after one customer Limits save the apply picker could open twice. Cause: `clSave` had no "already saving" guard, so a second tap or Enter sent a second save, and each opened the picker. `app-customer-limits.js`: Save is ignored while a save is in progress. `app-wo-nte.js`: only one picker at a time (a second request while one is loading or open for the same customer is ignored).
+- Version 5.16. Cache busters: `app-core.js` 161, `app-customer-limits.js` 6, `app-wo-nte.js` 3. `node --check` passes. NOT tested in a browser.

@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.15';
+const APP_VERSION = '5.16';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -254,6 +254,12 @@ window.addEventListener('load', function() {
     }
   });
 
+  // v5.16: Enter on the login screen. Registered BEFORE the "App updated" early return below, which used to skip the listener
+  // (so Enter did nothing after every update until the page was reloaded). The old Enter line further down is commented out.
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.isComposing) { var l = document.getElementById('screen-login'); var b = document.getElementById('btn-login'); if (l && !l.classList.contains('hidden') && b && !b.disabled) doLogin(); }
+  });
+
   var storedVersion = localStorage.getItem('dwo_app_version');
   if (storedVersion && storedVersion !== APP_VERSION) {
     sb.signOut().then(function() {
@@ -300,7 +306,7 @@ window.addEventListener('load', function() {
   } else { showScreen('screen-login'); showHeader(false); }
 
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { var l = document.getElementById('screen-login'); if (l && !l.classList.contains('hidden')) doLogin(); }
+    /* v5.16 was: if (e.key === 'Enter') { var l = document.getElementById('screen-login'); if (l && !l.classList.contains('hidden')) doLogin(); } -- moved above the version check */
     if (e.key === 'Escape') { closeStatusSheet(); closeBarcode(); closeCustomerAutocomplete(); }
   });
 });
