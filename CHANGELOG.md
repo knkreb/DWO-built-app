@@ -144,3 +144,11 @@ DWO is now Dynamiq Work Order. See `docs/specs/dynamiq-rebrand.md`.
 - `app-core.js`: NTE block hook in `renderWODetail`, `clAutoLink` calls after add/rename customer, version 5.10. `app-morning-brief.js`: NTE card hook.
 - Backfill of `customers.parent_customer_id` was applied 2026-10-21 by direct SQL, case-insensitive (94 sites under 20 parents); `v5.09_customer_parent_backfill.sql` now matches what was run.
 - Cache busters: `app-core.js` 155, `app-customer-limits.js` 2, new `app-wo-nte.js` 1, `app-morning-brief.js` 134. `node --check` passes on all changed JS; auto-link logic tested with a script. NOT tested in a browser.
+
+## v5.11 — NTE follow-ups from testing v5.10
+Spec: `docs/specs/customer-thresholds-and-carryover.md` section 1b.
+- Live NTE: the work order NTE bar and amber/red toast refresh after each hours or parts row is saved, edited, deleted or restored (`app-core.js` hooks call `woNteRefresh`). Alerts were already raised per row save by the database trigger.
+- Dashboard: admin sees an `NTE n%` badge (amber / red) on each Daily Dashboard dispatch row, desktop and mobile; one `wo_nte_status` lookup per render (`woNteBadgeSlot`, `woNteBadgesFill` in `app-wo-nte.js`; slot and fill hooks in `app-morning-brief.js`).
+- Apply picker: `woNteApplyOpen` now opens a checkbox list of open T&M work orders (spent, status, current NTE state; hand-set ones start unchecked) instead of two confirm boxes; the old function is commented out as SUPERSEDED. After saving a changed customer NTE, `clSave` calls `woNteAfterCustomerSave`, which prompts with the same list.
+- Completed work orders were already screened by the NTE card and alerts; no change.
+- Version 5.11. Cache busters: `app-core.js` 156, `app-morning-brief.js` 135, `app-customer-limits.js` 3, `app-wo-nte.js` 2. `node --check` passes on all changed JS; picker logic (change detection, work order set, spend, jobs) tested with a stub script. NOT tested in a browser. No database changes.

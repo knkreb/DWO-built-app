@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.10';
+const APP_VERSION = '5.11';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1763,6 +1763,7 @@ function dtSaveHoursRow(row, wo, eid, isNew, addNext, showPrompt) {
         else { var idx=AppState.hoursEntries.findIndex(function(e){return e.id===eid;}); if(idx>=0) AppState.hoursEntries[idx]=entry; }
       }
       dtFlashSaved(row);
+      if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
       // Replace edit row with read row after brief flash
       setTimeout(function() {
         var e2 = AppState.hoursEntries.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
@@ -1813,6 +1814,7 @@ function dtSavePartsRow(row, wo, eid, isNew, addNext, showPrompt) {
         else { var idx=AppState.lineItems.findIndex(function(e){return e.id===eid;}); if(idx>=0) AppState.lineItems[idx]=entry; }
       }
       dtFlashSaved(row);
+      if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
       setTimeout(function() {
         var e2 = AppState.lineItems.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
         if (e2) row.outerHTML = dtPartsReadRow(e2);
@@ -1844,6 +1846,7 @@ function dtSoftDelete(table, id) {
       else if (row) row.remove();
       dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
       delete AppState.projectedCache[AppState.currentWO.id];
+      if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: deleting a line can move the NTE level back down
       showToast('Deleted');
     } else showToast('Error deleting');
   });
@@ -1859,6 +1862,7 @@ function dtUndoDelete(table, id) {
     if (row && entry) row.outerHTML = (table==='hours_entries') ? dtHoursReadRow(entry) : dtPartsReadRow(entry);
     dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
     delete AppState.projectedCache[AppState.currentWO.id];
+    if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: a restored line counts toward the NTE again
     showToast('Restored');
   });
 }

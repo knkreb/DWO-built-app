@@ -36,6 +36,14 @@ Settings on the customer account (Customers screen, Limits sheet; built in slice
 - Crossing a level alerts the tech and the office (alerts center).
 - A warning card appears on the Daily Dashboard (confirmed by Kevin 2026-10-12).
 
+## 1b. NTE follow-ups (v5.11)
+Found while testing v5.10 on the Deploy Preview. Admin and tech behavior otherwise as in section 1.
+- **Live NTE bar.** The work order NTE bar and its amber/red toast refresh after each hours or parts row is saved, edited, deleted or restored, not only when the work order is reopened. Spend is still counted in the database, so the bar shows the new level the moment the row saves (not while a row is still being typed). The alerts center was already raised per row save by the database trigger, so it is unchanged.
+- **Dashboard row badge (admin).** Each job on the Daily Dashboard dispatch list (desktop and mobile) shows `NTE n%`, amber at the first level and red at the second, matching the bar. Quoted work orders get none. One lookup of `wo_nte_status` fills all rows.
+- **Completed is screened.** The NTE card and the alerts already include Completed (status category "completed", the last stop before invoicing) and the active statuses; draft, processed and cancelled statuses are not shown on the card. No change.
+- **Apply picker.** A customer NTE reaches an already-open work order only by being applied (the copy happens at creation). After an admin saves a changed NTE on a customer, a prompt offers to apply it now; the existing "Apply saved limits to open work orders" button opens the same list. The list shows every open T&M work order for the customer and its sites (active and Completed statuses, no quoted) with a checkbox, WO number, site, title, status, spent, and what it has now (no NTE, old default, set by hand). No NTE and old default start checked; set by hand starts unchecked. Select all / none; the Apply button shows the count. If the NTE was turned off, the list shows only work orders that have an NTE. Applying creates or updates the work order NTE row, so the database trigger raises the alert for any work order already over. Replaces the two confirm boxes of v5.10.
+- Not built (decided against for now): a one-time backfill across all customers.
+
 ## 2. CapEx threshold
 Customer-level only (not per work order). Per customer settings:
 - CapEx tracking on/off (off by default).
@@ -85,6 +93,7 @@ When a limit is found blown at data-entry time, the office needs a tool to take 
 ## Slices (each needs its own "okay to build")
 1. Parent link and limits settings home. BUILT as v5.09 (PR #10); follow-up batch (compact layout, read-only parent, automatic parent link, backfill script sync) built in v5.10.
 2. NTE: work order NTE table and copy-at-creation, editor and reset, "apply to open work orders", indicator, alerts, dashboard card. BUILT as v5.10 (migration applied).
+2b. NTE follow-ups (Kevin, 2026-10-22, "okay to build"). BUILT as v5.11, see section 1b below.
 3. CapEx threshold and minimum, reusing the slice 2 engine.
 4. Carryover table, admin view, apply to T&M work order.
 5. Quoted work order handling, statuses, quote expiration and revert.

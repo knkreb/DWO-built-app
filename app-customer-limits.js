@@ -335,6 +335,7 @@ function clSave() {
   var err = clValidate(limits);
   if (err) { clErr(err); return; }
   var body = Object.assign({}, limits, { label: clName(c), modified_by: AppState.userEmail });
+  var prevRow = CL.row; // v5.11: the limits as they were before this save, to tell whether the NTE changed
   var req = CL.row
     ? sb.patch('customer_thresholds', CL.row.id, body)
     : sb.post('customer_thresholds', Object.assign({ customer_id: c.id, created_by: AppState.userEmail }, body));
@@ -343,6 +344,7 @@ function clSave() {
     showToast('Saved');
     closeCustomerLimits();
     if (typeof filterCustomerRows === 'function') filterCustomerRows();
+    if (typeof woNteAfterCustomerSave === 'function') woNteAfterCustomerSave(c.id, prevRow, limits); // v5.11: offer to apply a changed NTE to open work orders
   });
 }
 

@@ -1,4 +1,5 @@
 // app-wo-nte.js — Work order NTE (not to exceed): block on the work order, editor, reset to customer default,
+// v5.11: apply-to-open-work-orders picker, prompt after a customer NTE save, dashboard dispatch-row badge,
 // "apply to open work orders" from the customer Limits sheet, and the Daily Dashboard NTE card (v5.10, slice 2)
 // Spec: docs/specs/customer-thresholds-and-carryover.md section 1. DB: supabase/migrations/v5.10_work_order_nte.sql
 // The customer default is COPIED to each T&M work order when it is created (database trigger) and never
@@ -172,6 +173,8 @@ function woNteApplyHtml(custId) {
 }
 function wonApplyMsg(t, bad) { var el = document.getElementById('won-apply-msg'); if (el) { el.textContent = t; el.style.color = bad ? 'var(--danger)' : 'var(--text-muted)'; } }
 
+/* SUPERSEDED v5.11 — 2026-10-22 — v5.10 woNteApplyOpen used two confirm() boxes (counts, then "also replace hand-edited?").
+   Replaced by the picker below (checkbox list, one row per work order). Kept for reference.
 function woNteApplyOpen() {
   var t = CL.row, owner = CL.custId;
   if (!t || !wonIsAdmin()) return;
@@ -206,6 +209,192 @@ function woNteApplyOpen() {
     wonApplyMsg('Applying…');
     jobs.reduce(function(p, j) { return p.then(function() { return j().then(function(x) { if (x.ok) okN++; else badN++; }); }); }, Promise.resolve()).then(function() {
       wonApplyMsg('Updated ' + okN + ' work order' + (okN === 1 ? '' : 's') + (badN ? '. ' + badN + ' failed.' : '.'), !!badN);
+    });
+  });
+}
+*/
+
+// ── v5.11: picker — choose which open work orders get the customer NTE ───
+// Opens from the "Apply saved limits to open work orders" button (uses the saved limits, CL.row) and, as a prompt,
+// right after an admin saves a changed NTE on a customer (uses the values just saved).
+var WONP = { rows: [], t: null, on: false, busy: false };
+
+function wonRateFor(typeId) {
+  var ht = (AppState.hoursTypes || []).find(function(x) { return x.id === typeId; });
+  return parseFloat(AppState.settings && ht && AppState.settings[ht.internal_rate_key]) || 0;
+}
+// Spend the same way the database view counts it: billable hours x Settings rate, plus parts and services, minus vendor credits.
+function wonSpentMap(ids) {
+  var list = ids.join(',');
+  return Promise.all([
+    sb.get('hours_entries', '?work_order_id=in.(' + list + ')&active=eq.true&billable=eq.true&select=work_order_id,hours,hours_type_id&limit=5000'),
+    sb.get('line_items', '?work_order_id=in.(' + list + ')&active=eq.true&select=work_order_id,sell_total,transaction_type&limit=5000')
+  ]).then(function(res) {
+    var m = {}; ids.forEach(function(i) { m[i] = 0; });
+    ((res[0].ok && res[0].data) || []).forEach(function(e) { m[e.work_order_id] = (m[e.work_order_id] || 0) + (parseFloat(e.hours) || 0) * wonRateFor(e.hours_type_id); });
+    ((res[1].ok && res[1].data) || []).forEach(function(e) { var v = parseFloat(e.sell_total) || 0; m[e.work_order_id] = (m[e.work_order_id] || 0) + (e.transaction_type === 'vendor_credit' ? -v : v); });
+    return { ok: !!(res[0].ok && res[1].ok), map: m };
+  });
+}
+
+function wonPickEnsureSheet() {
+  var el = document.getElementById('won-pick-sheet');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'sheet-overlay';
+  el.id = 'won-pick-sheet';
+  el.style.alignItems = 'flex-start';
+  // No click-outside close: a stray click should not dismiss the prompt.
+  el.innerHTML = '<div class="bottom-sheet" style="max-width:720px;margin:0 auto;border-radius:0 0 14px 14px;max-height:94vh;overflow-y:auto"><div class="sheet-header"><h3 id="wonp-title">Open work orders</h3><button class="sheet-close" onclick="wonPickClose()">✕</button></div><div id="wonp-body" style="padding:14px 16px"></div></div>';
+  document.body.appendChild(el);
+  return el;
+}
+function wonPickClose() { var el = document.getElementById('won-pick-sheet'); if (el) el.classList.remove('open'); }
+
+// custId: the customer (parent or standalone) whose saved limits are applied. t: the limits to apply. fromSave: opened by the save prompt.
+function woNteApplyOpen(custId, t, fromSave) {
+  if (!wonIsAdmin()) return;
+  custId = custId || CL.custId; t = t || CL.row;
+  if (!t || !custId) return;
+  var on = !!(t.nte_enabled && t.nte_amount > 0);
+  var wos = wonOpenTMForOwner(custId);
+  if (!wos.length) { if (!fromSave) wonApplyMsg('No open T&M work orders for this customer.'); return; }
+  if (!fromSave) wonApplyMsg('Checking…');
+  var ids = wos.map(function(w) { return w.id; });
+  Promise.all([
+    sb.get('work_order_limits', '?work_order_id=in.(' + ids.join(',') + ')&active=eq.true&select=id,work_order_id,source,nte_enabled,nte_amount'),
+    wonSpentMap(ids)
+  ]).then(function(res) {
+    if (!res[0].ok) { if (!fromSave) wonApplyMsg('Could not read the work orders.', true); else showToast('Could not read the open work orders'); return; }
+    var byWo = {}; (res[0].data || []).forEach(function(x) { byWo[x.work_order_id] = x; });
+    var rows = [];
+    wos.forEach(function(w) {
+      var x = byWo[w.id] || null;
+      if (!on && !(x && x.nte_enabled)) return; // turning off: only work orders that have an NTE to turn off
+      rows.push({ w: w, x: x, state: !x ? 'none' : (x.source === 'manual' ? 'manual' : 'follow'), spent: res[1].ok ? res[1].map[w.id] : null });
+    });
+    if (!rows.length) { if (!fromSave) wonApplyMsg('None of the open work orders has an NTE to turn off.'); return; }
+    if (!fromSave) wonApplyMsg('');
+    rows.sort(function(a, b) { return String(a.w.wo_number).localeCompare(String(b.w.wo_number), undefined, { numeric: true }); });
+    WONP.rows = rows; WONP.t = t; WONP.on = on; WONP.busy = false;
+    wonPickRender(custId, fromSave);
+  });
+}
+
+function wonPickRender(custId, fromSave) {
+  var c = (AppState.customers || []).find(function(x) { return x.id === custId; });
+  var cname = c ? getCustName(c) : '';
+  var t = WONP.t, on = WONP.on;
+  wonPickEnsureSheet().classList.add('open');
+  document.getElementById('wonp-title').textContent = (on ? 'Apply NTE' : 'Turn NTE off') + (cname ? ' · ' + cname : '');
+  var tags = { none: ['No NTE', 'var(--text-muted)'], follow: ['Old default', 'var(--text-muted)'], manual: ['Set by hand', '#b45309'] };
+  var h = '<div style="font-size:13px;margin-bottom:10px">'
+    + (fromSave ? '<strong>Saved.</strong> ' : '')
+    + (on ? 'Apply the new NTE of <strong>' + wonMoney(t.nte_amount) + '</strong> (' + wonLevelText(t) + ') to these open work orders now?'
+          : 'Turn the NTE off on these open work orders?')
+    + '<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Work orders set by hand start unchecked. Tick them to replace their NTE. Spent counts billable hours, parts and services, less vendor credits.</div></div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:8px">'
+    + '<button style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer" onclick="wonPickAll(true)">Select all</button>'
+    + '<button style="font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer" onclick="wonPickAll(false)">Select none</button></div>';
+  h += '<div style="border:1px solid var(--border);border-radius:var(--radius);max-height:52vh;overflow-y:auto">';
+  WONP.rows.forEach(function(r, i) {
+    var cu = (AppState.customers || []).find(function(x) { return x.id === r.w.customer_id; });
+    var tg = tags[r.state];
+    var over = on && r.spent !== null && r.spent > t.nte_amount;
+    var spentTxt = r.spent === null ? '—' : wonMoney(r.spent);
+    var pctTxt = (on && r.spent !== null && t.nte_amount > 0) ? ' (' + Math.round(r.spent / t.nte_amount * 100) + '% of new NTE)' : '';
+    h += '<label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer">'
+      + '<input type="checkbox" id="wonp-c' + i + '" ' + (r.state === 'manual' ? '' : 'checked') + ' onchange="wonPickCount()" style="margin-top:3px;width:18px;height:18px;flex-shrink:0">'
+      + '<span style="flex:1;min-width:0">'
+      + '<span style="font-size:13px;font-weight:600">' + escHtml(r.w.wo_number || '') + '</span> <span style="font-size:13px">' + escHtml(r.w.title || '') + '</span>'
+      + '<span style="display:block;font-size:11px;color:var(--text-muted);margin-top:2px">'
+      + escHtml(cu ? getCustName(cu) : '') + ' · ' + escHtml(getStatus(r.w.status).name || '') + ' · '
+      + '<span style="' + (over ? 'color:#c0392b;font-weight:700' : '') + '">Spent ' + spentTxt + pctTxt + (over ? ' — over' : '') + '</span>'
+      + ' · <span style="color:' + tg[1] + '">' + tg[0] + '</span></span></span></label>';
+  });
+  h += '</div>';
+  h += '<div id="wonp-msg" style="font-size:12px;min-height:16px;margin-top:10px;color:var(--text-muted)"></div>'
+    + '<div style="display:flex;gap:8px;margin-top:6px">'
+    + '<button class="save-btn" id="wonp-apply" style="flex:1" onclick="wonPickApply()">Apply</button>'
+    + '<button id="wonp-skip" style="padding:0 18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:14px" onclick="wonPickClose()">' + (fromSave ? 'Skip' : 'Close') + '</button></div>';
+  document.getElementById('wonp-body').innerHTML = h;
+  wonPickCount();
+}
+function wonLevelText(t) {
+  function one(n) {
+    var k = 'nte_l' + n;
+    if (!t[k + '_enabled']) return 'off';
+    var v = t[k + '_value'], p = t[k + '_type'] === 'percent';
+    return (t[k + '_direction'] === 'remaining' ? (p ? v + '% left' : wonMoney(v) + ' left') : (p ? v + '%' : wonMoney(v)));
+  }
+  return 'levels ' + one(1) + ' / ' + one(2);
+}
+function wonPickAll(flag) { WONP.rows.forEach(function(r, i) { var el = document.getElementById('wonp-c' + i); if (el) el.checked = !!flag; }); wonPickCount(); }
+function wonPickSelected() { return WONP.rows.filter(function(r, i) { var el = document.getElementById('wonp-c' + i); return el && el.checked; }); }
+function wonPickCount() {
+  var n = wonPickSelected().length, b = document.getElementById('wonp-apply'); if (!b) return;
+  b.textContent = n ? 'Apply to ' + n + ' work order' + (n === 1 ? '' : 's') : 'Nothing selected';
+  b.disabled = !n || WONP.busy;
+}
+function wonPickMsg(text, bad) { var el = document.getElementById('wonp-msg'); if (el) { el.textContent = text; el.style.color = bad ? 'var(--danger)' : 'var(--text-muted)'; } }
+
+function wonPickApply() {
+  if (WONP.busy || !wonIsAdmin()) return;
+  var sel = wonPickSelected(); if (!sel.length) return;
+  var t = WONP.t, on = WONP.on;
+  var cols = Object.assign(wonLevelCols(t), { nte_enabled: on, source: 'customer_default', modified_by: AppState.userEmail });
+  if (!on) cols.nte_amount = null;
+  var jobs = [];
+  sel.forEach(function(r) {
+    if (r.x) jobs.push(function() { return sb.patch('work_order_limits', r.x.id, cols); });
+    else if (on) jobs.push(function() { return sb.post('work_order_limits', Object.assign({ work_order_id: r.w.id, label: r.w.wo_number, created_by: AppState.userEmail }, cols)); });
+  });
+  if (!jobs.length) { wonPickMsg('Nothing to change.'); return; }
+  WONP.busy = true; wonPickCount(); wonPickMsg('Applying…');
+  var okN = 0, badN = 0;
+  jobs.reduce(function(p, j) { return p.then(function() { return j().then(function(x) { if (x.ok) okN++; else badN++; }); }); }, Promise.resolve()).then(function() {
+    WONP.busy = false;
+    var txt = 'Updated ' + okN + ' work order' + (okN === 1 ? '' : 's') + (badN ? '. ' + badN + ' failed.' : '.');
+    wonApplyMsg(txt, !!badN);
+    if (badN) { wonPickMsg(txt, true); wonPickCount(); return; }
+    wonPickClose(); showToast(txt);
+    var cur = AppState.currentWO; if (cur && typeof woNteRefresh === 'function') woNteRefresh(cur.id);
+  });
+}
+
+// Called by clSave (app-customer-limits.js) after a customer's limits are saved. Prompts only when the NTE actually changed.
+function woNteAfterCustomerSave(custId, prev, limits) {
+  if (!wonIsAdmin() || !limits) return;
+  var wasOn = !!(prev && prev.nte_enabled && prev.nte_amount > 0), isOn = !!(limits.nte_enabled && limits.nte_amount > 0);
+  if (!wasOn && !isOn) return;
+  var changed = wasOn !== isOn;
+  if (!changed) {
+    ['nte_amount', 'nte_l1_value', 'nte_l2_value'].forEach(function(k) { if ((parseFloat(prev[k]) || 0) !== (parseFloat(limits[k]) || 0)) changed = true; });
+    ['nte_l1_enabled', 'nte_l2_enabled'].forEach(function(k) { if (!!prev[k] !== !!limits[k]) changed = true; });
+    ['nte_l1_type', 'nte_l1_direction', 'nte_l2_type', 'nte_l2_direction'].forEach(function(k) { if (String(prev[k] || '') !== String(limits[k] || '')) changed = true; });
+  }
+  if (changed) woNteApplyOpen(custId, limits, true);
+}
+
+// ── v5.11: NTE badge on the Daily Dashboard dispatch rows (admin) ────────
+// The row renderers in app-morning-brief.js drop a slot next to each work order title; one lookup fills them all.
+function woNteBadgeSlot(woId, isQuoted) {
+  if (!wonIsAdmin() || isQuoted || !woId) return '';
+  return ' <span class="won-badge-slot" data-wo="' + woId + '"></span>';
+}
+function woNteBadgesFill(root) {
+  if (!wonIsAdmin()) return;
+  var slots = (root || document).querySelectorAll('.won-badge-slot');
+  if (!slots.length) return;
+  var seen = {}, ids = [];
+  slots.forEach(function(el) { var id = el.getAttribute('data-wo'); if (id && !seen[id]) { seen[id] = true; ids.push(id); } });
+  sb.get('wo_nte_status', '?level=gte.1&work_order_id=in.(' + ids.join(',') + ')&select=work_order_id,level,pct_used').then(function(r) {
+    if (!r.ok) return;
+    var map = {}; (r.data || []).forEach(function(x) { map[x.work_order_id] = x; });
+    slots.forEach(function(el) {
+      var st = map[el.getAttribute('data-wo')]; if (!st) return;
+      var col = st.level >= 2 ? '#c0392b' : '#e67e22';
+      el.innerHTML = '<span title="' + (st.level >= 2 ? 'NTE limit reached' : 'Approaching the NTE') + '" style="font-size:10px;font-weight:700;color:' + col + ';background:' + col + '18;border:1px solid ' + col + ';border-radius:3px;padding:1px 5px;white-space:nowrap">NTE ' + Math.round(st.pct_used) + '%</span>';
     });
   });
 }

@@ -151,7 +151,7 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
       var notesHtml = d.notes ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic">' + escHtml(d.notes) + '</div>' : '';
       html += '<div class="mb-dispatch-card" data-wo-id="' + d.work_order_id + '" data-dispatch-id="' + d.id + '" style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ' + borderColor + ';border-radius:0 var(--radius) var(--radius) 0;padding:10px 12px;margin-bottom:6px;cursor:pointer">';
       html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-      html += '<div style="font-size:13px;font-weight:600;color:var(--text-primary)">' + escHtml(wo.wo_number || '') + ' &#8212; ' + escHtml(wo.title || '') + '</div>';
+      html += '<div style="font-size:13px;font-weight:600;color:var(--text-primary)">' + escHtml(wo.wo_number || '') + ' &#8212; ' + escHtml(wo.title || '') + (typeof woNteBadgeSlot === 'function' ? woNteBadgeSlot(d.work_order_id, isQuoted) : '') + '</div>'; /* v5.11: NTE badge slot (admin) */
       html += '<div style="display:flex;gap:4px;align-items:center">' + quotedBadge;
       html += '<button class="mb-remove-btn" data-id="' + d.id + '" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;padding:0 2px">&times;</button>';
       html += '</div></div>';
@@ -173,6 +173,7 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
 
   html += '</div>';
   shell.innerHTML = html;
+  if (typeof woNteBadgesFill === 'function') woNteBadgesFill(shell); // v5.11: NTE badges on today's job rows (admin)
 
   // Event delegation for dispatch section
   shell.addEventListener('click', function(e) {
@@ -344,7 +345,7 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
         var notesHtml = d.notes ? '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:2px">' + escHtml(d.notes) + '</div>' : '';
         html += '<div class="mb-dt-dispatch" data-wo-id="' + d.work_order_id + '" data-dispatch-id="' + d.id + '" style="background:var(--surface);border:1px solid var(--border);border-left:4px solid ' + borderColor + ';border-radius:0 var(--radius) var(--radius) 0;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">';
         html += '<div style="flex:1;cursor:pointer" class="mb-dt-wo-link">';
-        html += '<div style="font-size:13px;font-weight:600">' + escHtml(wo.wo_number || '') + ' &#8212; ' + escHtml(wo.title || '') + ' ' + quotedBadge + '</div>';
+        html += '<div style="font-size:13px;font-weight:600">' + escHtml(wo.wo_number || '') + ' &#8212; ' + escHtml(wo.title || '') + ' ' + quotedBadge + (typeof woNteBadgeSlot === 'function' ? woNteBadgeSlot(d.work_order_id, isQuoted) : '') + '</div>'; /* v5.11: NTE badge slot (admin) */
         html += '<div style="font-size:12px;color:var(--text-secondary)">' + escHtml(custName) + '</div>';
         html += notesHtml;
         html += '</div>';
@@ -427,6 +428,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate NTE warnings card (admin only, v5.10)
   if (AppState.userRole === 'admin' && typeof woNteDashRender === 'function') woNteDashRender('mb-dt-wonte-shell');
+
+  // NTE badges on the dispatch rows (admin only, v5.11)
+  if (typeof woNteBadgesFill === 'function') woNteBadgesFill(body);
 
   // Populate bug reports section (admin only)
   if (AppState.userRole === 'admin' && typeof loadBugReports === 'function') {
