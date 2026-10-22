@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.11';
+const APP_VERSION = '5.12';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -1057,6 +1057,7 @@ function renderWODetail(wo) {
   }
   out += '</div>';
   out += (typeof woNteShell==='function' ? woNteShell(wo) : ''); // v5.10 work order NTE block (app-wo-nte.js)
+  out += (typeof wocShell==='function' ? wocShell(wo) : ''); // v5.12 CapEx tag and warnings (app-wo-capex.js)
   if (AppState.deviceMode === 'desktop') {
     // DESKTOP: inline spreadsheet layout
     out += renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTotal, creditsTotal, quotedTotal, projected, isAdmin, isLocked, inactiveFlags);
@@ -1764,6 +1765,7 @@ function dtSaveHoursRow(row, wo, eid, isNew, addNext, showPrompt) {
       }
       dtFlashSaved(row);
       if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
+      if (typeof wocRefresh === 'function') wocRefresh(wo.id); // v5.12: CapEx bar follows spend too
       // Replace edit row with read row after brief flash
       setTimeout(function() {
         var e2 = AppState.hoursEntries.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
@@ -1815,6 +1817,7 @@ function dtSavePartsRow(row, wo, eid, isNew, addNext, showPrompt) {
       }
       dtFlashSaved(row);
       if (typeof woNteRefresh === 'function') woNteRefresh(wo.id); // v5.11: live NTE bar and toast, one refresh per saved row
+      if (typeof wocRefresh === 'function') wocRefresh(wo.id); // v5.12: CapEx bar follows spend too
       setTimeout(function() {
         var e2 = AppState.lineItems.find(function(e){return e.id===(isNew?(r.data&&r.data[0]&&r.data[0].id):eid);});
         if (e2) row.outerHTML = dtPartsReadRow(e2);
@@ -1847,6 +1850,7 @@ function dtSoftDelete(table, id) {
       dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
       delete AppState.projectedCache[AppState.currentWO.id];
       if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: deleting a line can move the NTE level back down
+      if (typeof wocRefresh === 'function') wocRefresh(AppState.currentWO.id); // v5.12: CapEx bar follows spend too
       showToast('Deleted');
     } else showToast('Error deleting');
   });
@@ -1863,6 +1867,7 @@ function dtUndoDelete(table, id) {
     dtRefreshSectionMeta(table==='hours_entries'?'hours':'parts');
     delete AppState.projectedCache[AppState.currentWO.id];
     if (typeof woNteRefresh === 'function') woNteRefresh(AppState.currentWO.id); // v5.11: a restored line counts toward the NTE again
+    if (typeof wocRefresh === 'function') wocRefresh(AppState.currentWO.id); // v5.12: CapEx bar follows spend too
     showToast('Restored');
   });
 }

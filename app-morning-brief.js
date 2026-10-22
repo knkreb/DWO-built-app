@@ -388,6 +388,13 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
     html += mbSectionCardEnd();
   }
 
+  // CapEx watch card — admin only (v5.12, app-wo-capex.js)
+  if (AppState.userRole === 'admin' && typeof wocDashRender === 'function') {
+    html += mbSectionCardStart('wocapex', 'CapEx Watch', '<span id="mb-badge-wocapex">…</span>', '');
+    html += '<div id="mb-dt-wocapex-shell"></div>';
+    html += mbSectionCardEnd();
+  }
+
   // Feature Req/Bugs section card — admin only, loaded after render
   if (AppState.userRole === 'admin') {
     html += mbSectionCardStart('bugreports', 'Feature Req/Bugs', '<span id="mb-badge-bugreports">…</span>', '');
@@ -428,6 +435,9 @@ function renderMorningBriefDesktop(body, dispatches, dateTasks, locTasks, today,
 
   // Populate NTE warnings card (admin only, v5.10)
   if (AppState.userRole === 'admin' && typeof woNteDashRender === 'function') woNteDashRender('mb-dt-wonte-shell');
+
+  // Populate CapEx watch card (admin only, v5.12)
+  if (AppState.userRole === 'admin' && typeof wocDashRender === 'function') wocDashRender('mb-dt-wocapex-shell');
 
   // NTE badges on the dispatch rows (admin only, v5.11)
   if (typeof woNteBadgesFill === 'function') woNteBadgesFill(body);

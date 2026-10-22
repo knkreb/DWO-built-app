@@ -2,7 +2,7 @@
 
 Status: DRAFT from the 2026-10-21 design session with Kevin, updated the same evening with his decisions. Not yet reviewed in full by Kevin. Do not build until Kevin says "okay to build" and names the slice.
 
-Baseline: main at v5.08. Slice 1 is built as v5.09 and slice 2 (work order NTE, Limits sheet fixes, automatic parent link) as v5.10, both on PR #10 (not yet merged). Nothing else in this spec is built.
+Baseline: main at v5.08. Slice 1 is built as v5.09, slice 2 (work order NTE, Limits sheet fixes, automatic parent link) as v5.10, NTE follow-ups as v5.11, and slice 3 (CapEx) as v5.12, all on PR #10 (not yet merged). Nothing else in this spec is built.
 
 ## Why
 Commercial customers limit what Kevin can do on a job: a not-to-exceed (NTE) cap on a diagnostic T&M call, an approval limit, or a dollar line that moves a job from repair and maintenance to capital expense on the customer's books. Kevin tracks this in his head today. With a second technician in the field, a job can run past a limit before anyone notices (example: a $5,500 repair trips a CapEx line). The app should warn live, and give the office a clean way to fix things after the fact.
@@ -44,14 +44,22 @@ Found while testing v5.10 on the Deploy Preview. Admin and tech behavior otherwi
 - **Apply picker.** A customer NTE reaches an already-open work order only by being applied (the copy happens at creation). After an admin saves a changed NTE on a customer, a prompt offers to apply it now; the existing "Apply saved limits to open work orders" button opens the same list. The list shows every open T&M work order for the customer and its sites (active and Completed statuses, no quoted) with a checkbox, WO number, site, title, status, spent, and what it has now (no NTE, old default, set by hand). No NTE and old default start checked; set by hand starts unchecked. Select all / none; the Apply button shows the count. If the NTE was turned off, the list shows only work orders that have an NTE. Applying creates or updates the work order NTE row, so the database trigger raises the alert for any work order already over. Replaces the two confirm boxes of v5.10.
 - Not built (decided against for now): a one-time backfill across all customers.
 
-## 2. CapEx threshold
-Customer-level only (not per work order). Per customer settings:
-- CapEx tracking on/off (off by default).
-- CapEx threshold dollar amount (the line where a job becomes capital expense for that customer).
-- Two warning levels like NTE (defaults 75% and 100%), meaning "approaching the point where this must be split into more than one work order, or get approval to continue as a CapEx job."
-- CapEx minimum dollar amount: some customers have a separate account used for capital billing. A work order billed to that account must meet a minimum amount; below it, flag or block (flag vs block is open).
+## 2. CapEx threshold, tag and capital minimum
+Decisions (Kevin, 2026-10-22): CapEx is a tag on the work order, set by hand by admin. It is how a job is tracked as capital expense. Some customers only capitalize a job once it reaches a dollar amount, and below that the job has to be billed as repair and maintenance (R&M). Only Simon has a separate "capital projects" account today.
 
-Behavior: warns only. It never stops work. Same indicator, alerts and Daily Dashboard card pattern as NTE; reuse one warning engine and one dashboard card family, with separate settings and separate wording.
+Customer settings (customer level, parent-aware, built in v5.09, read live and not copied to work orders):
+- CapEx tracking on/off (off by default).
+- CapEx threshold dollar amount with two warning levels like NTE (defaults 75% / 100%).
+- Capital minimum dollar amount (on/off plus amount).
+
+Work order:
+- CapEx tag: a per-work-order flag, set and removed by hand by admin. Everyone sees the CapEx badge on a tagged work order. T&M work orders only.
+- Untagged work order of a customer with the threshold on: the levels warn that it is nearing the capital line ("split the work, or tag it CapEx"). Admin sees the bar; alerts and the dashboard card are for the office. A tagged work order gets no threshold warnings (it is already CapEx).
+- Tagged work order, customer minimum on: when the work order reaches Completed (status category completed, before invoicing) and its spend is under the minimum, it is flagged "below the capital minimum: bill as repair and maintenance, or remove the tag". The check runs at Completed, not on every save, because a job in progress is under the minimum until it grows. Flag, not block.
+- Warns only. It never stops work.
+- Measured per work order (billable hours x Settings rate, plus parts and services, minus vendor credits: the same spend as NTE). Combining several work orders on one job is deferred.
+
+Built as v5.12 (slice 3): `work_order_capex` table, views `wo_spend` and `wo_capex_status`, alert types `capex_level_1`, `capex_level_2`, `capex_below_min`, `app-wo-capex.js`, and the "CapEx Watch" dashboard card. Not built: a CapEx badge on the Daily Dashboard dispatch rows.
 
 ## 3. Carryover tab
 Purpose: when a job is deliberately quoted or billed under a customer's approval limit, the shorted remainder is tracked so it can be billed on another work order instead of lost. Example: real price $2,200, approval limit $2,000, quoted at $1,950, $250 carried over. Live case: one customer with a $1,700 limit and two jobs of about $2,200 and $2,500.
@@ -94,7 +102,7 @@ When a limit is found blown at data-entry time, the office needs a tool to take 
 1. Parent link and limits settings home. BUILT as v5.09 (PR #10); follow-up batch (compact layout, read-only parent, automatic parent link, backfill script sync) built in v5.10.
 2. NTE: work order NTE table and copy-at-creation, editor and reset, "apply to open work orders", indicator, alerts, dashboard card. BUILT as v5.10 (migration applied).
 2b. NTE follow-ups (Kevin, 2026-10-22, "okay to build"). BUILT as v5.11, see section 1b below.
-3. CapEx threshold and minimum, reusing the slice 2 engine.
+3. CapEx tag, threshold and capital minimum, reusing the slice 2 engine. BUILT as v5.12 (Kevin, 2026-10-22, "okay to build"); migration `v5.12_work_order_capex.sql` not yet applied.
 4. Carryover table, admin view, apply to T&M work order.
 5. Quoted work order handling, statuses, quote expiration and revert.
 6. Dashboard card, contextual flag, snooze.
@@ -105,10 +113,9 @@ When a limit is found blown at data-entry time, the office needs a tool to take 
 - Dashboard card layout and what each row shows.
 - Resolution window and escalation for low-volume customers with no live work order to flag against.
 - Split work order tool mechanics (what moves, how numbers are assigned, PO and invoice effects).
-- CapEx minimum: flag or hard block?
 - Work order NTE: when the customer on an existing work order is changed, re-copy the new customer's default, or ask first? And should raising a work order's NTE ask for a reason?
 - Whether carryover applies to quoted work orders on NTE accounts at all.
-- Where thresholds are measured for CapEx: work order total, or the sum across work orders on the same job (not discussed).
+- Combining work orders on one job (for CapEx measurement and elsewhere): later, Kevin 2026-10-22.
 - Kevin to confirm each customer's purchasing rules allow splitting work to stay under an approval limit. If a customer's contract or policy requires approval above a limit, structuring invoices to avoid it is a customer relationship and compliance question, not only a software one.
 
 ## Files touched (proposed)

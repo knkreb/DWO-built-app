@@ -196,7 +196,8 @@ function clLimitsHtml() {
     + clLevelHtml('nte', 1) + clLevelHtml('nte', 2)
     + (typeof woNteApplyHtml === 'function' ? woNteApplyHtml(CL.custId) : '') + '</div>';
   h += '<div style="' + CL_BOX + '">' + clSectionHead('cl-cap-en', clD('capex_enabled', false), 'CapEx threshold')
-    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Never stops work. Warns the job is nearing the line where it must be split or approved. Not live yet.</div>'
+    /* v5.12 was: Never stops work. Warns the job is nearing the line where it must be split or approved. Not live yet. */
+    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Never stops work. A T&amp;M work order not tagged CapEx is warned as it nears the threshold, so it can be split or tagged. Tag CapEx by hand on the work order. The minimum flags a CapEx-tagged work order that is completed under it. Applies to every work order live; nothing is copied.</div>'
     + clAmountRow('Threshold $', 'cl-cap-amt', clD('capex_threshold', ''))
     + clLevelHtml('capex', 1) + clLevelHtml('capex', 2)
     + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><input type="checkbox" id="cl-cap-min-en" style="' + CL_CHK + '"' + (clD('capex_min_enabled', false) ? ' checked' : '') + '><span style="font-size:12px">Minimum to bill as capital $</span>'
