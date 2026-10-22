@@ -1,6 +1,6 @@
 # Spec: Quote tracking, and carryover on quoted work orders
 
-Status: Slice 5a BUILT as v5.15 (migration written, not yet applied; pending Kevin's test). Slice 5b not authorized: do not build until Kevin says "okay to build" and names it.
+Status: Slice 5a BUILT and live as v5.15 (migration applied 2026-10-22). Slice 5b BUILT as v5.17 (migration `v5.17_carryover_quoted.sql` written, not yet applied; pending Kevin's go-ahead and test).
 
 Baseline: main at v5.12; PR #12 carries v5.13 (carryover ledger) and v5.14 (edit applications), not yet merged. Related: `customer-thresholds-and-carryover.md` (section 3), `quoted-wo-billing.md`.
 
@@ -36,6 +36,13 @@ New table `quote_tracking`, one row per tracked quoted work order (`work_order_i
 - Quote rejected or expired: its `committed_pending` applications are returned: the amount goes back on the carryover balance and shows as outstanding again, with a note of why. **The app never reassigns it on its own.** For expiry the balance views treat an application on an expired quote as returned straight away; the daily check then marks the rows returned and writes the audit trail.
 - The Record application form and the Ledger show a "pending quote" label on these applications; the work order block shows them under the quote.
 - As before, the app never changes a work order's hours or parts; this is the ledger only.
+
+## Slice 5b as built (v5.17)
+- A quoted work order can take an application only if its quote is **tracked** and not rejected or expired. Not sent / awaiting: the application is `committed_pending`; accepted: `resolved`. The database sets this (the app cannot choose it); untracked, rejected and expired quotes are refused with a plain message.
+- Accepting a quote turns its pending applications into resolved. Rejecting a quote (or stopping its tracking) **returns** its pending applications: the row is switched off with `returned_on` and `returned_reason`, the amount goes back on the balance, and the ledger and the work order show a "Returned ... (Quote rejected)" line. Nothing is reassigned.
+- Expired: the balance view stops counting pending applications on an expired quote at once, and the ledger shows them as "returned, quote expired". `quote_return_expired()` (run by `quote_check_all`, i.e. when the admin opens the Daily Dashboard) and any edit of that quote then write the returned rows, so a re-sent quote does not bring them back.
+- Applications already resolved on an accepted quote stay resolved if the quote is later changed.
+- Carryover on quoted work orders is allowed for NTE customers too (assumed; Kevin's P26500 example is the origin side).
 
 ## Open items
 - Does carryover go on quoted work orders for customers with an NTE at all? Assumed yes here (Kevin's own example, P26500 quoted at $2,000 under an NTE, is the origin side); confirm before 5b.

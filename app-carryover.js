@@ -398,7 +398,7 @@ function coDraw(box, wo) {
     h += '<div style="font-size:12px;margin-top:5px">Carried over from this job: <b>' + wonMoney(e.amount) + '</b> <span style="color:var(--text-muted)">(' + wonMoney(e.balance) + ' left)</span></div>';
   });
   if (needTrack) h += '<div style="font-size:12px;color:var(--text-muted);margin-top:5px">Track this quote (above) to apply carryover to it.</div>';
-  else if (isQuoted && quote && !canApply && bal > 0) h += '<div style="font-size:12px;color:var(--text-muted);margin-top:5px">Carryover cannot be applied to a ' + (quote.quote_state === 'rejected' ? 'rejected' : 'expired') + ' quote.</div>';
+  else if (isQuoted && quote && !canApply && bal > 0) h += '<div style="font-size:12px;color:var(--text-muted);margin-top:5px">Carryover cannot be applied to ' + (quote.quote_state === 'rejected' ? 'a rejected' : 'an expired') + ' quote.</div>';
   applied.forEach(function(a) {
     var src = CO.entries.find(function(e) { return e.id === a.carryover_id; });
     var tg = coAllocTag(a), expired = coAllocExpired(a);
