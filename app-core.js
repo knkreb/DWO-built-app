@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.12';
+const APP_VERSION = '5.17';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -254,6 +254,12 @@ window.addEventListener('load', function() {
     }
   });
 
+  // v5.16: Enter on the login screen. Registered BEFORE the "App updated" early return below, which used to skip the listener
+  // (so Enter did nothing after every update until the page was reloaded). The old Enter line further down is commented out.
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.isComposing) { var l = document.getElementById('screen-login'); var b = document.getElementById('btn-login'); if (l && !l.classList.contains('hidden') && b && !b.disabled) doLogin(); }
+  });
+
   var storedVersion = localStorage.getItem('dwo_app_version');
   if (storedVersion && storedVersion !== APP_VERSION) {
     sb.signOut().then(function() {
@@ -300,7 +306,7 @@ window.addEventListener('load', function() {
   } else { showScreen('screen-login'); showHeader(false); }
 
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { var l = document.getElementById('screen-login'); if (l && !l.classList.contains('hidden')) doLogin(); }
+    /* v5.16 was: if (e.key === 'Enter') { var l = document.getElementById('screen-login'); if (l && !l.classList.contains('hidden')) doLogin(); } -- moved above the version check */
     if (e.key === 'Escape') { closeStatusSheet(); closeBarcode(); closeCustomerAutocomplete(); }
   });
 });
@@ -1058,6 +1064,8 @@ function renderWODetail(wo) {
   out += '</div>';
   out += (typeof woNteShell==='function' ? woNteShell(wo) : ''); // v5.10 work order NTE block (app-wo-nte.js)
   out += (typeof wocShell==='function' ? wocShell(wo) : ''); // v5.12 CapEx tag and warnings (app-wo-capex.js)
+  out += (typeof coShell==='function' ? coShell(wo) : ''); // v5.13 carryover ledger block, admin only (app-carryover.js)
+  out += (typeof qtShell==='function' ? qtShell(wo) : ''); // v5.15 quote tracking block (app-quote-tracking.js)
   if (AppState.deviceMode === 'desktop') {
     // DESKTOP: inline spreadsheet layout
     out += renderWODetailDesktop(wo, activeH, activeL, activeQ, hoursVal, partsTotal, creditsTotal, quotedTotal, projected, isAdmin, isLocked, inactiveFlags);
@@ -5411,6 +5419,10 @@ function renderSettings(containerId) {
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Advisory only — shown as a warning in Time & Billing Reconciliation before export. Not enforced at save time.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Quoted work order cost warning (% of quote)</div><input class="settings-row-input" type="number" step="1" min="0" max="100" value="'+(AppState.settings.quoted_cost_warn_default_pct||'75')+'" onchange="saveSetting(\'quoted_cost_warn_default_pct\',this.value)"></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Default for every Quoted work order; each work order can override it or turn the early warning off. The overrun at 100% always shows.</div>';
+  // v5.15 quote tracking defaults (app-quote-tracking.js)
+  html += '<div class="settings-row"><div class="settings-row-label">Quote expires after (days)</div><input class="settings-row-input" type="number" step="1" min="1" value="'+(AppState.settings.quote_expiry_days||'30')+'" onchange="saveSetting(\'quote_expiry_days\',this.value)"></div>';
+  html += '<div class="settings-row"><div class="settings-row-label">Quote stale warning (days before expiration)</div><input class="settings-row-input" type="number" step="1" min="0" value="'+(AppState.settings.quote_remind_days||'7')+'" onchange="saveSetting(\'quote_remind_days\',this.value)"></div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Defaults for tracked quotes. The expiration is the sent date plus these days; each quote can change its own dates and warning.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Start/end of day travel threshold (min)</div><input class="settings-row-input" type="number" step="5" min="0" value="'+(AppState.settings.billing_travel_threshold_min||'30')+'" onchange="saveSetting(\'billing_travel_threshold_min\',this.value)"></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">First and last drive segments longer than this are flagged in Time & Billing Reconciliation as potential billable travel. Default: 30 minutes.</div>';
   html += '<div class="settings-row"><div class="settings-row-label">Tech home site</div>';

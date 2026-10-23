@@ -256,15 +256,21 @@ function woNteApplyOpen(custId, t, fromSave) {
   if (!wonIsAdmin()) return;
   custId = custId || CL.custId; t = t || CL.row;
   if (!t || !custId) return;
+  // v5.16: only one picker at a time. A second request while one is loading or open for the same customer is ignored
+  // (the double prompt after a single Limits save). Cleared when the picker closes or the lookup fails.
+  var sheetOpen = (function() { var e = document.getElementById('won-pick-sheet'); return !!(e && e.classList.contains('open')); })();
+  if (WONP.loading || (sheetOpen && WONP.cust === custId)) return;
   var on = !!(t.nte_enabled && t.nte_amount > 0);
   var wos = wonOpenTMForOwner(custId);
   if (!wos.length) { if (!fromSave) wonApplyMsg('No open T&M work orders for this customer.'); return; }
+  WONP.loading = true; WONP.cust = custId;
   if (!fromSave) wonApplyMsg('Checking…');
   var ids = wos.map(function(w) { return w.id; });
   Promise.all([
     sb.get('work_order_limits', '?work_order_id=in.(' + ids.join(',') + ')&active=eq.true&select=id,work_order_id,source,nte_enabled,nte_amount'),
     wonSpentMap(ids)
   ]).then(function(res) {
+    WONP.loading = false;
     if (!res[0].ok) { if (!fromSave) wonApplyMsg('Could not read the work orders.', true); else showToast('Could not read the open work orders'); return; }
     var byWo = {}; (res[0].data || []).forEach(function(x) { byWo[x.work_order_id] = x; });
     var rows = [];

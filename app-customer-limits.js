@@ -33,7 +33,8 @@ function clRowBadge(c) {
 }
 function clRowButton(c) {
   if (!clIsAdmin()) return '';
-  return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>';
+  /* v5.13 was: return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>'; */
+  return '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:3px;background:none;color:var(--header-bg);cursor:pointer" data-clid="' + c.id + '" onclick="openCustomerLimits(this.getAttribute(\'data-clid\'))">Limits</button>' + (typeof coRowButton === 'function' ? coRowButton(c) : ''); // v5.13: Carryover button next to Limits (app-carryover.js)
 }
 
 // ── Sheet ────────────────────────────────────────────────────────────────
@@ -336,11 +337,14 @@ function clSave() {
   var err = clValidate(limits);
   if (err) { clErr(err); return; }
   var body = Object.assign({}, limits, { label: clName(c), modified_by: AppState.userEmail });
+  if (CL.saving) return; // v5.16: ignore a second Save tap / Enter while the first is saving (it opened the apply picker twice)
+  CL.saving = true;
   var prevRow = CL.row; // v5.11: the limits as they were before this save, to tell whether the NTE changed
   var req = CL.row
     ? sb.patch('customer_thresholds', CL.row.id, body)
     : sb.post('customer_thresholds', Object.assign({ customer_id: c.id, created_by: AppState.userEmail }, body));
   req.then(function(r) {
+    CL.saving = false;
     if (!r.ok) { clErr('Error saving limits. Nothing was changed.'); return; }
     showToast('Saved');
     closeCustomerLimits();
