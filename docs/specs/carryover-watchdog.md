@@ -70,6 +70,47 @@ An accepted quote is the end state for an application (it is `resolved`). There 
 - The same migration adds the closed columns on `carryover` and updates the `carryover_balance` view, adds the alert types (`carryover_age`, `carryover_amount`, `carryover_total`, `carryover_customer_total`), and adds the Settings keys (`carryover_alert_days`, `carryover_alert_case_dollars`, `carryover_alert_total_dollars`, `carryover_alert_customer_dollars`), all blank (off) until set, with fields in Settings next to the quote ones.
 - Per build: `index.html` cache busters, `app-core.js` version, `CHANGELOG.md`.
 
+## Acceptance checks (added 2026-10-26; the QC test agent checks each one against this spec and the CHANGELOG line)
+Setup: log in as Test Admin (admin template) and Test User (field tech). Use the Office Test Customer, test work orders and a test carryover entry, so test data is easy to find. Test on live data only against these.
+
+**Rule 1: cancel block**
+1. A work order with an active carryover application: set it to Cancelled on the work order screen. The prompt shows the amount. Decline: status unchanged, application still active.
+2. Same, accept: the application is switched off with returned_on set and reason "work order cancelled", the amount is back on the customer's open balance, and the status is Cancelled.
+3. Both a pending application and a resolved one (quote accepted) trigger the prompt.
+4. A direct database update or bulk edit to Cancelled on such a work order is refused with the plain message; status unchanged.
+5. A work order with no carryover, or only returned/removed rows, cancels normally with no prompt.
+6. The Cancelled category is looked up in `wo_statuses.category`; no hard-coded status 99 in the new code.
+
+**Rule 1b: origin work order cancelled**
+7. Cancel the origin work order of an entry: the prompt shows the amount; accept closes the entry with reason "origin work order cancelled" and the cancel goes through (not blocked).
+8. With applications on two other work orders: each gets an alert and a "Carryover to follow up" line saying the carryover no longer exists. Their hours, parts, amounts and applications are not changed.
+9. The alert clears when dismissed, or when the downstream application is returned or removed.
+10. An origin cancel with no downstream applications closes the entry and raises no alerts.
+11. Test User (non-admin) sees none of these alerts.
+
+**Rule 2: finished while pending**
+12. Move a work order to a Completed or Processed category status with a pending application and its quote not_sent or awaiting: one `carryover_pending_finished` alert, one dashboard line (work order, customer, amount, quote state, days since finished, Open button). The status change is not blocked.
+13. Run the daily check again: no duplicate alert.
+14. Accept the quote (or return/remove the application): the alert clears.
+15. A finished work order with no carryover, or with a resolved application, raises no alert. Resolved applications stay resolved.
+
+**Rule 3: open balances modal**
+16. Admin opens it from the Daily Dashboard card and from the Ledger; Test User cannot.
+17. Backdate test entries to 0, 29, 30, 59, 60, 89 and 90 days: each lands in the right band (Current, 30, 60, 90+). Band headers show case count, open dollars and oldest age.
+18. A zero-balance entry with nothing pending is in "Ready to close"; "Close all ready" closes it with reason "Fully applied". An entry that is zero only because an amount is pending is not listed as ready.
+19. Close an entry with a balance: the reason list is covered on a later job, written off, billed elsewhere, other; "other" requires free text; who and when are recorded; the entry leaves the open list; the toggle shows it and it can be reopened.
+20. Closing an entry with an active pending application is refused.
+21. Each of the four thresholds, blank = off: it fires once when crossed; the cumulative ones once per crossing (company-wide, and each customer separately); the "Carryover review due" prompt clears after the flagged cases are reviewed and returns only when a threshold is crossed again.
+22. The header shows the thresholds, and the Change link opens the four Settings fields and Back returns to the modal.
+23. The case ledger shows the origin and every application with status, quote state, who and note, and a running balance.
+
+**Regression and smoke**
+24. Ordinary status changes on a test work order with no carryover (draft to active to completed to invoiced) behave as before, including the existing `trg_wo_capex_check_status`, NTE copy and audit triggers on `work_orders`.
+25. v5.17 behavior is unchanged: rejecting or expiring a quote returns pending applications; accepting resolves them.
+26. The migration was pre-checked, adds only what this spec lists (closed columns, alert types, settings keys, the cancel trigger, the origin-cancel handling) and changes no existing rows.
+27. Smoke test: every sidebar screen opens with no console errors. `node --check` passes on every changed JS file; APP_VERSION and cache busters bumped; CHANGELOG line added.
+28. The agent flags any change in the build that is not listed in this spec.
+
 ## Open items
 - **Finished / billed:** settled 2026-10-22. By category, not status: Completed and Processed count as finished; Cancelled is the category the cancel block uses. Categories in `wo_statuses` today: draft (0-4), active (5-9), completed (10), processed (11, 12, 15), cancelled (99).
 - **Cancel block scope:** settled 2026-10-26. Any active application, pending or resolved, blocks; the screen prompts to return the carryover and cancel (Rule 1).
