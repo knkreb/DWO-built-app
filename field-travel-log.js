@@ -594,6 +594,19 @@ function drProcessAndRender() {
           }
         }
       });
+      // v5.18 — a saved site that is NOT a geofence match (picked from the nearby list): resolve it against all sites.
+      // Stops already resolved by geofence or by the account picker are left exactly as they are.
+      DRState.stops.forEach(function(stop) {
+        if (stop.location || stop.confirmedAccounts) return;
+        var savedVal = stopLocs[stop.arrivedAt];
+        if (!savedVal) return;
+        var ids = Array.isArray(savedVal) ? savedVal : [savedVal];
+        var found = ids.map(function(id) { return (DRState.locations || []).find(function(l){ return l.id === id && l.active !== false; }); }).filter(Boolean);
+        if (!found.length) return;
+        stop.isBillable = found[0].billable_default !== false;
+        if (stop.locationMatches && stop.locationMatches.length > 1) { stop.confirmedAccounts = found; stop.location = found[0]; }
+        else { stop.location = found[0]; stop._nearbyAssigned = true; }
+      });
     }
   }
   drRenderTimeline();
@@ -627,7 +640,8 @@ function drRebuildAllocationsFromEntries() {
         htId: entry.hours_type_id,
         rateName: ht ? ht.name : '',
         isPaid: entry.paid !== false,
-        isBillable: entry.billable !== false
+        isBillable: entry.billable !== false,
+        entryId: entry.id // v5.18
       });
     }
   });
@@ -1178,8 +1192,8 @@ function drRenderTimeline() {
         html += '<button onclick="event.stopPropagation();tbUnmerge(\'' + primaryArrivedAtForSecondary + '\')" style="margin-left:auto;font-size:11px;padding:3px 10px;background:#534ab7;color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Undo merge</button>';
         html += '</div>';
       } else if (!stop.location && !isMultiAccount) {
-        html += DRState.identifyIdx === origIdx ? drRenderIdentifyForm(origIdx) : '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
-          '<button onclick="event.stopPropagation();drStartIdentify(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Identify this stop</button>' +
+        html += DRState.identifyIdx === origIdx ? drRenderIdentifyForm(origIdx) : DRState.nearbyIdx === origIdx ? drRenderNearbyForm(origIdx) : '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+          '<button onclick="event.stopPropagation();drStartNearby(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Identify this stop</button>' +
           '<button onclick="event.stopPropagation();drMarkNotBillable(' + origIdx + ')" style="font-size:12px;padding:5px 12px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Mark not billable</button>' +
           '</div>';
       } else if (!stop.location && isMultiAccount) {
@@ -1191,6 +1205,11 @@ function drRenderTimeline() {
           html += '<button onclick="event.stopPropagation();tbUnmerge(\'' + stop.arrivedAt + '\')" style="margin-left:auto;font-size:11px;padding:3px 10px;background:#534ab7;color:#fff;border:none;border-radius:var(--radius);cursor:pointer">Undo merge</button>';
           html += '</div>';
         }
+        if (DRState.identifyIdx === origIdx) {
+          html += drRenderIdentifyForm(origIdx);
+        } else if (DRState.nearbyIdx === origIdx) {
+          html += drRenderNearbyForm(origIdx);
+        } else {
         html += '<div style="background:#f1efff;border:1px solid #a89fe8;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">';
         html += '<div style="font-size:11px;font-weight:600;color:#534ab7;margin-bottom:10px">Which accounts did you work at this location?</div>';
         stop.locationMatches.forEach(function(loc, li) {
@@ -1204,10 +1223,11 @@ function drRenderTimeline() {
         });
         html += '<div style="display:flex;gap:6px;margin-top:10px">';
         html += '<button onclick="event.stopPropagation();drConfirmStopAccounts(' + origIdx + ')" style="font-size:12px;padding:6px 14px;background:#534ab7;color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Confirm</button>';
-        html += '<button onclick="event.stopPropagation();drStartIdentify(' + origIdx + ')" style="font-size:12px;padding:6px 10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">None of these</button>';
+        html += '<button onclick="event.stopPropagation();drStartNearby(' + origIdx + ')" style="font-size:12px;padding:6px 10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">None of these</button>';
         html += '<button onclick="event.stopPropagation();drMarkNotBillable(' + origIdx + ')" style="font-size:12px;padding:6px 10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Mark not billable</button>';
         html += '</div>';
         html += '</div>';
+        }
       } else if (isConfirmedMulti) {
         // Multi-account confirmed — show confirmed accounts with Change option
         if (isMerged) {
@@ -1228,13 +1248,13 @@ function drRenderTimeline() {
           html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px">Billing breakdown:</div>';
           html += '<table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:6px">';
           html += '<tr><th style="text-align:left;padding:3px 0;color:var(--text-muted);border-bottom:1px solid var(--border)">Customer</th><th style="text-align:left;padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border)">WO</th><th style="padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border);text-align:right">Hours</th></tr>';
-          stop.allocations.forEach(function(a) {
+          stop.allocations.forEach(function(a, ai) {
             var effH = parseFloat(a.hours||0);
             var belowM = effH > 0 && effH < minBillingM;
             var isQ = a.formMode === 'quoted';
             var badge = isQ ? '<span style="font-size:9px;padding:1px 5px;background:#eaf3de;color:#3b6d11;border-radius:99px;margin-left:4px;font-weight:600">Quoted</span>' : '<span style="font-size:9px;padding:1px 5px;background:#e6f1fb;color:#185fa5;border-radius:99px;margin-left:4px;font-weight:600">T&M</span>';
             html += '<tr><td style="padding:3px 0;font-weight:600">' + escHtml(a.customerName||'—') + '</td>';
-            html += '<td style="padding:3px 4px;font-size:10px;color:var(--text-muted)">' + escHtml(a.woNumber||'') + badge + '</td>';
+            html += '<td style="padding:3px 4px;font-size:10px;color:var(--text-muted)">' + drAllocWoLink(origIdx, ai, a) + badge + '</td>';
             html += '<td style="padding:3px 4px;text-align:right;font-weight:600">' + effH.toFixed(2) + 'h' + (belowM ? ' <span style="color:#854f0b;font-size:9px">(min ' + minBillingM + 'h)</span>' : '') + '</td></tr>';
           });
           html += '</table>';
@@ -1267,7 +1287,13 @@ function drRenderTimeline() {
             html += '</div>';
           }
         }
-        if (stop.locationMatches && stop.locationMatches.length > 1 && stop.location) {
+        if (stop._nearbyAssigned && stop.location) {
+          // v5.18 — site picked from the nearby list: show it with a Change option
+          html += '<div style="background:#f1efff;border:1px solid #a89fe8;border-radius:var(--radius);padding:7px 9px;margin-bottom:8px;display:flex;align-items:center;gap:8px">';
+          html += '<span style="font-size:11px;color:#534ab7;font-weight:600">&#10003; ' + escHtml(stop.location.name) + '</span>';
+          html += '<button onclick="event.stopPropagation();drClearNearbyAssign(' + origIdx + ')" style="margin-left:auto;font-size:11px;padding:3px 8px;background:none;border:1px solid #a89fe8;border-radius:var(--radius);color:#534ab7;cursor:pointer">Change</button>';
+          html += '</div>';
+        } else if (stop.locationMatches && stop.locationMatches.length > 1 && stop.location) {
           // Account selected — show confirmation with change option
           var selWO = stop.selectedWOId ? (AppState.workOrders||[]).find(function(w){ return w.id === stop.selectedWOId; }) : null;
           html += '<div style="background:#f1efff;border:1px solid #a89fe8;border-radius:var(--radius);padding:7px 9px;margin-bottom:8px">';
@@ -1292,13 +1318,13 @@ function drRenderTimeline() {
           html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px">Billing breakdown:</div>';
           html += '<table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:6px">';
           html += '<tr><th style="text-align:left;padding:3px 0;color:var(--text-muted);border-bottom:1px solid var(--border)">Customer</th><th style="text-align:left;padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border)">WO</th><th style="padding:3px 4px;color:var(--text-muted);border-bottom:1px solid var(--border);text-align:right">Hours</th></tr>';
-          stop.allocations.forEach(function(a) {
+          stop.allocations.forEach(function(a, ai) {
             var effHours = parseFloat(a.hours||0);
             var belowMin = effHours > 0 && effHours < minBilling;
             var isQuoted = a.formMode === 'quoted';
             var modeBadge = isQuoted ? '<span style="font-size:9px;padding:1px 5px;background:#eaf3de;color:#3b6d11;border-radius:99px;margin-left:4px;font-weight:600">Quoted</span>' : '<span style="font-size:9px;padding:1px 5px;background:#e6f1fb;color:#185fa5;border-radius:99px;margin-left:4px;font-weight:600">T&M</span>';
             html += '<tr><td style="padding:3px 0;font-weight:600">' + escHtml(a.customerName||'—') + '</td>';
-            html += '<td style="padding:3px 4px;font-size:10px;color:var(--text-muted)">' + escHtml(a.woNumber||'') + modeBadge + '</td>';
+            html += '<td style="padding:3px 4px;font-size:10px;color:var(--text-muted)">' + drAllocWoLink(origIdx, ai, a) + modeBadge + '</td>';
             html += '<td style="padding:3px 4px;text-align:right;font-weight:600">' + effHours.toFixed(2) + 'h' + (belowMin ? ' <span style="color:#854f0b;font-size:9px">(min ' + minBilling + 'h)</span>' : '') + '</td></tr>';
           });
           html += '</table>';
@@ -1754,6 +1780,8 @@ function drStartNewWOForAccount(customerId) {
 
 
 function drStartIdentify(idx) {
+  DRState.identifyFromNearby = DRState.nearbyIdx === idx ? idx : null; // v5.18
+  DRState.nearbyIdx = null;
   DRState.identifyIdx = idx;
   DRState.identifyStep = 'type';
   drRenderTimeline();
@@ -1933,7 +1961,148 @@ function mdrMarkNotBillable(idx) {
   });
 }
 
+// =============================================================
+// v5.18 — Nearby sites step (None of these / Identify this stop)
+// A stop only matches sites whose own geofence contains it, so a neighbouring site that is just outside its
+// radius never shows up. This step lists existing sites near the stop so one can be picked instead of creating
+// a duplicate. Sites within the association radius (3 x default geofence, the radius used to re-attach saved
+// time entries to a stop) are selectable; farther ones can be found by search but not assigned.
+// =============================================================
+function drAssocRadius() {
+  return parseInt(AppState.settings.geofence_radius_default || '100') * 3;
+}
+
+function drLocDistLabel(d) {
+  return Math.round(d) + ' m / ' + Math.round(d * 3.28084) + ' ft';
+}
+
+function drLocCustName(loc) {
+  var c = loc.customer_id ? (AppState.customers || []).find(function(x){ return x.id === loc.customer_id; }) : null;
+  var n = c ? (c.display_name || c.name || '') : '';
+  return (n && n !== loc.name) ? n : '';
+}
+
+function drNearbySites(stop, excludeIds) {
+  var assoc = drAssocRadius();
+  var out = [];
+  (DRState.locations || []).forEach(function(l) {
+    if (!l.lat || !l.lng || l.active === false || excludeIds.indexOf(l.id) >= 0) return;
+    var d = drHaversineMeters(stop.lat, stop.lng, l.lat, l.lng);
+    if (d <= assoc) out.push({ loc: l, dist: d });
+  });
+  out.sort(function(a, b) { return a.dist - b.dist; });
+  return out.slice(0, 12);
+}
+
+function drStartNearby(idx) {
+  DRState.nearbyIdx = idx;
+  DRState.identifyIdx = null;
+  drRenderTimeline();
+}
+
+function drCloseNearby() {
+  DRState.nearbyIdx = null;
+  drRenderTimeline();
+}
+
+function drNearbyRow(loc, dist, idx, enabled) {
+  var cn = drLocCustName(loc);
+  var label = '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:' + (enabled ? '#534ab7' : 'var(--text-muted)') + '">' + escHtml(loc.name || '(unnamed)') + '</div>'
+    + (cn ? '<div style="font-size:10px;color:var(--text-muted)">' + escHtml(cn) + '</div>' : '')
+    + (enabled ? '' : '<div style="font-size:10px;color:#a32d2d">Too far from this stop to assign — create a new site instead</div>')
+    + '</div><div style="font-size:11px;color:var(--text-muted);white-space:nowrap">' + drLocDistLabel(dist) + '</div>';
+  if (!enabled) return '<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg);opacity:.7">' + label + '</div>';
+  return '<div class="dr-nearby-item" onclick="event.stopPropagation();drAssignNearby(' + idx + ',\'' + escHtml(loc.id) + '\')" style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:4px;border:1px solid #c4bef0;border-radius:6px;cursor:pointer;background:var(--surface)">' + label + '</div>';
+}
+
+function drRenderNearbyForm(idx) {
+  var stop = DRState.stops[idx];
+  if (!stop) return '';
+  var exclude = (stop.locationMatches || []).map(function(l){ return l.id; });
+  var near = drNearbySites(stop, exclude);
+  var html = '<div id="dr-nearby-form" style="background:#f1efff;border:1px solid #a89fe8;border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">';
+  html += '<div style="font-size:11px;font-weight:600;color:#534ab7;margin-bottom:8px">Is it one of these nearby sites?</div>';
+  if (near.length) {
+    near.forEach(function(n) { html += drNearbyRow(n.loc, n.dist, idx, true); });
+  } else {
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">No other sites near this stop.</div>';
+  }
+  html += '<input type="text" id="dr-nearby-search" placeholder="Search all sites by name or customer..." oninput="drNearbySearch(' + idx + ',this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box;margin:4px 0 6px">';
+  html += '<div id="dr-nearby-results" onclick="event.stopPropagation()"></div>';
+  html += '<div style="display:flex;gap:6px;margin-top:8px">';
+  html += '<button onclick="event.stopPropagation();drStartIdentify(' + idx + ')" style="font-size:12px;padding:6px 12px;background:#534ab7;color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600">Create a new site</button>';
+  html += '<button onclick="event.stopPropagation();drCloseNearby()" style="font-size:12px;padding:6px 10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">' + (stop.locationMatches && stop.locationMatches.length > 1 ? 'Back to accounts' : 'Back') + '</button>';
+  html += '</div></div>';
+  return html;
+}
+
+function drNearbySearch(idx, val) {
+  var el = document.getElementById('dr-nearby-results');
+  var stop = DRState.stops[idx];
+  if (!el || !stop) return;
+  var q = (val || '').toLowerCase().trim();
+  if (!q) { el.innerHTML = ''; return; }
+  var exclude = (stop.locationMatches || []).map(function(l){ return l.id; });
+  var assoc = drAssocRadius();
+  var rows = [];
+  (DRState.locations || []).forEach(function(l) {
+    if (!l.lat || !l.lng || l.active === false || exclude.indexOf(l.id) >= 0) return;
+    var hay = ((l.name || '') + ' ' + drLocCustName(l)).toLowerCase();
+    if (hay.indexOf(q) < 0) return;
+    rows.push({ loc: l, dist: drHaversineMeters(stop.lat, stop.lng, l.lat, l.lng) });
+  });
+  rows.sort(function(a, b) { return a.dist - b.dist; });
+  if (!rows.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:2px 0">No sites match.</div>'; return; }
+  el.innerHTML = rows.slice(0, 8).map(function(r) { return drNearbyRow(r.loc, r.dist, idx, r.dist <= assoc); }).join('');
+}
+
+// Saves the site chosen for a stop to the day review (day_review.stop_locations), same field the account picker uses.
+function drSaveStopLocChoice(stop, value, msg) {
+  var dayReview = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate && r.tech_id === DRState.tech; });
+  if (!dayReview) { showToast(msg + ' — no day record yet, so this will not be kept after a reload'); return; }
+  var stopLocs = dayReview.stop_locations ? JSON.parse(typeof dayReview.stop_locations === 'string' ? dayReview.stop_locations : JSON.stringify(dayReview.stop_locations)) : {};
+  if (!stopLocs || typeof stopLocs !== 'object' || Array.isArray(stopLocs)) stopLocs = {};
+  if (value === null) delete stopLocs[stop.arrivedAt]; else stopLocs[stop.arrivedAt] = value;
+  sb.patch('day_review', dayReview.id, {
+    stop_locations: stopLocs,
+    modified_by: AppState.userEmail,
+    modified_at: new Date().toISOString()
+  }).then(function(r) {
+    if (r.ok) { dayReview.stop_locations = stopLocs; if (msg) showToast(msg); }
+    else showToast('Error saving site');
+  });
+}
+
+function drAssignNearby(idx, locId) {
+  var stop = DRState.stops[idx];
+  var loc = (DRState.locations || []).find(function(l){ return l.id === locId; });
+  if (!stop || !loc) return;
+  stop.isBillable = loc.billable_default !== false;
+  if (stop.locationMatches && stop.locationMatches.length > 1) {
+    // multi-account stop: same state as confirming an account from the checkboxes
+    stop.confirmedAccounts = [loc];
+    stop.location = loc;
+  } else {
+    stop.location = loc;
+    stop._nearbyAssigned = true;
+  }
+  DRState.nearbyIdx = null;
+  drSaveStopLocChoice(stop, loc.id, loc.name + ' selected');
+  drRenderTimeline();
+}
+
+function drClearNearbyAssign(idx) {
+  var stop = DRState.stops[idx];
+  if (!stop) return;
+  stop.location = null;
+  stop._nearbyAssigned = false;
+  drSaveStopLocChoice(stop, null, '');
+  drRenderTimeline();
+}
+
 function drCancelIdentify() {
+  if (DRState.identifyFromNearby !== null && DRState.identifyFromNearby !== undefined && DRState.identifyFromNearby === DRState.identifyIdx) DRState.nearbyIdx = DRState.identifyIdx; // v5.18 back to the nearby list
+  DRState.identifyFromNearby = null;
   DRState.identifyIdx = null;
   DRState.identifyStep = null;
   DRState.identifyType = null;
@@ -1957,6 +2126,8 @@ function drRenderIdentifyForm(idx) {
       html += '<button onclick="event.stopPropagation();drIdentifyTypeSelect(\'' + t.k + '\')" style="font-size:12px;padding:5px 14px;background:' + bg + ';color:' + col + ';border:1px solid ' + col + ';border-radius:99px;cursor:pointer;font-weight:600">' + t.l + '</button>';
     });
     html += '</div>';
+    // v5.18 — the type step had no way out; Cancel returns to the nearby list (or the stop's buttons)
+    html += '<div style="margin-top:8px"><button onclick="event.stopPropagation();drCancelIdentify()" style="font-size:12px;padding:5px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">Cancel</button></div>';
   } else if (step === 'entity') {
     var label = type === 'customer' ? 'Which customer?' : type === 'vendor' ? 'Which vendor?' : type === 'personal' ? 'Name this site' : 'Name this site';
     html += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">' + label + '</div>';
@@ -2193,7 +2364,9 @@ var TBState = {
   pendingCustId: null,
   pendingCustName: null,
   map: null,
-  mapReady: false
+  mapReady: false,
+  changeBlockIdx: null, // v5.18 Change work order mode (index of the block being moved)
+  focusBlock: null      // v5.18 block to scroll to and highlight when the modal opens
 };
 
 function drOpenBillingModal(idx) {
@@ -2205,6 +2378,7 @@ function drOpenBillingModal(idx) {
   TBState.step = 'segs';
   TBState.pendingCustId = null;
   TBState.pendingCustName = null;
+  TBState.changeBlockIdx = null; // v5.18
   var modal = document.getElementById('tb-modal');
   if (!modal) return;
   modal.classList.add('open');
@@ -2438,6 +2612,12 @@ function tbRenderRows() {
   html += '<div id="tb-add-wo-btn" onclick="tbStartAddWO()" style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px;cursor:pointer;color:var(--text-accent);font-size:13px;margin-top:4px">';
   html += '<i class="ti ti-plus" aria-hidden="true"></i> Add work order</div>';
   el.innerHTML = html;
+  // v5.18 — opened from a tapped work order in the stop tile: scroll to and highlight that block
+  if (TBState.focusBlock !== null && TBState.focusBlock !== undefined) {
+    var fb = document.getElementById('tb-block-' + TBState.focusBlock);
+    TBState.focusBlock = null;
+    if (fb) { fb.classList.add('tb-focus'); if (fb.scrollIntoView) fb.scrollIntoView({ block: 'center' }); }
+  }
 }
 
 function tbBuildWOBlock(alloc, blockIdx) {
@@ -2456,6 +2636,7 @@ function tbBuildWOBlock(alloc, blockIdx) {
   html += '</div>';
   html += '<div class="tb-wo-body">';
   html += '<button onclick="tbOpenWorkOrder(\'' + escHtml(alloc.woId||'') + '\')" style="font-size:12px;padding:4px 12px;border:1px solid var(--header-bg);border-radius:var(--radius-sm,4px);background:var(--surface);color:var(--header-bg);cursor:pointer">Open Work Order &#x2197;</button>';
+  html += '<button onclick="tbStartChangeWO(' + blockIdx + ')" style="font-size:12px;padding:4px 12px;margin-left:8px;border:1px solid var(--border);border-radius:var(--radius-sm,4px);background:var(--surface);color:var(--text-secondary);cursor:pointer">Change work order</button>';
   html += '</div></div>';
   return html;
 }
@@ -2537,17 +2718,35 @@ function tbAddPart(woId, psKey) {
   });
 }
 
+// v5.18 — every allocation block carries the id of its hours_entries row (alloc.entryId).
+// tbWithEntry runs fn(entryId) for the block's row. A block added this session whose save is still
+// in flight waits for that save; an older block with no id (should not happen after v5.18) falls back to
+// work order + tech + date + THIS stop's location, so a second stop on the same work order is never touched.
+function tbWithEntry(stop, alloc, fn) {
+  if (alloc.entryId) { fn(alloc.entryId); return; }
+  if (alloc._saving) {
+    alloc._saving.then(function() { if (alloc.entryId) fn(alloc.entryId); });
+    return;
+  }
+  var locId = stop && stop.location ? stop.location.id : null;
+  var entry = DRState.hoursEntries.find(function(e) {
+    return e.work_order_id === alloc.woId && e.tech_id === DRState.tech && e.entry_date === DRState.selectedDate
+      && (e.location_id || null) === locId && e.active !== false;
+  });
+  if (entry) { alloc.entryId = entry.id; fn(entry.id); }
+}
+
 function tbSaveHours(blockIdx, val) {
   var idx = TBState.stopIdx;
   var stop = DRState.stops[idx];
   if (!stop || !stop.allocations || !stop.allocations[blockIdx]) return;
   var alloc = stop.allocations[blockIdx];
   alloc.hours = parseFloat(val||0);
-  // Find existing hours_entry and update
-  var entry = DRState.hoursEntries.find(function(e){ return e.work_order_id === alloc.woId && e.tech_id === DRState.tech && e.entry_date === DRState.selectedDate; });
-  if (entry) {
-    sb.patch('hours_entries', entry.id, { hours: alloc.hours, modified_by: AppState.userEmail, modified_at: new Date().toISOString() });
-  }
+  tbWithEntry(stop, alloc, function(entryId) {
+    sb.patch('hours_entries', entryId, { hours: alloc.hours, modified_by: AppState.userEmail, modified_at: new Date().toISOString() });
+    var mem = DRState.hoursEntries.find(function(e){ return e.id === entryId; });
+    if (mem) mem.hours = alloc.hours;
+  });
   tbUpdateBalance();
 }
 
@@ -2556,17 +2755,81 @@ function tbRemoveBlock(blockIdx) {
   var stop = DRState.stops[idx];
   if (!stop || !stop.allocations) return;
   var alloc = stop.allocations[blockIdx];
-  if (alloc && alloc.woId) {
-    var entryIdx = DRState.hoursEntries.findIndex(function(e){ return e.work_order_id === alloc.woId && e.tech_id === DRState.tech && e.entry_date === DRState.selectedDate; });
-    if (entryIdx >= 0) {
-      sb.patch('hours_entries', DRState.hoursEntries[entryIdx].id, { active: false, modified_by: AppState.userEmail });
-      DRState.hoursEntries.splice(entryIdx, 1);
-    }
+  if (alloc) {
+    tbWithEntry(stop, alloc, function(entryId) {
+      sb.patch('hours_entries', entryId, { active: false, modified_by: AppState.userEmail });
+      var i = DRState.hoursEntries.findIndex(function(e){ return e.id === entryId; });
+      if (i >= 0) DRState.hoursEntries.splice(i, 1);
+    });
   }
   stop.allocations.splice(blockIdx, 1);
   tbRenderRows();
   tbUpdateBalance();
   showToast('Entry removed');
+}
+
+// v5.18 — Change work order: move one allocation (its hours_entries row) to a different work order.
+function tbStartChangeWO(blockIdx) {
+  var idx = TBState.stopIdx;
+  var stop = DRState.stops[idx];
+  if (!stop || !stop.allocations || !stop.allocations[blockIdx]) return;
+  var alloc = stop.allocations[blockIdx];
+  var curWO = AppState.workOrders.find(function(w){ return w.id === alloc.woId; });
+  // From Batch Invoice Process on (Processed category) the time has gone to invoicing: no moves.
+  if (curWO && statusCat(curWO.status) === 'processed') {
+    showToast('This work order has gone to invoicing; adjust it from the work order');
+    return;
+  }
+  TBState.changeBlockIdx = blockIdx;
+  TBState.step = 'wo';
+  if (stop.location && stop.location.location_type === 'vendor') { tbRenderVendorWOList(''); return; }
+  TBState.pendingCustId = alloc.custId || (curWO ? curWO.customer_id : null);
+  if (!TBState.pendingCustId) { tbStartAddWO(); return; }
+  var cust = AppState.customers.find(function(c){ return c.id === TBState.pendingCustId; });
+  TBState.pendingCustName = alloc.customerName || (cust ? getCustName(cust) : '');
+  tbRenderWOList('');
+}
+
+function tbCurrentTag(woId) {
+  var bi = TBState.changeBlockIdx;
+  if (bi === null || bi === undefined) return '';
+  var stop = DRState.stops[TBState.stopIdx];
+  var alloc = stop && stop.allocations ? stop.allocations[bi] : null;
+  if (alloc && alloc.woId === woId) return ' <span style="font-size:10px;padding:1px 6px;border-radius:99px;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-weight:500">current</span>';
+  return '';
+}
+
+function tbApplyChangeWO(woId) {
+  var blockIdx = TBState.changeBlockIdx;
+  var stop = DRState.stops[TBState.stopIdx];
+  var wo = AppState.workOrders.find(function(w){ return w.id === woId; });
+  TBState.changeBlockIdx = null;
+  if (!stop || !stop.allocations || !stop.allocations[blockIdx] || !wo) { tbCancelAddWO(); return; }
+  var alloc = stop.allocations[blockIdx];
+  if (alloc.woId === woId) { showToast('Already on ' + wo.wo_number); tbCancelAddWO(); return; }
+  var fromNum = alloc.woNumber;
+  var cust = AppState.customers.find(function(c){ return c.id === wo.customer_id; });
+  var techName = (findTechAny(DRState.tech)||{}).name||'';
+  tbWithEntry(stop, alloc, function(entryId) {
+    var p = sb.patch('hours_entries', entryId, {
+      work_order_id: woId,
+      descriptor: wo.wo_number + ' - ' + techName + ' - ' + (wo.title||''),
+      modified_by: AppState.userEmail,
+      modified_at: new Date().toISOString()
+    });
+    if (p && p.then) p.then(function(r){ if (r && r.ok === false) showToast('Error saving the move — check the timecard'); });
+    var mem = DRState.hoursEntries.find(function(e){ return e.id === entryId; });
+    if (mem) mem.work_order_id = woId;
+  });
+  alloc.woId = woId;
+  alloc.woNumber = wo.wo_number;
+  alloc.custId = wo.customer_id || TBState.pendingCustId || '';
+  alloc.customerName = cust ? getCustName(cust) : (TBState.pendingCustName || '');
+  alloc.formMode = wo.form_mode || 'time_materials';
+  TBState.step = 'rows';
+  tbRenderRows();
+  tbUpdateBalance();
+  showToast('Moved ' + parseFloat(alloc.hours||0).toFixed(2) + 'h from ' + (fromNum || 'work order') + ' to ' + wo.wo_number);
 }
 
 function tbStartAddWO() {
@@ -2678,7 +2941,7 @@ function tbRenderVendorWOList(query) {
       var cust = AppState.customers.find(function(c){ return c.id === w.customer_id; });
       var isQuoted = w.form_mode === 'quoted';
       html += '<div class="tb-wo-item" onclick="tbSelectVendorWO(\'' + w.id + '\')">';
-      html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + '</div>';
+      html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + tbCurrentTag(w.id) + '</div>';
       html += '<div style="font-size:11px;color:var(--text-muted)">' + escHtml(cust ? getCustName(cust) : '') + (w.title?' — '+escHtml(w.title):'') + '</div></div>';
       html += '<span class="tb-badge ' + (isQuoted?'qt':'tm') + '">' + (isQuoted?'Quoted':'T&M') + '</span>';
       html += '</div>';
@@ -2689,7 +2952,7 @@ function tbRenderVendorWOList(query) {
     var cust = AppState.customers.find(function(c){ return c.id === w.customer_id; });
     var isQuoted = w.form_mode === 'quoted';
     html += '<div class="tb-wo-item" onclick="tbSelectVendorWO(\'' + w.id + '\')">';
-    html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + '</div>';
+    html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + tbCurrentTag(w.id) + '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted)">' + escHtml(cust ? getCustName(cust) : '') + (w.title?' — '+escHtml(w.title):'') + '</div></div>';
     html += '<span class="tb-badge ' + (isQuoted?'qt':'tm') + '">' + (isQuoted?'Quoted':'T&M') + '</span>';
     html += '</div>';
@@ -2726,7 +2989,7 @@ function tbRenderWOList(query) {
   var html = '<div id="tb-step">';
   html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
   html += '<button onclick="tbStartAddWO()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">&larr;</button>';
-  html += '<div class="tb-step-label">Work order — ' + escHtml(custName) + '</div></div>';
+  html += '<div class="tb-step-label">' + (TBState.changeBlockIdx !== null && TBState.changeBlockIdx !== undefined ? 'Move to which work order? — ' : 'Work order — ') + escHtml(custName) + '</div></div>';
   html += '<input type="text" placeholder="Search WO number or description..." oninput="tbRenderWOList(this.value)" value="' + escHtml(query) + '" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);box-sizing:border-box;margin-bottom:10px">';
   if (!wos.length) {
     html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">' + (q ? 'No WOs match "' + escHtml(query) + '"' : 'No open work orders for this customer.') + '</div>';
@@ -2734,7 +2997,7 @@ function tbRenderWOList(query) {
   wos.forEach(function(w) {
     var isQuoted = w.form_mode === 'quoted';
     html += '<div class="tb-wo-item" onclick="tbSelectWO(\'' + w.id + '\')">';
-    html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + '</div>';
+    html += '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(w.wo_number) + tbCurrentTag(w.id) + '</div>';
     html += '<div style="font-size:11px;color:var(--text-muted)">' + escHtml(w.title||'') + '</div></div>';
     html += '<span class="tb-badge ' + (isQuoted?'qt':'tm') + '">' + (isQuoted?'Quoted':'T&M') + '</span>';
     html += '</div>';
@@ -2750,6 +3013,7 @@ function tbRenderWOList(query) {
 function tbSelectWO(woId) {
   var wo = AppState.workOrders.find(function(w){ return w.id === woId; });
   if (!wo) return;
+  if (TBState.changeBlockIdx !== null && TBState.changeBlockIdx !== undefined) { tbApplyChangeWO(woId); return; } // v5.18
   var idx = TBState.stopIdx;
   var stop = DRState.stops[idx];
   if (!stop) return;
@@ -2775,7 +3039,7 @@ function tbSelectWO(woId) {
   // Save to hours_entries
   var loc = stop.location;
   var autoTechName = (findTechAny(DRState.tech)||{}).name||'';
-  sb.post('hours_entries', {
+  alloc._saving = sb.post('hours_entries', {
     work_order_id: woId,
     tech_id: DRState.tech,
     entry_date: DRState.selectedDate,
@@ -2787,7 +3051,7 @@ function tbSelectWO(woId) {
     created_by: AppState.userEmail,
     modified_by: AppState.userEmail
   }).then(function(r) {
-    if (r.ok && r.data && r.data.length) DRState.hoursEntries.push(r.data[0]);
+    if (r.ok && r.data && r.data.length) { DRState.hoursEntries.push(r.data[0]); alloc.entryId = r.data[0].id; } // v5.18
   });
   TBState.step = 'rows';
   tbRenderRows();
@@ -2817,6 +3081,7 @@ function tbCreateNewWO() {
 }
 
 function tbCancelAddWO() {
+  TBState.changeBlockIdx = null; // v5.18
   TBState.step = 'rows';
   tbRenderRows();
 }
@@ -2863,6 +3128,49 @@ function tbExpandMap() {
 function drStartAllocate(idx) {
   DRState.tagStopIdx = idx;
   drOpenBillingModal(idx);
+}
+
+// v5.18 — tapping an allocated work order in the stop tile offers: open the work order, or edit just that allocation.
+function drAllocWoLink(stopIdx, ai, a) {
+  return '<span onclick="event.stopPropagation();drAllocWoMenu(' + stopIdx + ',' + ai + ',event)" title="Open or edit this allocation" style="cursor:pointer;color:var(--text-accent);text-decoration:underline;font-weight:600">' + escHtml(a.woNumber || '(no WO)') + '</span>';
+}
+
+function drCloseAllocWoMenu() {
+  var m = document.getElementById('dr-alloc-wo-menu');
+  if (m) m.remove();
+}
+
+function drAllocWoMenu(stopIdx, ai, ev) {
+  drCloseAllocWoMenu();
+  var stop = DRState.stops[stopIdx];
+  if (!stop || !stop.allocations || !stop.allocations[ai]) return;
+  var m = document.createElement('div');
+  m.id = 'dr-alloc-wo-menu';
+  var x = Math.max(8, Math.min((ev && ev.clientX) || 100, window.innerWidth - 200));
+  var y = Math.max(8, Math.min(((ev && ev.clientY) || 100) + 8, window.innerHeight - 110));
+  m.style.cssText = 'position:fixed;z-index:300;left:' + x + 'px;top:' + y + 'px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);padding:4px;min-width:180px';
+  var btn = 'display:block;width:100%;text-align:left;font-size:13px;padding:9px 12px;background:none;border:none;border-radius:4px;cursor:pointer;color:var(--text-primary)';
+  m.innerHTML = '<button id="dr-awm-edit" style="' + btn + '">Edit this allocation</button>'
+    + '<button id="dr-awm-open" style="' + btn + '">Open work order &#x2197;</button>';
+  document.body.appendChild(m);
+  document.getElementById('dr-awm-edit').onclick = function(e) { e.stopPropagation(); drCloseAllocWoMenu(); drEditAllocation(stopIdx, ai); };
+  document.getElementById('dr-awm-open').onclick = function(e) { e.stopPropagation(); drCloseAllocWoMenu(); if (stop.allocations[ai]) openWODetail(stop.allocations[ai].woId); };
+  setTimeout(function() { document.addEventListener('click', drCloseAllocWoMenu, { once: true }); }, 0);
+}
+
+function drEditAllocation(stopIdx, ai) {
+  DRState.tagStopIdx = stopIdx;
+  TBState.focusBlock = ai;
+  drOpenBillingModal(stopIdx);
+}
+
+// v5.18 — Save & Close button at the bottom of the Time & Billing window.
+// Everything in the window already saves as it is changed; this blurs the field being typed in
+// (so its change is saved) and then closes back to the FTL, same as the X.
+function tbSaveAndClose() {
+  var a = document.activeElement;
+  if (a && a.blur && a !== document.body) a.blur();
+  tbCloseModal();
 }
 
 function drCloseTagOverlay() {
