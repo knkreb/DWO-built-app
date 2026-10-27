@@ -33,7 +33,7 @@ Kevin's decision: mistakes will happen, so correcting an allocation to the right
 - Data change, on that one existing `hours_entries` row only: `work_order_id`, `descriptor` (new WO number, tech and title, same format as Add work order) and `modified_by` / `modified_at`. No row is created or deleted. Rows are updated by entry id (see below), never by work order + date.
 - **Entry id on the allocation (required by this fix).** Allocations today do not carry their `hours_entries` id, which is why `tbSaveHours` and `tbRemoveBlock` find rows by work order + tech + date. This build adds `entryId` to each allocation (set from the saved row in `tbSelectWO` and from the entry in `drRebuildAllocationsFromEntries`) and uses it for Change work order, hours edits and remove. That also closes the existing risk in "Blast radius and risks" for those three actions.
 - Target list shows live work orders only (as Add work order does today). The back arrow cancels the change and returns to the blocks with nothing altered.
-- Not allowed when the **current** work order is already in a Processed category (invoiced): the button shows a short message ("This work order is already invoiced; adjust it from the work order") and changes nothing. See Open question 5.
+- Not allowed when the **current** work order is in the Processed category (Batch Invoice Process and later; decision 5): the button shows a short message ("This work order has gone to invoicing; adjust it from the work order") and changes nothing. The same check applies to the hours edit and Remove on such a block only if Kevin asks; this spec does not change those.
 - "New work order" in the list works as it does for Add work order and, in change mode, moves the allocation to the newly created work order.
 
 ## Fix 2: Save & Close button on the allocation window
@@ -59,7 +59,7 @@ Kevin's report: at a site with several accounts, when none of the suggested acco
 3. **"None of these" result:** the identify form saves a **new site** (it does today for single-account stops). At an address that already has several accounts, that adds one more location at the same address, so the next visit shows one more candidate. Acceptable, or should "None of these" offer to pick another existing customer's location first? (Recommended: acceptable for now; the form already lets you search customers.)
 4. **Mobile (still open):** this spec changes desktop only. Does the mobile FTL need the same three fixes? The mobile tile has no breakdown or work-order link, and the multi-account panel was not checked on mobile. If yes, say so and it becomes a second slice after a read of the `mdr` code.
 
-5. **Invoiced source work order (new):** Change work order is blocked when the work order the time is currently on is already invoiced/Processed, so invoiced totals cannot shift silently. Confirm the block is wanted (recommended), or say if invoiced work orders should allow the move with a warning.
+5. **Invoiced source work order: SETTLED 2026-10-27 (Kevin).** Blocked. Kevin's rule: from Batch Invoice Process (11) onward the work order has effectively gone to QuickBooks, so time cannot be moved off it. Implemented by status category (Processed: today 11, 12, 15), never by status number, so a status added later to that category is covered. Completed (10) is still movable.
 
 ## Blast radius and risks
 - Low to medium. One module, no schema, no triggers, no change to saved data shape.
@@ -88,7 +88,7 @@ Change work order (Fix 1b):
 - C4. T&M to quoted and quoted to T&M moves: badge and tile mixed-mode warning correct; the quoted-billing, NTE and carryover figures on both work orders match the new allocation (or are refreshed).
 - C5. Vendor stop: the vendor list is used; a move works.
 - C6. Same WO allocated at two stops on one day: change or edit one block and confirm the other stop's entry is untouched.
-- C7. Current WO already invoiced: Change work order shows the message and changes nothing.
+- C7. Current WO in Batch Invoice Process (11), Invoiced (12) or Invoiced Outside DWO (15): Change work order shows the message and changes nothing; at Completed (10) it still works.
 - C8. Reload the FTL after a move: the allocation rebuilds on the new WO (entry id present), and editing it again still hits the right row.
 - C9. "New work order" from the list in change mode moves the allocation to the new WO.
 
