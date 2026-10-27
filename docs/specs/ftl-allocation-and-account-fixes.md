@@ -4,7 +4,7 @@ Status: SPEC ONLY, drafted 2026-10-27 from Kevin's notes of 2026-10-27. Nothing 
 
 Baseline: v5.17, `field-travel-log.js` (read at main 011ab29). Next build would be v5.18; re-check `APP_VERSION` and the top of `CHANGELOG.md` after `git fetch` before bumping.
 
-Scope: three Field Travel Log (FTL) fixes noticed while using the app. No schema change, no database trigger, no new table. Customers on mobile (Customers missing from the mobile menu) is deliberately NOT in this spec; it is parked on the mobile notes list in the open register.
+Scope: four Field Travel Log (FTL) fixes noticed while using the app (Fix 1, 1b, 2, 3). No schema change, no database trigger, no new table. Customers on mobile (Customers missing from the mobile menu) is deliberately NOT in this spec; it is parked on the mobile notes list in the open register.
 
 ## What the code showed (read before the decisions)
 - There are two allocation surfaces on desktop. The older "Save to timecard" panel (`drOpenAllocPanel`, `#dr-alloc-panel`) is no longer reachable: `drStartAllocate` is defined twice and the later definition (~line 2863) opens the **Time & Billing modal** (`#tb-modal`, `drOpenBillingModal`). The Time & Billing modal is the "allocation window" Kevin means.
@@ -18,11 +18,23 @@ Kevin's request: after time is allocated, expanding the stop tile should let you
 
 - In the expanded tile's Billing breakdown (both the confirmed-multi-account branch and the single-location branch), the WO number becomes tappable.
 - Tapping it shows a two-choice popover next to the row:
-  1. **Edit this allocation**: opens the Time & Billing modal for that stop, scrolled to that block with the block highlighted, so the hours can be changed or the block removed without opening the work order. (Changing which work order a block is allocated to = remove the block and use the existing "Add work order"; see Open question 2.)
+  1. **Edit this allocation**: opens the Time & Billing modal for that stop, scrolled to that block with the block highlighted, so the hours can be changed or the block removed without opening the work order. (Changing which work order a block is allocated to is Fix 1b, the Change work order button.)
   2. **Open work order**: opens the full work order (`openWODetail(woId)`), the same as the modal's existing button.
 - Choosing nothing dismisses the popover; tapping elsewhere in the tile still toggles it as today.
 - Implementation shape: reuse `drOpenBillingModal(idx)` and add a one-shot `TBState.focusBlock` so `tbRenderRows` scrolls to and marks the chosen block. No new editor.
 - No data change. Allocation, hours entry and billing-minimum logic are not touched.
+
+## Fix 1b: Change work order button on each allocation block (added 2026-10-27, Kevin)
+Kevin's decision: mistakes will happen, so correcting an allocation to the right work order must take the least friction. Remove-and-add is not enough; add a Change work order button.
+
+- Each block in the Time & Billing modal gets a **Change work order** button beside the existing Open Work Order button.
+- Tapping it opens the same pickers used by "Add work order" (`tbRenderCustList` / `tbRenderWOList`, or the vendor list on vendor stops), in a "change" mode (`TBState.changeBlockIdx`). To keep taps low, it opens straight on the **work order list for the block's current customer** (the usual mistake is the wrong job for the right customer), with the back arrow going to the customer list for a different customer. The current work order is shown in the list marked "current".
+- Choosing a work order **moves** the allocation; it does not create a second one. Hours, hours type, paid and billable are kept. The block shows the new customer, work order number and T&M/Quoted badge, and a toast confirms ("Moved 1.50h from P26001 to P26002").
+- Data change, on that one existing `hours_entries` row only: `work_order_id`, `descriptor` (new WO number, tech and title, same format as Add work order) and `modified_by` / `modified_at`. No row is created or deleted. Rows are updated by entry id (see below), never by work order + date.
+- **Entry id on the allocation (required by this fix).** Allocations today do not carry their `hours_entries` id, which is why `tbSaveHours` and `tbRemoveBlock` find rows by work order + tech + date. This build adds `entryId` to each allocation (set from the saved row in `tbSelectWO` and from the entry in `drRebuildAllocationsFromEntries`) and uses it for Change work order, hours edits and remove. That also closes the existing risk in "Blast radius and risks" for those three actions.
+- Target list shows live work orders only (as Add work order does today). The back arrow cancels the change and returns to the blocks with nothing altered.
+- Not allowed when the **current** work order is already in a Processed category (invoiced): the button shows a short message ("This work order is already invoiced; adjust it from the work order") and changes nothing. See Open question 5.
+- "New work order" in the list works as it does for Add work order and, in change mode, moves the allocation to the newly created work order.
 
 ## Fix 2: Save & Close button on the allocation window
 Kevin's request: the allocation window only has an X at the top right; add a Save & Close button at the bottom that returns to the FTL.
@@ -43,15 +55,18 @@ Kevin's report: at a site with several accounts, when none of the suggested acco
 
 ## Decisions needed from Kevin (open questions)
 1. **Cancel button: SETTLED 2026-10-27 (Kevin).** No separate Cancel. Kevin's goal is a clearer, more logical way out than the X, which Save & Close gives (see Fix 2).
-2. **Changing the work order on an allocation:** is "remove the block and add the right one" enough, or do you want a "Change work order" action on the block itself? (Recommended: enough for now.)
+2. **Changing the work order on an allocation: SETTLED 2026-10-27 (Kevin).** Add a Change work order button on each block (Fix 1b), not remove-and-add.
 3. **"None of these" result:** the identify form saves a **new site** (it does today for single-account stops). At an address that already has several accounts, that adds one more location at the same address, so the next visit shows one more candidate. Acceptable, or should "None of these" offer to pick another existing customer's location first? (Recommended: acceptable for now; the form already lets you search customers.)
-4. **Mobile:** this spec changes desktop only. Does the mobile FTL need the same three fixes? The mobile tile has no breakdown or work-order link, and the multi-account panel was not checked on mobile. If yes, say so and it becomes a second slice after a read of the `mdr` code.
+4. **Mobile (still open):** this spec changes desktop only. Does the mobile FTL need the same three fixes? The mobile tile has no breakdown or work-order link, and the multi-account panel was not checked on mobile. If yes, say so and it becomes a second slice after a read of the `mdr` code.
+
+5. **Invoiced source work order (new):** Change work order is blocked when the work order the time is currently on is already invoiced/Processed, so invoiced totals cannot shift silently. Confirm the block is wanted (recommended), or say if invoiced work orders should allow the move with a warning.
 
 ## Blast radius and risks
 - Low to medium. One module, no schema, no triggers, no change to saved data shape.
 - Fix 3 is render-only in one branch.
 - Fixes 1 and 2 sit next to allocation edits, which feed billing hours and invoicing, so they get one targeted regression test (below).
-- **Existing risk, not fixed here:** `tbSaveHours` and `tbRemoveBlock` find the `hours_entries` row by work order + tech + date only, not by location. If the same work order is allocated at two stops on one day, editing one block can patch the other stop's entry. Fix 1 makes single-block editing easier, so this is more likely to be hit. Recommended: Kevin decides whether to include a location match in this build or schedule it separately (it changes which row is patched, so it needs its own test).
+- **Existing risk, now handled in this build (recommended, Kevin to confirm):** `tbSaveHours` and `tbRemoveBlock` find the `hours_entries` row by work order + tech + date only, not by location. If the same work order is allocated at two stops on one day, editing one block can patch the other stop's entry. Fix 1b needs the exact row, so allocations carry `entryId` and all three block actions (hours, remove, change work order) use it. That changes which row is patched in existing actions, so check 10 and C6 test it.
+- **Billing side effects to confirm while building:** moving time between a T&M and a quoted work order changes how it bills (the tile's mixed-mode warning already covers display). Check whether the quoted-billing, NTE and carryover modules (`app-quoted-billing.js`, `app-wo-nte.js`, `app-carryover.js`) read `hours_entries` live or cache totals; if any cache, Change work order must trigger their refresh. If one does and the refresh is not simple, stop and report to Kevin before shipping.
 
 ## Acceptance checks
 Allocation (Fixes 1 and 2):
@@ -65,6 +80,17 @@ Allocation (Fixes 1 and 2):
 8. The X still closes the window as before.
 9. A stop with both T&M and quoted allocations still shows the mixed-mode warning and correct badges.
 10. Same work order allocated at two stops on one day: record what editing one block does to the other (see the existing risk). Do not ship a change here without Kevin's decision.
+
+Change work order (Fix 1b):
+- C1. Block shows Change work order; tapping opens the WO list for that block's customer with the current WO marked; back arrow goes to the customer list; back from the list leaves the block unchanged.
+- C2. Pick another WO of the same customer: the block, the tile breakdown, the timecard and the hours entry all show the new WO; hours, hours type, paid, billable are unchanged; no second row is created.
+- C3. Pick a WO of a different customer: customer name and badge update to the new customer.
+- C4. T&M to quoted and quoted to T&M moves: badge and tile mixed-mode warning correct; the quoted-billing, NTE and carryover figures on both work orders match the new allocation (or are refreshed).
+- C5. Vendor stop: the vendor list is used; a move works.
+- C6. Same WO allocated at two stops on one day: change or edit one block and confirm the other stop's entry is untouched.
+- C7. Current WO already invoiced: Change work order shows the message and changes nothing.
+- C8. Reload the FTL after a move: the allocation rebuilds on the new WO (entry id present), and editing it again still hits the right row.
+- C9. "New work order" from the list in change mode moves the allocation to the new WO.
 
 Multi-account (Fix 3):
 11. Multi-account unresolved stop: "None of these" shows the identify form (type, then search or name), not the checkbox panel again.
@@ -83,4 +109,4 @@ Per the QC framework rule, a full gate is not recommended here (no trigger, no s
 ## Out of scope
 - Customers missing from the mobile menu (parked on the mobile notes list).
 - Retiring the unreachable `#dr-alloc-panel`.
-- Any change to how hours entries are matched or billed beyond what Open risk describes, unless Kevin decides it is in.
+- Any change to how hours are billed. Matching blocks to their `hours_entries` rows by entry id is in scope (Fix 1b).
