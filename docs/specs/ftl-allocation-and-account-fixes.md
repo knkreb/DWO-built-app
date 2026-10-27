@@ -42,7 +42,7 @@ Kevin's report: at a site with several accounts, when none of the suggested acco
 - The identify form itself and `drSaveIdentify` are unchanged. After a successful save the stop has a location, so it leaves the unresolved branch as it does for single-account stops. Verify this on a real multi-account stop.
 
 ## Decisions needed from Kevin (open questions)
-1. **Cancel button:** confirm no separate Cancel on the allocation window (recommended, see Fix 2).
+1. **Cancel button: SETTLED 2026-10-27 (Kevin).** No separate Cancel. Kevin's goal is a clearer, more logical way out than the X, which Save & Close gives (see Fix 2).
 2. **Changing the work order on an allocation:** is "remove the block and add the right one" enough, or do you want a "Change work order" action on the block itself? (Recommended: enough for now.)
 3. **"None of these" result:** the identify form saves a **new site** (it does today for single-account stops). At an address that already has several accounts, that adds one more location at the same address, so the next visit shows one more candidate. Acceptable, or should "None of these" offer to pick another existing customer's location first? (Recommended: acceptable for now; the form already lets you search customers.)
 4. **Mobile:** this spec changes desktop only. Does the mobile FTL need the same three fixes? The mobile tile has no breakdown or work-order link, and the multi-account panel was not checked on mobile. If yes, say so and it becomes a second slice after a read of the `mdr` code.
