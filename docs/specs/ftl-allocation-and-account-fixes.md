@@ -45,25 +45,34 @@ Kevin's request: the allocation window only has an X at the top right; add a Sav
 - Recommendation on Cancel (Kevin's open question): **no separate Cancel button.** Changes are already saved when made, so a Cancel would suggest it undoes them and it would not. If an undo is ever wanted, that is a different feature.
 - The unreachable older panel (`#dr-alloc-panel`, "Save to timecard") is left alone; do not delete it (CLAUDE.md: comment out, never hard-delete). Whether to retire it is a cleanup for later.
 
-## Fix 3: "None of these" does nothing on a multi-account stop
-Kevin's report: at a site with several accounts, when none of the suggested accounts is right, tapping "None of these" does nothing.
+## Fix 3: "None of these" does nothing on a multi-account stop (revised 2026-10-27, Kevin)
+Kevin's report: at a site with several accounts, when none of the suggested accounts is right, tapping "None of these" does nothing. Kevin's direction: the right answer may be a closer neighboring site that is already in the Sites/Locations database but did not show up as a match; let him select it, and still allow creating a new one.
 
-- Cause (confirmed in code): in the multi-account unresolved branch (~lines 1185-1210) the "None of these" button calls `drStartIdentify(origIdx)`, which sets `DRState.identifyIdx` and re-renders. But only the single-account branch (~line 1181) checks `DRState.identifyIdx` and shows `drRenderIdentifyForm`. The multi-account branch never checks it, so it re-renders the same checkbox panel.
-- Fix: in the multi-account branch, if `DRState.identifyIdx === origIdx`, render `drRenderIdentifyForm(origIdx)`; otherwise render the checkbox panel as now.
-- Add a **Back to accounts** link on the identify form when it was reached from the multi-account panel, so a mis-tap does not strand the stop. Clears `DRState.identifyIdx` and re-renders.
-- The identify form itself and `drSaveIdentify` are unchanged. After a successful save the stop has a location, so it leaves the unresolved branch as it does for single-account stops. Verify this on a real multi-account stop.
+- Cause (confirmed in code): in the multi-account unresolved branch (~lines 1185-1210) the "None of these" button calls `drStartIdentify(origIdx)`, which sets `DRState.identifyIdx` and re-renders. Only the single-account branch (~line 1181) checks `DRState.identifyIdx` and shows the form, so the multi-account branch re-renders the same checkboxes.
+- Why a neighbor can be missed: a stop only matches sites whose own geofence (default 100 m, per-site `geofence_radius`) contains the stop. A site just outside its radius, or with slightly off coordinates, is never offered.
+- New behavior: "None of these" opens a **Nearby sites** step in the same place as the checkboxes:
+  1. **Nearby list:** active sites from `DRState.locations` not already offered as matches, nearest first by straight-line distance from the stop (`drHaversineMeters`), each with its name, customer and distance (e.g. "140 m"). The list covers sites within the association radius (3 x `geofence_radius_default`, 300 m today), because that is the radius the app uses to re-attach saved time entries to a stop after a reload (`drRebuildAllocationsFromEntries`). Do not offer sites beyond it in this list.
+  2. **Search box:** finds any active site by name or customer. A result farther than the association radius is shown greyed with "Too far from this stop (N m) to assign; create a new site instead", and cannot be selected (otherwise its saved time would not re-attach after a reload).
+  3. Tapping a site **assigns it to the stop**: `stop.location` and `stop.confirmedAccounts` are set to that site (billable default from the site, as `drSelectStopLocation` does), and the choice is saved to the day review the same way the existing picker saves it (`day_review.stop_locations[arrivedAt] = locationId`). No new site row is created and nothing about the site changes.
+  4. **Create a new site** button at the bottom opens the existing identify form (`drRenderIdentifyForm` / `drSaveIdentify`), unchanged: it saves a new pending site at the stop's coordinates.
+  5. **Back to accounts** returns to the checkboxes with the list intact.
+- **Reload fix required by this:** `drProcessAndRender` (~line 572) only restores a saved stop location when the stop still has two or more geofence matches. A neighbor chosen outside the geofence has none, so the choice would vanish on reload. Change the restore so a saved id is resolved against all of `DRState.locations` when the stop has no resolved location, keeping the existing logic for stops with matches unchanged. A saved id whose site is no longer active leaves the stop unresolved, as today.
+- Also applies to **Identify this stop** (stops with no match at all): the same Nearby sites step comes first, with Create a new site below it, so near-miss sites are not duplicated. See Open question 6.
+- Out of scope: widening a site's geofence or correcting its coordinates when a near miss shows it is off. Note it to Kevin in the reply if a site looks wrong while testing.
 
 ## Decisions needed from Kevin (open questions)
 1. **Cancel button: SETTLED 2026-10-27 (Kevin).** No separate Cancel. Kevin's goal is a clearer, more logical way out than the X, which Save & Close gives (see Fix 2).
 2. **Changing the work order on an allocation: SETTLED 2026-10-27 (Kevin).** Add a Change work order button on each block (Fix 1b), not remove-and-add.
-3. **"None of these" result:** the identify form saves a **new site** (it does today for single-account stops). At an address that already has several accounts, that adds one more location at the same address, so the next visit shows one more candidate. Acceptable, or should "None of these" offer to pick another existing customer's location first? (Recommended: acceptable for now; the form already lets you search customers.)
+3. **"None of these" result: SETTLED 2026-10-27 (Kevin).** Offer nearby existing sites to select first, and still allow creating a new one (Fix 3).
 4. **Mobile (still open):** this spec changes desktop only. Does the mobile FTL need the same three fixes? The mobile tile has no breakdown or work-order link, and the multi-account panel was not checked on mobile. If yes, say so and it becomes a second slice after a read of the `mdr` code.
 
 5. **Invoiced source work order: SETTLED 2026-10-27 (Kevin).** Blocked. Kevin's rule: from Batch Invoice Process (11) onward the work order has effectively gone to QuickBooks, so time cannot be moved off it. Implemented by status category (Processed: today 11, 12, 15), never by status number, so a status added later to that category is covered. Completed (10) is still movable.
 
+6. **Identify this stop (new):** should the same Nearby sites step also come first for stops with no match at all, so near-miss sites are picked instead of duplicated? Recommended: yes, one shared step; small extra work.
+
 ## Blast radius and risks
 - Low to medium. One module, no schema, no triggers, no change to saved data shape.
-- Fix 3 is render-only in one branch.
+- Fix 3 is no longer render-only: it assigns an existing site to a stop and changes how a saved stop location is restored on load (`drProcessAndRender`). It writes only `day_review.stop_locations`, the same field the existing account picker already writes. It touches which site a stop belongs to, which feeds the billing breakdown, so it gets its own regression checks (11-18).
 - Fixes 1 and 2 sit next to allocation edits, which feed billing hours and invoicing, so they get one targeted regression test (below).
 - **Existing risk, now handled in this build (recommended, Kevin to confirm):** `tbSaveHours` and `tbRemoveBlock` find the `hours_entries` row by work order + tech + date only, not by location. If the same work order is allocated at two stops on one day, editing one block can patch the other stop's entry. Fix 1b needs the exact row, so allocations carry `entryId` and all three block actions (hours, remove, change work order) use it. That changes which row is patched in existing actions, so check 10 and C6 test it.
 - **Billing side effects to confirm while building:** moving time between a T&M and a quoted work order changes how it bills (the tile's mixed-mode warning already covers display). Check whether the quoted-billing, NTE and carryover modules (`app-quoted-billing.js`, `app-wo-nte.js`, `app-carryover.js`) read `hours_entries` live or cache totals; if any cache, Change work order must trigger their refresh. If one does and the refresh is not simple, stop and report to Kevin before shipping.
@@ -92,16 +101,20 @@ Change work order (Fix 1b):
 - C8. Reload the FTL after a move: the allocation rebuilds on the new WO (entry id present), and editing it again still hits the right row.
 - C9. "New work order" from the list in change mode moves the allocation to the new WO.
 
-Multi-account (Fix 3):
-11. Multi-account unresolved stop: "None of these" shows the identify form (type, then search or name), not the checkbox panel again.
-12. "Back to accounts" returns to the checkboxes with the account list intact.
-13. Complete the identify form: the stop resolves to the new site, leaves the unresolved state, and the day's totals are unchanged.
-14. Confirm / "Mark not billable" / "Undo merge" on a multi-account stop still behave as before, including on a merged stop.
-15. A single-account unresolved stop's "Identify this stop" still works.
+Multi-account and nearby sites (Fix 3):
+11. Multi-account unresolved stop: "None of these" shows the Nearby sites step, not the checkboxes again.
+12. The nearby list excludes the sites already offered as matches, is sorted nearest first, shows distances, and only includes sites within the association radius.
+13. Pick a nearby site: the stop resolves to it, the tile and billing breakdown use it, and a toast confirms. No new site row is created (check the Sites screen).
+14. Reload the day: the chosen site is still on the stop, and any time already allocated to it re-attaches to that stop.
+15. Search finds a site by name; a result farther than the association radius is greyed and cannot be selected.
+16. Create a new site from the step: the identify form and save behave as before (pending site at the stop's coordinates) and the stop resolves.
+17. Back to accounts returns to the checkboxes with the account list intact; Confirm, Mark not billable and Undo merge still work, including on a merged stop.
+18. Stops that already resolve by geofence (single match, or multi-account confirmed from the checkboxes) restore after reload exactly as before.
+19. "Identify this stop" on a no-match stop shows the Nearby sites step first (if Open question 6 is approved) and still reaches the identify form.
 
 General:
-16. `node --check` passes on every changed JS file; `APP_VERSION` and cache busters bumped; CHANGELOG line added; commit message `v5.18: ...`.
-17. Tested on desktop (Kevin) before deploy. If mobile is added later (Open question 4), also on Jadyn's iPhone.
+20. `node --check` passes on every changed JS file; `APP_VERSION` and cache busters bumped; CHANGELOG line added; commit message `v5.18: ...`.
+21. Tested on desktop (Kevin) before deploy. If mobile is added later (Open question 4), also on Jadyn's iPhone.
 
 ## QC gate
 Per the QC framework rule, a full gate is not recommended here (no trigger, no schema, one module). Recommended: acceptance checks 4, 5 and 10 are the gate; the rest are quick visual checks.
