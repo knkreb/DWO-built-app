@@ -117,7 +117,7 @@ General:
 21. Tested on desktop (Kevin) before deploy. If mobile is added later (Open question 4), also on Jadyn's iPhone.
 
 ## QC gate
-Per the QC framework rule, a full gate is not recommended here (no trigger, no schema, one module). Recommended: acceptance checks 4, 5 and 10 are the gate; the rest are quick visual checks.
+Per the QC framework rule, a full gate is not recommended here (no trigger, no schema, one module). Recommended: acceptance checks 4, 5, 10, C6, 13 and 14 are the gate (they cover hours, row matching and site assignment); the rest are quick visual checks.
 
 ## Out of scope
 - Customers missing from the mobile menu (parked on the mobile notes list).
