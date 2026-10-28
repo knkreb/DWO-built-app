@@ -51,8 +51,8 @@ Kevin's report: at a site with several accounts, when none of the suggested acco
 - Cause (confirmed in code): in the multi-account unresolved branch (~lines 1185-1210) the "None of these" button calls `drStartIdentify(origIdx)`, which sets `DRState.identifyIdx` and re-renders. Only the single-account branch (~line 1181) checks `DRState.identifyIdx` and shows the form, so the multi-account branch re-renders the same checkboxes.
 - Why a neighbor can be missed: a stop only matches sites whose own geofence (default 100 m, per-site `geofence_radius`) contains the stop. A site just outside its radius, or with slightly off coordinates, is never offered.
 - New behavior: "None of these" opens a **Nearby sites** step in the same place as the checkboxes:
-  1. **Nearby list:** active sites from `DRState.locations` not already offered as matches, nearest first by straight-line distance from the stop (`drHaversineMeters`), each with its name, customer and distance (e.g. "140 m / 460 ft"). The list covers sites within the **nearby radius**: setting `nearby_sites_radius_m`, default **1,000 m** when unset (Kevin: location errors from RF interference can be large, so this is not tied to the geofence size). Replaces the earlier 3 x geofence (300 m) limit.
-  2. **Search box:** finds any active site by name or customer, at any distance. **Nothing is blocked.** A result beyond the nearby radius is selectable too and shows a warning line, "N m from this stop; the stop's GPS position or the site's saved position may be off" (decision 9, Kevin 2026-10-27).
+  1. **Nearby list:** every active site from `DRState.locations` not already offered as a match, sorted nearest first by straight-line distance from the stop (`drHaversineMeters`), each showing name, customer and distance (e.g. "506 m / 1,660 ft"). **No radius limit and no setting** (Kevin 2026-10-27: "just give a list by closest site"). The list shows the nearest 12; the search box reaches the rest.
+  2. **Search box:** finds any active site by name or customer, shown with its distance and sorted nearest first. Nothing is greyed or blocked.
   3. Tapping a site **assigns it to the stop**: `stop.location` and `stop.confirmedAccounts` are set to that site (billable default from the site, as `drSelectStopLocation` does), and the choice is saved to the day review the same way the existing picker saves it (`day_review.stop_locations[arrivedAt] = locationId`). No new site row is created and nothing about the site changes.
   4. **Create a new site** button at the bottom opens the existing identify form (`drRenderIdentifyForm` / `drSaveIdentify`), unchanged: it saves a new pending site at the stop's coordinates.
   5. **Back to accounts** returns to the checkboxes with the list intact.
@@ -89,7 +89,7 @@ Blast radius for Slice B: medium to high. It rewrites the mobile allocation save
 6. **Identify this stop: SETTLED 2026-10-27 (Kevin).** Yes, the Nearby sites step also comes first for stops with no match (desktop and mobile).
 7. **Build order: SETTLED 2026-10-27 (Kevin).** Desktop and mobile are split: Slice A (desktop, v5.18) first, Kevin tests, then Slice B (mobile, v5.19). "Okay to build" must name this spec and the slice. (Original question: Slice B (mobile) changes how allocations are saved on the phone and is used daily by the field tech on an iPhone, so it is a bigger and riskier build than Slice A. Recommended: build and ship Slice A (v5.18), Kevin tests, then build Slice B (v5.19). Alternative was one combined build.)
 8. **Mobile save semantics: SETTLED 2026-10-27 (Kevin, "sounds solid").** (Original question: mobile Save today deletes this stop's earlier entries and re-creates them (hard delete). Slice B changes it to edit-in-place by entry id (patch changed rows, add new rows, mark removed rows inactive like desktop Remove). Needed for Change work order.) Still to do during the Slice B build: check it against `operational-audit-trail.md`.
-9. **Do not block far sites: SETTLED 2026-10-27 (Kevin).** Any site can be selected at any distance; a warning shows beyond the nearby radius (default 1,000 m, to be confirmed by Kevin). The "Move this site's pin to here" idea is dropped: the error is in the stop's GPS position (RF interference), not the site.
+9. **Do not block far sites: SETTLED 2026-10-27 (Kevin).** The nearby step is a plain list of sites by distance from the stop, nearest first, with no radius limit and no warning text. The "Move this site's pin to here" idea is dropped: the error is in the stop's GPS position (RF interference), not the site.
 
 ## Blast radius and risks
 - Low to medium. One module, no schema, no triggers, no change to saved data shape.
@@ -124,10 +124,10 @@ Change work order (Fix 1b):
 
 Multi-account and nearby sites (Fix 3):
 11. Multi-account unresolved stop: "None of these" shows the Nearby sites step, not the checkboxes again.
-12. The nearby list excludes the sites already offered as matches, is sorted nearest first, shows distances, and includes only sites within the nearby radius (default 1,000 m; changing `nearby_sites_radius_m` changes it).
+12. The nearby list excludes the sites already offered as matches, is sorted nearest first, shows each distance, has no radius cut-off, and shows at most the nearest 12.
 13. Pick a nearby site: the stop resolves to it, the tile and billing breakdown use it, and a toast confirms. No new site row is created (check the Sites screen).
 14. Reload the day: the chosen site is still on the stop, and any time already allocated to it re-attaches to that stop, including when the site is more than 300 m (and more than 1,000 m) from the stop.
-15. Search finds a site by name at any distance; a result beyond the nearby radius is selectable and shows the distance warning (nothing is greyed or blocked).
+15. Search finds a site by name at any distance, with its distance shown; nothing is greyed or blocked.
 16. Create a new site from the step: the identify form and save behave as before (pending site at the stop's coordinates) and the stop resolves.
 17. Back to accounts returns to the checkboxes with the account list intact; Confirm, Mark not billable and Undo merge still work, including on a merged stop.
 18. Stops that already resolve by geofence (single match, or multi-account confirmed from the checkboxes) restore after reload exactly as before.
