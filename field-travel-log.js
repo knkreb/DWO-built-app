@@ -562,7 +562,6 @@ function drMergeStops(indices) {
 
 function drProcessAndRender() {
   DRState.stops = drDetectStops(DRState.pings, DRState.locations);
-  drRebuildAllocationsFromEntries();
   var dayReview = DRState.dayReviews.find(function(r){ return r.review_date === DRState.selectedDate && r.tech_id === DRState.tech; });
   drLoadStopFlags(dayReview || null);
   // Apply saved stop location selections — v4.45
@@ -609,6 +608,7 @@ function drProcessAndRender() {
       });
     }
   }
+  drRebuildAllocationsFromEntries(); // v5.18 runs after the saved site choices are restored so time can attach by site
   drRenderTimeline();
   drInitMap();
 }
@@ -622,11 +622,22 @@ function drRebuildAllocationsFromEntries() {
     if (!entryLoc || !entryLoc.lat || !entryLoc.lng) return;
     var bestStop = null;
     var bestDist = Infinity;
+    // v5.18 — a stop whose chosen site IS this entry's site claims it, at any distance (nearest such stop if several).
     DRState.stops.forEach(function(s) {
-      var dist = drHaversineMeters(s.lat, s.lng, entryLoc.lat, entryLoc.lng);
-      if (dist < bestDist) { bestDist = dist; bestStop = s; }
+      var ids = (s.confirmedAccounts || []).map(function(l){ return l.id; });
+      if (s.location) ids.push(s.location.id);
+      if (ids.indexOf(entry.location_id) < 0) return;
+      var d = drHaversineMeters(s.lat, s.lng, entryLoc.lat, entryLoc.lng);
+      if (d < bestDist) { bestDist = d; bestStop = s; }
     });
-    if (bestStop && bestDist <= ASSOC_RADIUS) {
+    var bySite = !!bestStop;
+    if (!bySite) {
+      DRState.stops.forEach(function(s) {
+        var dist = drHaversineMeters(s.lat, s.lng, entryLoc.lat, entryLoc.lng);
+        if (dist < bestDist) { bestDist = dist; bestStop = s; }
+      });
+    }
+    if (bestStop && (bySite || bestDist <= ASSOC_RADIUS)) {
       var wo = AppState.workOrders.find(function(w){ return w.id === entry.work_order_id; });
       var cust = wo ? AppState.customers.find(function(c){ return c.id === wo.customer_id; }) : null;
       var ht = AppState.hoursTypes.find(function(t){ return t.id === entry.hours_type_id; });
@@ -1963,15 +1974,10 @@ function mdrMarkNotBillable(idx) {
 
 // =============================================================
 // v5.18 — Nearby sites step (None of these / Identify this stop)
-// A stop only matches sites whose own geofence contains it, so a neighbouring site that is just outside its
-// radius never shows up. This step lists existing sites near the stop so one can be picked instead of creating
-// a duplicate. Sites within the association radius (3 x default geofence, the radius used to re-attach saved
-// time entries to a stop) are selectable; farther ones can be found by search but not assigned.
+// A stop only matches sites whose own geofence contains it, so a neighbouring site just outside its radius never
+// shows up. This step lists existing sites by distance from the stop (nearest first, no radius limit, nothing blocked:
+// RF interference can throw a stop's position off by a large margin) so one can be picked instead of creating a duplicate.
 // =============================================================
-function drAssocRadius() {
-  return parseInt(AppState.settings.geofence_radius_default || '100') * 3;
-}
-
 function drLocDistLabel(d) {
   return Math.round(d) + ' m / ' + Math.round(d * 3.28084) + ' ft';
 }
@@ -1983,12 +1989,11 @@ function drLocCustName(loc) {
 }
 
 function drNearbySites(stop, excludeIds) {
-  var assoc = drAssocRadius();
   var out = [];
   (DRState.locations || []).forEach(function(l) {
     if (!l.lat || !l.lng || l.active === false || excludeIds.indexOf(l.id) >= 0) return;
     var d = drHaversineMeters(stop.lat, stop.lng, l.lat, l.lng);
-    if (d <= assoc) out.push({ loc: l, dist: d });
+    out.push({ loc: l, dist: d });
   });
   out.sort(function(a, b) { return a.dist - b.dist; });
   return out.slice(0, 12);
@@ -2043,7 +2048,6 @@ function drNearbySearch(idx, val) {
   var q = (val || '').toLowerCase().trim();
   if (!q) { el.innerHTML = ''; return; }
   var exclude = (stop.locationMatches || []).map(function(l){ return l.id; });
-  var assoc = drAssocRadius();
   var rows = [];
   (DRState.locations || []).forEach(function(l) {
     if (!l.lat || !l.lng || l.active === false || exclude.indexOf(l.id) >= 0) return;
@@ -2053,7 +2057,7 @@ function drNearbySearch(idx, val) {
   });
   rows.sort(function(a, b) { return a.dist - b.dist; });
   if (!rows.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:2px 0">No sites match.</div>'; return; }
-  el.innerHTML = rows.slice(0, 8).map(function(r) { return drNearbyRow(r.loc, r.dist, idx, r.dist <= assoc); }).join('');
+  el.innerHTML = rows.slice(0, 8).map(function(r) { return drNearbyRow(r.loc, r.dist, idx, true); }).join('');
 }
 
 // Saves the site chosen for a stop to the day review (day_review.stop_locations), same field the account picker uses.
