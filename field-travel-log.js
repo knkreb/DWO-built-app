@@ -1989,6 +1989,9 @@ function drLocCustName(loc) {
 }
 
 function drNearbySites(stop, excludeIds) {
+  return ftlNearbySites(DRState.locations, stop, excludeIds, 12); // v5.19 — shared with mobile (app-ftl-mobile.js)
+}
+/* MOVED TO app-ftl-mobile.js (ftlNearbySites) — v5.19 — 2026-10-27. Previous body of drNearbySites, not run:
   var out = [];
   (DRState.locations || []).forEach(function(l) {
     if (!l.lat || !l.lng || l.active === false || excludeIds.indexOf(l.id) >= 0) return;
@@ -1997,7 +2000,7 @@ function drNearbySites(stop, excludeIds) {
   });
   out.sort(function(a, b) { return a.dist - b.dist; });
   return out.slice(0, 12);
-}
+*/
 
 function drStartNearby(idx) {
   DRState.nearbyIdx = idx;
@@ -2048,6 +2051,8 @@ function drNearbySearch(idx, val) {
   var q = (val || '').toLowerCase().trim();
   if (!q) { el.innerHTML = ''; return; }
   var exclude = (stop.locationMatches || []).map(function(l){ return l.id; });
+  var rows = ftlNearbySearch(DRState.locations, stop, exclude, val); // v5.19 — shared with mobile (app-ftl-mobile.js)
+  /* MOVED TO app-ftl-mobile.js (ftlNearbySearch) — v5.19 — 2026-10-27. Previous inline search, not run:
   var rows = [];
   (DRState.locations || []).forEach(function(l) {
     if (!l.lat || !l.lng || l.active === false || exclude.indexOf(l.id) >= 0) return;
@@ -2056,6 +2061,7 @@ function drNearbySearch(idx, val) {
     rows.push({ loc: l, dist: drHaversineMeters(stop.lat, stop.lng, l.lat, l.lng) });
   });
   rows.sort(function(a, b) { return a.dist - b.dist; });
+  */
   if (!rows.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:2px 0">No sites match.</div>'; return; }
   el.innerHTML = rows.slice(0, 8).map(function(r) { return drNearbyRow(r.loc, r.dist, idx, true); }).join('');
 }
@@ -3543,7 +3549,7 @@ function mdrRefreshHours() {
   var tech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
   var date = MDRState.selectedDate;
   if (!tech || !date) return;
-  sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + date + '&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc')
+  sb.get('hours_entries', '?tech_id=eq.' + tech + '&entry_date=eq.' + date + '&active=eq.true&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc')
     .then(function(r) {
       MDRState.hoursEntries = (r.ok && r.data) ? r.data : [];
       mdrRenderDay(null);
@@ -3812,7 +3818,7 @@ function mdrLoadDay(dateStr) {
   var toUTC = drNextLocalMidnightUTC(dateStr);
   Promise.all([
     sb.get('location_event', '?tid=eq.'+tid+'&timestamp=gte.'+fromUTC+'&timestamp=lt.'+toUTC+'&select=id,tid,timestamp,lat,lng,accuracy,speed,battery&order=timestamp.asc&limit=10000'),
-    sb.get('hours_entries', '?tech_id=eq.'+MDRState.tech+'&entry_date=eq.'+dateStr+'&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc'),
+    sb.get('hours_entries', '?tech_id=eq.'+MDRState.tech+'&entry_date=eq.'+dateStr+'&active=eq.true&select=*,work_orders(wo_number,customers(display_name,name))&order=created_at.asc'), // v5.19 active only: a removed row stays inactive after a reload
     sb.get('day_review', '?tech_id=eq.'+MDRState.tech+'&review_date=eq.'+dateStr+'&select=*')
   ]).then(function(results) {
     MDRState.pings = (results[0].ok && results[0].data) ? results[0].data : [];
@@ -3835,6 +3841,8 @@ function drGetTechTidForTech(techId) {
   return tech ? (tech.tid || null) : null;
 }
 
+/* MOVED TO app-ftl-mobile.js — v5.19 — 2026-10-27 (mdrRebuildAllocationsFromEntries). Old copy kept below, not called: the later definition in app-ftl-mobile.js replaces it. */
+/*
 function mdrRebuildAllocationsFromEntries() {
   var ASSOC_RADIUS = parseInt(AppState.settings.geofence_radius_default || '100') * 3;
   MDRState.stops.forEach(function(stop){ stop.allocations = []; });
@@ -3867,12 +3875,14 @@ function mdrRebuildAllocationsFromEntries() {
     }
   });
 }
+*/
 
 function mdrRenderDay(dayReview) {
   if (dayReview === null || dayReview === undefined) dayReview = MDRState.currentDayReview || null;
   var content = document.getElementById('mdr-content');
   if (!content) return;
   MDRState.stops = drDetectStops(MDRState.pings, MDRState.locations);
+  mdrRestoreStopChoices(); // v5.19 — saved account / nearby-site choices (app-ftl-mobile.js); must run before the rebuild so time attaches by site
   mdrRebuildAllocationsFromEntries();
   var dayStatus = dayReview ? dayReview.status : 'none';
   var kickbackReason = dayReview ? dayReview.kickback_reason : null;
@@ -3953,7 +3963,7 @@ function mdrRenderDay(dayReview) {
     var isSelected = MDRState.selectedStop === MDRState.stops.indexOf(stop);
     var origIdx = MDRState.stops.indexOf(stop);
     var hasAllocations = stop.allocations && stop.allocations.length > 0;
-    var locName = stop.location ? stop.location.name : 'Unknown stop';
+    var locName = mdrStopDisplayName(stop); // v5.19 (was: stop.location ? stop.location.name : 'Unknown stop')
     var locType = stop.location ? (stop.location.location_type||'untagged') : 'untagged';
     var isUntagged = !stop.location;
     var mdrAllocCustomers = '';
@@ -3990,7 +4000,7 @@ function mdrRenderDay(dayReview) {
     var icColor = locType==='customer'?'#e6f1fb;color:#185fa5':locType==='vendor'?'#eaf3de;color:#3b6d11':'#faeeda;color:#854f0b';
     var icLabel = locType==='customer'?'C':locType==='vendor'?'V':isUntagged?'?':'P';
     var badgeColor = isUntagged?'#faeeda;color:#854f0b':stop.allocations&&stop.allocations.length?'#eaf3de;color:#3b6d11':'var(--surface);color:var(--text-muted);border:1px solid var(--border)';
-    var badgeText = isUntagged?'Untagged':stop.allocations&&stop.allocations.length?'Allocated':'No entries';
+    var badgeText = isUntagged?(mdrIsMultiUnresolved(stop)?'Select account':'Untagged'):stop.allocations&&stop.allocations.length?'Allocated':'No entries'; // v5.19: multi-account stops say Select account
 
     html += '<div style="border:1px solid ' + borderColor + ';border-radius:10px;margin-bottom:4px;overflow:hidden;cursor:pointer" onclick="mdrSelectStop(' + origIdx + ')">';
     html += '<div style="padding:9px 11px;display:flex;align-items:center;gap:8px;background:var(--surface)">';
@@ -4002,6 +4012,10 @@ function mdrRenderDay(dayReview) {
     html += '</div>';
 
     // Expanded body
+    if (isSelected) {
+      html += mdrRenderStopBody(stop, origIdx, idx, locType, isUntagged); // v5.19 — body moved to app-ftl-mobile.js
+    }
+    /* MOVED TO app-ftl-mobile.js (mdrRenderStopBody) — v5.19 — 2026-10-27. The previous inline body of the expanded stop tile, kept for reference, not run:
     if (isSelected) {
       html += '<div style="padding:10px 12px;background:var(--bg);border-top:1px solid var(--border)">';
       if (isUntagged) {
@@ -4027,6 +4041,7 @@ function mdrRenderDay(dayReview) {
       }
       html += '</div>';
     }
+    */
     html += '</div>';
   });
 
@@ -4266,6 +4281,8 @@ function mdrIdentifySelectEntity(id, name) {
   if (resultsEl) resultsEl.innerHTML = '<div style="font-size:12px;color:#3b6d11;padding:4px 0">&#10003; ' + escHtml(name) + ' selected</div>';
 }
 
+/* MOVED TO app-ftl-mobile.js — v5.19 — 2026-10-27 (mdrBuildAllocateSheet). Old copy kept below, not called: the later definition in app-ftl-mobile.js replaces it. */
+/*
 function mdrBuildAllocateSheet(div, stop) {
   var gpsH = drElapsedMin(stop) / 60;
   var minBilling = parseFloat(AppState.settings.billing_minimum_hours || 2);
@@ -4289,7 +4306,10 @@ function mdrBuildAllocateSheet(div, stop) {
   div.innerHTML = html;
   mdrAddAllocRow();
 }
+*/
 
+/* MOVED TO app-ftl-mobile.js — v5.19 — 2026-10-27 (mdrAddAllocRow). Old copy kept below, not called: the later definition in app-ftl-mobile.js replaces it. */
+/*
 function mdrAddAllocRow() {
   var container = document.getElementById('mdr-alloc-rows');
   if (!container) return;
@@ -4320,7 +4340,10 @@ function mdrAddAllocRow() {
     + '<button onclick="this.closest(\'div\').parentElement.remove();mdrUpdateAllocSummary(' + MDRState.tagStopIdx + ')" style="padding:6px 10px;border:1px solid var(--danger);border-radius:6px;color:var(--danger);background:none;cursor:pointer">&times;</button></div>';
   container.appendChild(div);
 }
+*/
 
+/* MOVED TO app-ftl-mobile.js — v5.19 — 2026-10-27 (mdrUpdateAllocSummary). Old copy kept below, not called: the later definition in app-ftl-mobile.js replaces it. */
+/*
 function mdrUpdateAllocSummary(idx) {
   var el = document.getElementById('mdr-alloc-summary');
   if (!el) return;
@@ -4343,12 +4366,15 @@ function mdrUpdateAllocSummary(idx) {
   }
   el.innerHTML = html;
 }
+*/
 
 
 // ── Morning Brief ─────────────────────────────────────────────
 
 // Morning Brief, End of Day, and dispatch functions moved to app-morning-brief.js
 
+/* MOVED TO app-ftl-mobile.js — v5.19 — 2026-10-27 (mdrSaveAllocations). Old copy kept below, not called: the later definition in app-ftl-mobile.js replaces it. */
+/*
 function mdrSaveAllocations(idx) {
   var stop = MDRState.stops[idx];
   if (!stop) return;
@@ -4434,6 +4460,7 @@ function mdrSaveAllocations(idx) {
     });
   });
 }
+*/
 
 function mdrFetchPlacesMobile(lat, lng) {
   var el = document.getElementById('mdr-places-list');
