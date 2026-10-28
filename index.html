@@ -750,6 +750,7 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
             <div id="tb-map-expand" onclick="tbExpandMap()"><i class="ti ti-arrows-maximize" aria-hidden="true"></i> Expand map</div>
           </div>
         </div>
+        <div id="tb-modal-foot"><button id="tb-modal-save" onclick="tbSaveAndClose()">Save &amp; Close</button></div>
       </div>
       <div id="desktop-panel-morningbrief" style="display:none;flex-direction:column;height:100%;overflow-y:auto">
         <div id="alerts-dashboard-card-desktop" style="display:none;max-width:1100px;margin:24px 24px 0"></div>
@@ -1110,6 +1111,9 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .tb-wo-block{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden}
 .tb-wo-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}
 .tb-wo-body{padding:8px 10px;background:var(--bg)}
+.tb-wo-block.tb-focus{border-color:var(--header-bg);box-shadow:0 0 0 2px var(--header-bg)}
+#tb-modal-foot{flex-shrink:0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border)}
+#tb-modal-save{display:block;width:100%;padding:12px;font-size:15px;font-weight:700;background:var(--header-bg);color:#fff;border:none;border-radius:var(--radius);cursor:pointer}
 .tb-badge{font-size:10px;padding:2px 6px;border-radius:99px;font-weight:600}
 .tb-badge.tm{background:#e6f1fb;color:#185fa5}
 .tb-badge.qt{background:#eaf3de;color:#3b6d11}
@@ -1128,12 +1132,12 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 </style>
 <script src="gps-engine.js?v=10"></script>
 <script src="app-morning-brief.js?v=137"></script>
-<script src="app-core.js?v=162"></script>
+<script src="app-core.js?v=163"></script>
 <script src="app-mobile-ui.js?v=1"></script>
 <script src="app-sites-travel.js?v=1"></script>
 <script src="app-users.js?v=1"></script>
 <script src="app-alerts.js?v=4"></script>
-<script src="field-travel-log.js?v=132"></script>
+<script src="field-travel-log.js?v=134"></script>
 <script src="app-subforms.js?v=114"></script>
 <script src="app-invoice-gen.js?v=6"></script>
 <script src="app-quoted-billing.js?v=5"></script>
