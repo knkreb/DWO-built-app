@@ -66,7 +66,7 @@ function poEditWoTableHtml(po) {
   var rows = poBreakdownFor(po.id).slice().sort(function(a, b) { return String(a.wo_number).localeCompare(String(b.wo_number)); });
   var html = '<div style="font-size:13px;font-weight:700;margin:8px 0 4px">Work orders on this PO</div>';
   if (!rows.length) return html + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">No work orders linked yet.</div>';
-  html += '<div style="overflow-x:auto;margin-bottom:10px"><table class="po-grid-table"><thead><tr><th>WO #</th><th>Customer</th><th>Description</th><th>Status</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>';
+  html += '<div style="overflow-x:auto;margin-bottom:10px"><table class="po-grid-table"><thead><tr><th>WO #</th><th>Customer</th><th>Description</th><th>Status</th><th>Counts as</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>';
   rows.forEach(function(b) {
     var wo = (AppState.workOrders || []).find(function(w) { return w.id === b.work_order_id; }) || {};
     var custId = b.customer_id || wo.customer_id;
@@ -79,7 +79,8 @@ function poEditWoTableHtml(po) {
       + '<td style="font-size:12px">' + escHtml(getCustName(cust || wo.customers)) + '</td>'
       + '<td>' + escHtml(desc) + '</td>'
       + '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + escHtml(st.color || '#eee') + '">' + escHtml(st.name) + '</span></td>'
-      + '<td style="text-align:right">' + poFmtMoney(b.wo_total) + '</td>'
+      + '<td style="font-size:12px">' + escHtml(poBucketLabel(b.bucket)) + '</td>'
+      + '<td style="text-align:right' + (b.bucket === 'none' ? ';color:var(--text-muted)' : '') + '">' + poFmtMoney(b.wo_total) + '</td>'
       + '<td>' + (isLockedWO
           ? '<span title="Locked to this PO — use Untie below" style="font-size:11px">🔒</span>'
           : '<button onclick="event.stopPropagation();poEditUnlinkWO(\'' + po.id + '\',\'' + b.work_order_id + '\')" style="font-size:12px;padding:3px 10px;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);background:none;cursor:pointer">Unlink</button>')
@@ -98,8 +99,11 @@ function poEditUnlinkWO(poId, woId) {
   var b = poBreakdownFor(poId).find(function(x) { return x.work_order_id === woId; }) || {};
   if (po.locked && po.locked_work_order_id === woId) { showToast('This work order is locked to the PO — use Untie'); return; }
   var msg = 'Unlink ' + (b.wo_number || 'this work order') + ' from this PO?';
+  /* MOVED TO bucket check — v5.20 — 2026-10-31 (was: b.status === 12)
   if (b.status === 12) {
-    msg = (b.wo_number || 'This work order') + ' has already been INVOICED. Unlinking it will remove ' + poFmtMoney(b.wo_total)
+  */
+  if (b.bucket === 'billed') {
+    msg = (b.wo_number || 'This work order') + ' has already been billed. Unlinking it will remove ' + poFmtMoney(b.wo_total)
       + ' from this PO\'s Billed amount and it will no longer count against the PO.\n\nUnlink anyway?';
   }
   if (!confirm(msg)) return;
