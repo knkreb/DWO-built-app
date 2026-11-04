@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.22';
+const APP_VERSION = '5.23';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -2490,7 +2490,10 @@ function showExportReview(wos) {
       var custForPO = AppState.customers.find(function(cc){ return cc.id===wo.customer_id; });
       var poUnknown = custForPO && (custForPO.po_required===null || custForPO.po_required===undefined);
       var poMissing = custForPO && custForPO.po_required===true && !wo.po_number;
-      if (isTruckStock) {
+      if (isQuotedMode) {
+        // v5.23: quoted work orders bill one milestone at a time from Quoted billing, never from Export Review
+        status='blocked'; label='Quoted: bill from Quoted billing'; icon='ti-file-invoice';
+      } else if (isTruckStock) {
         status='ready'; label='Truck stock'; icon='ti-truck';
       } else if (wo.customer_flag) {
         status='blocked'; label='Unresolved customer'; icon='ti-user-off';
@@ -2505,7 +2508,7 @@ function showExportReview(wos) {
         status='caution'; label='Flags: '+flagLabels.join(', '); icon='ti-flag';
       } else if (poUnknown) {
         status='caution'; label='PO req not set'; icon='ti-help';
-      } else if (isQuotedMode) {
+      } else if (isQuotedMode) { /* v5.23: unreachable, quoted work orders are blocked by the first branch above; kept per CLAUDE.md */
         if (hasQuoted) { status='ready'; label='Quoted'; icon='ti-file-invoice'; }
         else { status='blocked'; label='No quoted amount'; icon='ti-file-off'; }
       } else if (!hasHours && !hasParts) {
@@ -2568,7 +2571,10 @@ function renderExportReviewGrid() {
     html += '<td style="padding:9px 10px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(wo.title)+'</td>';
     html += '<td style="padding:9px 10px"><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:'+pillBg+';color:'+pillColor+'">'+r.label+'</span></td>';
     html += '<td id="er-action-'+wo.id+'" style="padding:9px 10px">';
-    if (r.status !== 'ready') {
+    if (wo.form_mode==='quoted') {
+      // v5.23: no Export anyway, no Add hours/quote; the only action is to go to the Quoted billing queue
+      html += '<button style="font-size:11px;padding:3px 8px;border:1px solid var(--header-bg);border-radius:4px;background:var(--bg);color:var(--header-bg)" onclick="if(typeof qbBillNow2===\'function\')qbBillNow2()">Open Quoted billing</button>';
+    } else if (r.status !== 'ready') {
       var hasHours = r.hours.length>0, hasParts = r.parts.length>0;
       var custForRow = AppState.customers.find(function(cc){ return cc.id===wo.customer_id; });
       var poUnknownRow = custForRow && (custForRow.po_required===null || custForRow.po_required===undefined);
@@ -2707,7 +2713,8 @@ function erSetPOReq(woId, custId, required) {
       if (!required) {
         // No PO needed - re-evaluate based on hours/parts
         var hasHours = row.hours.length>0, hasParts = row.parts.length>0;
-        if (!hasHours && !hasParts) { row.status='blocked'; row.label='No entries'; }
+        if (wo.form_mode==='quoted') { row.status='blocked'; row.label='Quoted: bill from Quoted billing'; } /* v5.23 */
+        else if (!hasHours && !hasParts) { row.status='blocked'; row.label='No entries'; }
         else if (!hasHours) { row.status='caution'; row.label='No hours'; }
         else if (!hasParts && wo.form_mode!=='quoted') { row.status='caution'; row.label='No parts'; }
         else { row.status='ready'; row.label='Ready'; }
@@ -2751,7 +2758,8 @@ function erSavePO(woId) {
       row.wo.po_number = po;
       var wo = row.wo;
       var hasHours = row.hours.length>0, hasParts = row.parts.length>0;
-      if (!hasHours && !hasParts) { row.status='blocked'; row.label='No entries'; }
+      if (wo.form_mode==='quoted') { row.status='blocked'; row.label='Quoted: bill from Quoted billing'; } /* v5.23 */
+      else if (!hasHours && !hasParts) { row.status='blocked'; row.label='No entries'; }
       else if (!hasHours) { row.status='caution'; row.label='No hours'; }
       else if (!hasParts && wo.form_mode!=='quoted') { row.status='caution'; row.label='No parts'; }
       else { row.status='ready'; row.label='Ready'; }
@@ -2776,6 +2784,7 @@ function erSkipBatch(woId, idx) {
 function exportReviewOverride(woId) {
   var rows = AppState._exportReviewRows||[];
   var r = rows.find(function(r){return r.wo.id===woId;});
+  if (r && r.wo.form_mode==='quoted') { showToast('Quoted work orders bill from Quoted billing'); return; } // v5.23
   if (r) { r.status='ready'; r.label='Override'; renderExportReviewGrid(); }
 }
 

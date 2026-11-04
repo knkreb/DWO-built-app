@@ -433,6 +433,14 @@ function _rerender(table){
 // ZED AXIS EXPORT
 function runExport(wos) {
   if(!wos.length){showToast('No work orders to export');return;}
+  // v5.23: quoted work orders never export from here. They bill one milestone at a time from the Quoted billing
+  // queue (qbExport in app-quoted-billing.js), which writes one invoice per milestone with the -00, -01 suffixes.
+  var _quotedSkipped = wos.filter(function(w){ return w.form_mode==='quoted'; });
+  if (_quotedSkipped.length) {
+    wos = wos.filter(function(w){ return w.form_mode!=='quoted'; });
+    showToast('Quoted work orders bill from Quoted billing: '+_quotedSkipped.map(function(w){ return w.wo_number; }).join(', '));
+    if (!wos.length) return;
+  }
   showToast('Building export... please wait');
   var woIds=wos.map(function(w){return w.id;});
   var idList=woIds.join(',');
@@ -445,6 +453,9 @@ function runExport(wos) {
     var hours  = results[0].ok?results[0].data||[]:[];
     var parts  = results[1].ok?results[1].data||[]:[];
     var quoted = results[2].ok?results[2].data||[]:[];
+    /* MOVED TO the quoted-work-order guard at the top of runExport — v5.23 — 2026-11-04. The v5.22 filter below kept
+       a quoted work order's hours, parts and credits out of this export. Quoted work orders no longer reach this point,
+       so it is redundant. Kept commented out per CLAUDE.md.
     // v5.22: a quoted work order exports only its header row (s1) and its quoted rows (s4). Hours, parts and vendor
     // credits on it are internal reference and never reach a quoted invoice. s2, s3, s5 and s6 are built from these two
     // lists, so filtering here covers all four. T&M work orders (including truck stock) are untouched.
@@ -452,6 +463,7 @@ function runExport(wos) {
     wos.forEach(function(w){ if (w.form_mode==='quoted') _quotedWoIds[w.id] = true; });
     hours = hours.filter(function(e){ return !_quotedWoIds[e.work_order_id]; });
     parts = parts.filter(function(e){ return !_quotedWoIds[e.work_order_id]; });
+    */
     var teamMember = AppState.settings.team_member_default||'Kevin Reb';
     var now = new Date();
     var woN=function(wo){var n=wo.wo_number.replace(/^[A-Za-z]+/,'');return n+':'+wo.title;};
