@@ -173,6 +173,34 @@ function drFormatTime(ts) {
   return new Date(ts).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true});
 }
 
+// v5.21 — "(next day)" label for an overnight clock-out. The clock-out's calendar date is read in the Settings
+// timezone and compared with the day being viewed (review_date, YYYY-MM-DD). Returns '' for a same-day clock-out.
+function drNextDaySuffix(clockOutTs, reviewDate) {
+  if (!clockOutTs || !reviewDate) return '';
+  var outDate;
+  try {
+    outDate = new Intl.DateTimeFormat('en-CA', { timeZone: drGetTimezone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(clockOutTs));
+  } catch (e) { return ''; }
+  return outDate > reviewDate ? ' (next day)' : '';
+}
+
+// v5.21 — one-line "who and when" for the punch-out windows, e.g. "Mon Nov 2, 2 days ago, Jaden".
+// withAgo adds how long ago the day was (past-day window only; today's window leaves it out).
+function drPunchSubtitle(dateStr, techId, withAgo) {
+  var p = String(dateStr || '').split('-');
+  if (p.length !== 3) return '';
+  var y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+  var out = new Date(y, m - 1, d, 12).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
+  if (withAgo) {
+    var tp = tzTodayStr().split('-');
+    var n = Math.round((Date.UTC(parseInt(tp[0], 10), parseInt(tp[1], 10) - 1, parseInt(tp[2], 10)) - Date.UTC(y, m - 1, d)) / 86400000);
+    out += ', ' + (n === 1 ? '1 day ago' : n + ' days ago');
+  }
+  var t = findTechAny(techId);
+  if (t && t.name) out += ', ' + t.name;
+  return out;
+}
+
 function drFormatDuration(minutes) {
   if (!minutes && minutes !== 0) return '--';
   var h = Math.floor(minutes / 60);
@@ -997,7 +1025,7 @@ function drRenderTimeline() {
     var workMin = clockOut ? Math.round((new Date(clockOut) - new Date(clockIn)) / 60000) : Math.round((new Date() - new Date(clockIn)) / 60000);
     html += '<button onclick="drEditClockIn()" style="font-size:12px;background:#eaf3de;color:#3b6d11;padding:5px 12px;border-radius:20px;font-weight:600;border:none;cursor:pointer">&#9679; In: ' + drFormatTime(clockIn) + (dayReview && dayReview.clock_in_backdated ? ' ✎' : '') + '</button>';
     if (clockOut) {
-      html += '<button onclick="drEditClockOut()" style="font-size:12px;background:#fcebeb;color:#a32d2d;padding:5px 12px;border-radius:20px;font-weight:600;border:none;cursor:pointer">&#9679; Out: ' + drFormatTime(clockOut) + (dayReview && dayReview.clock_out_backdated ? ' ✎' : '') + '</button>';
+      html += '<button onclick="drEditClockOut()" style="font-size:12px;background:#fcebeb;color:#a32d2d;padding:5px 12px;border-radius:20px;font-weight:600;border:none;cursor:pointer">&#9679; Out: ' + drFormatTime(clockOut) + drNextDaySuffix(clockOut, (dayReview && dayReview.review_date) || DRState.selectedDate) + (dayReview && dayReview.clock_out_backdated ? ' ✎' : '') + '</button>';
       html += '<div style="font-size:11px;color:var(--text-muted)">' + drFormatDuration(workMin) + ' work window</div>';
     } else {
       html += '<button onclick="drEditClockOut()" style="font-size:12px;background:#a32d2d;color:#fff;padding:5px 12px;border-radius:20px;font-weight:600;border:none;cursor:pointer">Clock out</button>';
@@ -1368,7 +1396,7 @@ function drRenderTimeline() {
   if (clockOut) {
     html += '<div class="dr-punch"><div class="dr-punch-dot end" style="background:#a32d2d"></div>';
     html += '<div style="font-size:12px;color:#a32d2d;font-weight:600">Clocked out</div>';
-    html += '<div style="margin-left:auto;font-size:12px;font-weight:600">' + drFormatTime(clockOut) + (dayReview && dayReview.clock_out_backdated ? ' <span style="font-size:10px;color:var(--text-muted)">(adjusted)</span>' : '') + '</div></div>';
+    html += '<div style="margin-left:auto;font-size:12px;font-weight:600">' + drFormatTime(clockOut) + drNextDaySuffix(clockOut, (dayReview && dayReview.review_date) || DRState.selectedDate) + (dayReview && dayReview.clock_out_backdated ? ' <span style="font-size:10px;color:var(--text-muted)">(adjusted)</span>' : '') + '</div></div>';
   } else {
     html += '<div class="dr-punch"><div class="dr-punch-dot end" style="background:var(--text-muted)"></div>';
     html += '<div style="font-size:12px;color:var(--text-muted)">Still on clock</div>';
@@ -1413,27 +1441,45 @@ function drTpSetAmPm(val) {
   document.getElementById('dr-tp-pm').setAttribute('data-active', val==='PM'?'1':'0');
 }
 
-function drShowTimePicker(label, defaultTime24, callback, allowClear) {
+// v5.21 — optional fifth parameter `opts` (existing four-argument callers are unchanged and stay pre-filled):
+//   blank: true        hour and minute boxes empty ("--"), neither AM nor PM selected; Confirm refuses until all three are set
+//   amber: true        amber window (#faeeda background, #854f0b text), used for "Punch out previous day"
+//   overnightBox: true adds the "Overnight shift" checkbox
+//   subtitle: 'text'   line under the title (date, how long ago, technician)
+//   handler(time24, {overnight})  when set, Confirm calls this instead of the callback and leaves the window open;
+//                      the handler validates and calls drTpClose() itself when it is done (drTpMsg() shows a message in the window)
+var _drTpOpts = null;
+function drShowTimePicker(label, defaultTime24, callback, allowClear, opts) {
   var existing = document.getElementById('dr-time-picker-overlay');
   if (existing) existing.remove();
-  var t = drTo12hr(defaultTime24);
+  opts = opts || null;
+  _drTpOpts = opts;
+  var blank = !!(opts && opts.blank);
+  var amber = !!(opts && opts.amber);
+  var t = blank ? { h: '', m: '', ampm: '' } : drTo12hr(defaultTime24);
   _drTpCallback = callback;
   var now = new Date();
   _drTpNowStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   var ov = document.createElement('div');
   ov.id = 'dr-time-picker-overlay';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:400;display:flex;align-items:center;justify-content:center';
+  var cardStyle = amber
+    ? 'background:#faeeda;color:#854f0b;border:1px solid #854f0b66;'
+    : 'background:var(--surface);';
   ov.innerHTML =
-    '<div style="background:var(--surface);border-radius:14px;padding:28px 24px;min-width:280px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.25)">'
-    + '<div style="font-size:15px;font-weight:700;margin-bottom:24px">'+escHtml(label)+'</div>'
+    '<div style="'+cardStyle+'border-radius:14px;padding:28px 24px;min-width:280px;max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.25)">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:'+(opts && opts.subtitle ? '4px' : '24px')+'">'+escHtml(label)+'</div>'
+    + (opts && opts.subtitle ? '<div style="font-size:12px;margin-bottom:20px;opacity:0.85">'+escHtml(opts.subtitle)+'</div>' : '')
     + '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:24px">'
-    + '<input type="text" inputmode="numeric" id="dr-tp-hour" value="'+t.h+'" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)" oninput="if(this.value.length>=2){document.getElementById(\'dr-tp-min\').focus();document.getElementById(\'dr-tp-min\').select();}">'
+    + '<input type="text" inputmode="numeric" id="dr-tp-hour" value="'+(blank ? '' : t.h)+'" placeholder="--" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)" oninput="if(this.value.length>=2){document.getElementById(\'dr-tp-min\').focus();document.getElementById(\'dr-tp-min\').select();}">'
     + '<span style="font-size:32px;font-weight:700;margin:0 2px">:</span>'
-    + '<input type="text" inputmode="numeric" id="dr-tp-min" value="'+String(t.m).padStart(2,'0')+'" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)">'
+    + '<input type="text" inputmode="numeric" id="dr-tp-min" value="'+(blank ? '' : String(t.m).padStart(2,'0'))+'" placeholder="--" maxlength="2" style="width:60px;font-size:32px;font-weight:700;text-align:center;border:2px solid var(--border);border-radius:8px;padding:8px 4px;background:var(--bg)">'
     + '<div style="display:flex;flex-direction:column;gap:5px;margin-left:10px">'
     + '<button id="dr-tp-am" onclick="drTpSetAmPm(\'AM\')" style="'+drTpAmPmStyle(t.ampm==='AM')+'" data-active="'+(t.ampm==='AM'?'1':'0')+'">AM</button>'
     + '<button id="dr-tp-pm" onclick="drTpSetAmPm(\'PM\')" style="'+drTpAmPmStyle(t.ampm==='PM')+'" data-active="'+(t.ampm==='PM'?'1':'0')+'">PM</button>'
     + '</div></div>'
+    + (opts && opts.overnightBox ? '<label style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:16px;cursor:pointer"><input type="checkbox" id="dr-tp-overnight" style="width:18px;height:18px;margin:0" onchange="drTpMsg(\'\')"> Overnight shift (clock-out is the next day)</label>' : '')
+    + (opts && opts.handler ? '<div id="dr-tp-msg" style="display:none;font-size:12px;font-weight:600;color:#a32d2d;margin-bottom:14px;line-height:1.35"></div>' : '')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">'
     + (allowClear ? '<button onclick="drTpClear()" style="flex:1;min-width:80px;padding:12px;border:1px solid var(--danger);border-radius:8px;background:none;color:var(--danger);font-size:14px;cursor:pointer">Clear</button>' : '')
     + '<button onclick="drTpCancel()" style="flex:1;min-width:80px;padding:12px;border:1px solid var(--border);border-radius:8px;background:none;font-size:14px;cursor:pointer">Cancel</button>'
@@ -1447,12 +1493,30 @@ function drTpCancel() {
   var ov = document.getElementById('dr-time-picker-overlay');
   if (ov) ov.remove();
   _drTpCallback = null;
+  _drTpOpts = null;
 }
 
 function drTpClear() {
   var ov = document.getElementById('dr-time-picker-overlay');
   if (ov) ov.remove();
+  _drTpOpts = null;
   if (_drTpCallback) { var cb=_drTpCallback; _drTpCallback=null; cb('CLEAR'); }
+}
+
+// v5.21 — close the window from a handler (opts.handler mode) once it has saved or given up
+function drTpClose() {
+  var ov = document.getElementById('dr-time-picker-overlay');
+  if (ov) ov.remove();
+  _drTpCallback = null;
+  _drTpOpts = null;
+}
+
+// v5.21 — message line inside the window (opts.handler mode). Empty text hides it.
+function drTpMsg(text) {
+  var el = document.getElementById('dr-tp-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.display = text ? 'block' : 'none';
 }
 
 function drTpConfirm() {
@@ -1460,13 +1524,32 @@ function drTpConfirm() {
   var mEl = document.getElementById('dr-tp-min');
   var amBtn = document.getElementById('dr-tp-am');
   if (!hEl||!mEl) return;
-  var h = parseInt(hEl.value)||12;
-  var m = parseInt(mEl.value)||0;
+  var blank = !!(_drTpOpts && _drTpOpts.blank);
+  var h, m;
+  if (blank) {
+    // v5.21 — blank mode never fills in defaults: all three parts must be entered
+    var pmBtn = document.getElementById('dr-tp-pm');
+    var hasAmPm = (amBtn && amBtn.getAttribute('data-active')==='1') || (pmBtn && pmBtn.getAttribute('data-active')==='1');
+    if (!String(hEl.value).trim() || !String(mEl.value).trim() || !hasAmPm) { showToast('Enter the hour, minutes and AM or PM'); return; }
+    h = parseInt(hEl.value, 10);
+    m = parseInt(mEl.value, 10);
+  } else {
+    h = parseInt(hEl.value)||12;
+    m = parseInt(mEl.value)||0;
+  }
   var ampm = (amBtn && amBtn.getAttribute('data-active')==='1') ? 'AM' : 'PM';
-  if (h<1||h>12||m<0||m>59) { showToast('Invalid time — enter hour 1-12 and minute 0-59'); return; }
+  if (isNaN(h)||isNaN(m)||h<1||h>12||m<0||m>59) { showToast('Invalid time — enter hour 1-12 and minute 0-59'); return; }
   var time24 = drTo24hr(h, m, ampm);
+  if (_drTpOpts && typeof _drTpOpts.handler === 'function') {
+    // v5.21 — handler mode: window stays open until the handler calls drTpClose()
+    var chk = document.getElementById('dr-tp-overnight');
+    drTpMsg('');
+    _drTpOpts.handler(time24, { overnight: !!(chk && chk.checked) });
+    return;
+  }
   var ov = document.getElementById('dr-time-picker-overlay');
   if (ov) ov.remove();
+  _drTpOpts = null;
   if (_drTpCallback) { var cb=_drTpCallback; _drTpCallback=null; cb(time24); }
 }
 
@@ -4047,7 +4130,7 @@ function mdrRenderDay(dayReview) {
 
   html += '<div style="width:2px;background:var(--border);margin-left:4px;height:10px"></div>';
   if (clockOut) {
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><div style="width:10px;height:10px;border-radius:50%;background:#a32d2d;flex-shrink:0"></div><div style="font-size:12px;color:#a32d2d;font-weight:600">Clocked out</div><div style="margin-left:auto;font-size:12px;font-weight:500">' + drFormatTime(clockOut) + '</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><div style="width:10px;height:10px;border-radius:50%;background:#a32d2d;flex-shrink:0"></div><div style="font-size:12px;color:#a32d2d;font-weight:600">Clocked out</div><div style="margin-left:auto;font-size:12px;font-weight:500">' + drFormatTime(clockOut) + drNextDaySuffix(clockOut, (dayReview && dayReview.review_date) || MDRState.selectedDate) + '</div></div>';
   } else {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0"><div style="width:10px;height:10px;border-radius:50%;background:#888;flex-shrink:0"></div><div style="font-size:12px;color:var(--text-muted)">Still on clock</div></div>';
   }
@@ -4074,9 +4157,14 @@ function mdrRenderDayBottom(dayReview) {
   if (clockIn) {
     html += '<div style="flex:1;text-align:center;font-size:11px;padding:5px;background:#eaf3de;border-radius:6px;color:#3b6d11">In: ' + drFormatTime(clockIn) + '</div>';
     if (!clockOut) {
-      html += '<button onclick="mdrGoToEndOfDay()" style="flex:1;padding:5px;background:#a32d2d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">End of Day →</button>';
+      if (MDRState.selectedDate && MDRState.selectedDate !== tzTodayStr()) {
+        // v5.21 — a past day with no clock-out is closed right here (blank picker), which ends the End of Day loop
+        html += '<button onclick="mdrClockOutPastDay()" style="flex:1;padding:5px;background:#a32d2d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Clock out</button>';
+      } else {
+        html += '<button onclick="mdrGoToEndOfDay()" style="flex:1;padding:5px;background:#a32d2d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">End of Day →</button>';
+      }
     } else {
-      html += '<div style="flex:1;text-align:center;font-size:11px;padding:5px;background:#fcebeb;border-radius:6px;color:#a32d2d">Out: ' + drFormatTime(clockOut) + '</div>';
+      html += '<div style="flex:1;text-align:center;font-size:11px;padding:5px;background:#fcebeb;border-radius:6px;color:#a32d2d">Out: ' + drFormatTime(clockOut) + drNextDaySuffix(clockOut, (dayReview && dayReview.review_date) || MDRState.selectedDate) + '</div>';
     }
     html += '<button onclick="mdrEditPunch()" style="padding:5px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;color:var(--text-muted)">Edit</button>';
   } else {
@@ -4616,6 +4704,84 @@ function mdrClockOut() {
     var isBackdated = dt < new Date(new Date() - 60000);
     mdrUpsertDayReview({ clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual' });
   });
+}
+
+// ── v5.21 — Past-day punch-out (spec: docs/specs/mobile-punch-out-loop.md, change 2) ──
+// Opens a blank, amber picker for the day on screen. The time is picked from what the log shows, so nothing
+// is pre-filled. An "Overnight shift" box moves the clock-out to the next calendar day, behind a second prompt.
+function mdrClockOutPastDay() {
+  var dayStr = MDRState.selectedDate;
+  var dr = MDRState.currentDayReview || null;
+  if (!dayStr || !dr || dr.review_date !== dayStr) { showToast('Reload this day and try again'); return; }
+  if (!dr.clock_in || dr.clock_out) { showToast('Nothing to clock out for this day'); return; }
+  var clockInDt = new Date(dr.clock_in);
+  drShowTimePicker('Punch out previous day', '', null, false, {
+    blank: true,
+    amber: true,
+    overnightBox: true,
+    subtitle: drPunchSubtitle(dayStr, MDRState.tech, true),
+    handler: function(time24, extra) {
+      mdrConfirmPastDayClockOut(dayStr, clockInDt, time24, !!(extra && extra.overnight));
+    }
+  });
+}
+
+// Typed time on the viewed day, or on the next calendar day when overnight. The date is advanced first and the
+// time applied after, in the phone's time zone (as clock-in does), so a daylight-saving night cannot shift it.
+function mdrBuildClockOutDate(dayStr, time24, nextDay) {
+  var p = dayStr.split('-');
+  var t = time24.split(':');
+  return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10) + (nextDay ? 1 : 0), parseInt(t[0], 10), parseInt(t[1], 10), 0, 0);
+}
+
+function mdrConfirmPastDayClockOut(dayStr, clockInDt, time24, overnight) {
+  var dt = mdrBuildClockOutDate(dayStr, time24, overnight);
+  if (isNaN(dt.getTime())) { drTpMsg('That time is not valid.'); return; }
+  if (dt <= clockInDt) {
+    drTpMsg(overnight ? 'That time is not after the clock-in.' : 'That time is before the clock-in. Was this an overnight shift?');
+    return;
+  }
+  if (dt.getTime() - clockInDt.getTime() > 24 * 60 * 60 * 1000) {
+    drTpMsg('A clock-out can’t be more than 24 hours after the clock-in.');
+    return;
+  }
+  function save() {
+    drTpClose();
+    mdrUpsertDayReview(
+      { clock_out: dt.toISOString(), clock_out_backdated: true, clock_out_source: 'manual' },
+      function() { showToast('Clock-out saved'); }
+    );
+  }
+  if (!overnight) { save(); return; }
+  mdrShowOvernightConfirm(dt, save);
+}
+
+// Second prompt for an overnight punch. "No, go back" is the primary button; "Yes, overnight shift" is secondary.
+// Going back leaves the picker open and nothing saved.
+function mdrShowOvernightConfirm(dt, onYes) {
+  var old = document.getElementById('dr-overnight-confirm');
+  if (old) old.remove();
+  var timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  var dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
+  var ov = document.createElement('div');
+  ov.id = 'dr-overnight-confirm';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:410;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML =
+    '<div style="background:var(--surface);border-radius:14px;padding:24px 22px;width:min(340px,100%);box-shadow:0 8px 32px rgba(0,0,0,0.25)">'
+    + '<div style="font-size:15px;font-weight:700;margin-bottom:10px">Overnight shift</div>'
+    + '<div style="font-size:13px;line-height:1.45;margin-bottom:18px">This records your clock-out at ' + escHtml(timeStr) + ' ' + escHtml(dateStr)
+    + ', the day after the shift began. Your admin will be notified. Is this really an overnight shift?</div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px">'
+    + '<button id="dr-on-back" style="padding:12px;background:var(--header-bg);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">No, go back</button>'
+    + '<button id="dr-on-yes" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--text);font-size:14px;cursor:pointer">Yes, overnight shift</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+  document.getElementById('dr-on-back').onclick = function() { ov.remove(); };
+  document.getElementById('dr-on-yes').onclick = function() {
+    this.disabled = true;
+    ov.remove();
+    onYes();
+  };
 }
 
 function mdrSubmitDay() {

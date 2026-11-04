@@ -62,24 +62,44 @@ function initMorningBrief() {
     sb.get('tasks', '?task_type=eq.date&scheduled_date=eq.' + today + '&status=neq.completed&select=*,task_assignments(tech_id)'),
     sb.get('tasks', '?task_type=eq.location&status=neq.completed&select=*,task_assignments(tech_id),locations(name)'),
     sb.get('location_event', '?tid=eq.' + (AppState.traccarId || 'KM') + '&timestamp=gte.' + today + 'T04:00:00Z&timestamp=lte.' + today + 'T23:59:59Z&order=timestamp.asc&limit=1&select=timestamp,lat,lng'),
-    tech ? sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=eq.' + today + '&select=*&limit=1') : Promise.resolve({ ok: false, data: [] })
+    tech ? sb.get('day_review', '?tech_id=eq.' + tech + '&review_date=eq.' + today + '&select=*&limit=1') : Promise.resolve({ ok: false, data: [] }),
+    // v5.21 — missing clock-outs, same query as the desktop Daily Dashboard (line ~243). A technician sees only
+    // their own days; an admin sees every technician's.
+    (AppState.userRole === 'admin' || tech)
+      ? sb.get('day_review', '?clock_in=not.is.null&clock_out=is.null&review_date=lt.' + today + (AppState.userRole === 'admin' ? '' : '&tech_id=eq.' + tech) + '&select=id,tech_id,review_date,clock_in&order=review_date.desc&limit=20')
+      : Promise.resolve({ ok: false, data: [] })
   ]).then(function(results) {
     var dispatches  = (results[0].ok ? results[0].data : []) || [];
     var dateTasks   = (results[1].ok ? results[1].data : []) || [];
     var locTasks    = (results[2].ok ? results[2].data : []) || [];
     var firstPing   = results[3].ok && results[3].data && results[3].data.length ? results[3].data[0] : null;
     var todayReview = (results[4].ok && results[4].data && results[4].data.length) ? results[4].data[0] : null;
+    var missingClockOut = (results[5].ok ? results[5].data : []) || [];
     // Keep MDRState in sync so FTL and punch-out buttons work correctly
     if (todayReview) MDRState.currentDayReview = todayReview;
     var clockedIn = todayReview && todayReview.clock_in;
-    renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview);
+    renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview, missingClockOut);
   }).catch(function() {
     var fallbackReview = MDRState.currentDayReview || null;
-    renderMorningBrief(shell, [], [], [], fallbackReview && fallbackReview.clock_in, null, today, tech, fallbackReview);
+    renderMorningBrief(shell, [], [], [], fallbackReview && fallbackReview.clock_in, null, today, tech, fallbackReview, []);
   });
 }
 
-function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview) {
+// v5.21 — "Fix in FTL" from the phone Missing Clock-out banner. Opens that day in the mobile FTL for that
+// technician, where the past-day Clock out button is. initMobileDailyReview() resets MDRState.tech to the
+// logged-in user, so the state is set here and the log rendered once (calling the init and then switching
+// technician would start two loads that can finish out of order).
+function mbFixPunchMobile(techId, dateStr) {
+  MDRState.tech = techId || AppState.userTechId || MDRState.tech;
+  MDRState.selectedDate = dateStr;
+  MDRState.weekStart = drGetMonday(new Date(dateStr + 'T12:00:00'));
+  MDRState.view = 'day';
+  MDRState.locations = (typeof LocState !== 'undefined' && LocState.locations && LocState.locations.length) ? LocState.locations : [];
+  mdrRender();
+  pushScreen('screen-mobile-dailyreview', 'Field Travel Log');
+}
+
+function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, firstPing, today, tech, todayReview, missingClockOut) {
   var now = new Date();
   var greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
   var techName = '';
@@ -124,6 +144,25 @@ function renderMorningBrief(shell, dispatches, dateTasks, locTasks, clockedIn, f
       html += '</div>';
       html += '</div>';
     }
+  }
+
+  // v5.21 — Payroll alert, Missing Clock-out (same orange box as the desktop Daily Dashboard), under the punch card
+  missingClockOut = missingClockOut || [];
+  if (missingClockOut.length) {
+    var _mbTechs = AppState.allTechnicians || AppState.technicians || [];
+    html += '<div style="background:#fff0e6;border:1.5px solid #e67e22;border-radius:var(--radius);padding:12px 14px;margin-bottom:16px">';
+    html += '<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:6px">&#9888; Payroll Alert &mdash; Missing Clock-out</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">' + missingClockOut.length + ' day' + (missingClockOut.length === 1 ? '' : 's') + ' clocked in with no clock-out recorded:</div>';
+    missingClockOut.forEach(function(r) {
+      var mbT = _mbTechs.find(function(t){ return t.id === r.tech_id; });
+      var mbName = mbT ? mbT.name : 'Unknown tech';
+      var mbIn = r.clock_in ? new Date(r.clock_in).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true}) : '';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:0.5px solid #e67e2244">';
+      html += '<span style="font-size:12px"><strong>' + escHtml(r.review_date) + '</strong> &mdash; ' + escHtml(mbName) + ' (in: ' + escHtml(mbIn) + ')</span>';
+      html += '<a href="#" data-mb-tech="' + escHtml(r.tech_id) + '" data-mb-date="' + escHtml(r.review_date) + '" onclick="mbFixPunchMobile(this.getAttribute(\'data-mb-tech\'), this.getAttribute(\'data-mb-date\'));return false" style="font-size:12px;color:#c0392b;text-decoration:underline;white-space:nowrap">Fix in FTL</a>';
+      html += '</div>';
+    });
+    html += '</div>';
   }
 
   // Today's jobs
@@ -856,14 +895,23 @@ function _eodRenderQueue(container, exceptions, weekOnClockMin, weekBilledH, isD
 }
 
 function eodClockOut() {
+  // v5.21 (change 2b) — today's Clock Out always writes to TODAY, for the technician the queue loaded for.
+  // MDRState.selectedDate and .tech can be left on a past day or another technician by the FTL, so both are
+  // set here, and the window's date and name come from the same values that are written.
+  var eodToday = tzTodayStr();
+  var eodTech = AppState.userTechId || MDRState.tech || (AppState.technicians && AppState.technicians[0] && AppState.technicians[0].id);
+  MDRState.selectedDate = eodToday;
+  MDRState.tech = eodTech;
   var now = new Date();
   var nowStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
   var overlay = document.createElement('div');
+  overlay._eodDate = eodToday;
+  overlay._eodTech = eodTech;
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end';
   overlay.innerHTML =
     '<div style="width:100%;background:var(--surface);border-radius:16px 16px 0 0;padding:20px">' +
-    '<div style="font-size:15px;font-weight:700;margin-bottom:4px">Clock Out</div>' +
-    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">This will close out your day.</div>' +
+    '<div style="font-size:15px;font-weight:700;margin-bottom:4px">Punch out today&#39;s shift</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">' + escHtml(drPunchSubtitle(eodToday, eodTech, false)) + '</div>' +
     '<div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Clock-out time:</div>' +
     '<input type="time" id="eod-clockout-time" value="' + nowStr + '" style="width:100%;font-size:18px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:16px">' +
     '<div style="display:flex;gap:8px">' +
@@ -882,7 +930,10 @@ function eodConfirmClockOut(overlay) {
   if (!timeEl) return;
   var timeVal = timeEl.value;
   if (overlay) overlay.remove();
-  var today = MDRState.selectedDate || tzTodayStr();
+  // v5.21 (change 2b) — write to the date and technician the window was opened for, not whatever the FTL last showed
+  var today = (overlay && overlay._eodDate) || tzTodayStr();
+  MDRState.selectedDate = today;
+  if (overlay && overlay._eodTech) MDRState.tech = overlay._eodTech;
   var dt = new Date(today + 'T' + timeVal + ':00');
   var isBackdated = dt < new Date(new Date() - 60000);
   mdrUpsertDayReview({clock_out: dt.toISOString(), clock_out_backdated: isBackdated, clock_out_source: 'manual'});
