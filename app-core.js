@@ -1,13 +1,16 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.19';
+const APP_VERSION = '5.20';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
 
 // Statuses loaded from Supabase wo_statuses table at startup
-// Fallback used only if load fails — mirrors full wo_statuses table
-var STATUSES_FALLBACK = [
+// Fallback is now empty (v5.20) — see the MOVED note below
+var STATUSES_FALLBACK = [];
+/* MOVED TO the live wo_statuses table (loaded by loadStatuses) — v5.20 — 2026-10-31. The hardcoded list was stale
+   (Parts Ordered and Work Ready are 'active' live, 'draft' here). Declaration kept: getStatus, getStatusByKey,
+   loadStatuses and three dropdown/table builders still reference it.
   { num:0,  name:'Approval Request',      color:'#f5e8a0', category:'draft',     mobile:true,  sort_order:0  },
   { num:1,  name:'Quote Request',         color:'#d8d6d0', category:'draft',     mobile:true,  sort_order:1  },
   { num:2,  name:'Quoted',                color:'#f5e8a0', category:'draft',     mobile:true,  sort_order:2  },
@@ -23,7 +26,7 @@ var STATUSES_FALLBACK = [
   { num:12, name:'Invoiced',              color:'#e8e8e8', category:'processed', mobile:false, sort_order:12 },
   { num:15, name:'Invoiced Outside DWO',  color:'#d0d0d0', category:'processed', mobile:false, sort_order:15 },
   { num:99, name:'Cancelled',             color:'#d8d6d0', category:'cancelled', mobile:false, sort_order:99 },
-];
+*/
 
 
 function getStatus(n) {

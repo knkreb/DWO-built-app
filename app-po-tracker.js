@@ -130,6 +130,12 @@ function renderPOPanel(containerId) {
 
 function poRenderPanelBody(containerId) {
   var el = document.getElementById(containerId); if (!el) return;
+  var tabs = (typeof poPanelTabsHtml === 'function') ? poPanelTabsHtml(containerId) : '';
+  if (typeof poPanelTab !== 'undefined' && poPanelTab === 'buckets') {
+    el.innerHTML = tabs + '<div id="po-bucket-body"></div>';
+    poStatusMapRender('po-bucket-body');
+    return;
+  }
   var q = (document.getElementById('po-panel-search') && document.getElementById('po-panel-search').value || '').toLowerCase();
   var list = (AppState.purchaseOrders || []).filter(function(p) {
     if (!q) return true;
@@ -139,7 +145,7 @@ function poRenderPanelBody(containerId) {
   });
   list.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
 
-  var html = '<div style="margin-bottom:12px"><input type="search" id="po-panel-search" placeholder="Search PO #, description, customer…" value="' + escHtml(q) + '" oninput="poRenderPanelBody(\'' + containerId + '\')" style="width:100%;max-width:360px;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>';
+  var html = tabs + '<div style="margin-bottom:12px"><input type="search" id="po-panel-search" placeholder="Search PO #, description, customer…" value="' + escHtml(q) + '" oninput="poRenderPanelBody(\'' + containerId + '\')" style="width:100%;max-width:360px;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>';
 
   if (!list.length) {
     html += '<div style="padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:var(--radius)">No customer purchase orders yet.</div>';
