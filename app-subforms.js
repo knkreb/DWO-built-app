@@ -445,6 +445,13 @@ function runExport(wos) {
     var hours  = results[0].ok?results[0].data||[]:[];
     var parts  = results[1].ok?results[1].data||[]:[];
     var quoted = results[2].ok?results[2].data||[]:[];
+    // v5.22: a quoted work order exports only its header row (s1) and its quoted rows (s4). Hours, parts and vendor
+    // credits on it are internal reference and never reach a quoted invoice. s2, s3, s5 and s6 are built from these two
+    // lists, so filtering here covers all four. T&M work orders (including truck stock) are untouched.
+    var _quotedWoIds = {};
+    wos.forEach(function(w){ if (w.form_mode==='quoted') _quotedWoIds[w.id] = true; });
+    hours = hours.filter(function(e){ return !_quotedWoIds[e.work_order_id]; });
+    parts = parts.filter(function(e){ return !_quotedWoIds[e.work_order_id]; });
     var teamMember = AppState.settings.team_member_default||'Kevin Reb';
     var now = new Date();
     var woN=function(wo){var n=wo.wo_number.replace(/^[A-Za-z]+/,'');return n+':'+wo.title;};
