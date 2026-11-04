@@ -1,80 +1,99 @@
-# Spec: Mobile punch-out loop (past days cannot be clocked out)
+# Spec: Past-day punch-out, phone Missing Clock-out alert, overnight shifts
 
-Status: SPEC ONLY, drafted 2026-11-04 from Kevin's report of 2026-10-28 and his retest of 2026-11-04 (still broken on v5.20). Nothing built. Needs "okay to build" with this spec named.
+Status: SPEC ONLY, drafted 2026-11-04 from Kevin's report of 2026-10-28, his retest of 2026-11-04 (still broken on v5.20) and his decisions of 2026-11-04. Nothing built. Needs "okay to build" with this spec named.
 
 Baseline: v5.20, main c23c67d. `field-travel-log.js` and `app-morning-brief.js` read at that commit. Next build would be v5.21; re-check `APP_VERSION` and the end of `CHANGELOG.md` after `git fetch` before bumping.
 
-Scope: give past, unclosed days a way to be clocked out from the Exceptions Queue, using a time picker with no preset time. No schema change, no database trigger, no new table, no change to `app-core.js`.
+Scope: three connected fixes. (1) Past unclosed days can be clocked out from the Field Travel Log day view with a blank time picker, which ends the loop. (2) The phone Morning Brief gets the same Missing Clock-out warning the desktop Daily Dashboard already has. (3) An overnight shift can be entered on purpose, behind a confirm prompt, and raises a warning for the admin. One small database migration (an alert trigger and a seeded setting); no new column, no new table; no change to `app-core.js`.
 
 ## The loop, as the code shows it
 
-1. On mobile, a day in the Field Travel Log (FTL) that has a clock-in and no clock-out shows an **End of Day →** button (`mdrRenderDayBottom`, `field-travel-log.js` lines 4076-4077). It appears for any day being viewed, not only today.
-2. The button calls `mdrGoToEndOfDay` (`app-morning-brief.js` line 674), which opens the Exceptions Queue.
-3. The queue offers **Clock Out** only on today's card: `if (ex.isToday && !ex.clockOut)` (`app-morning-brief.js` line 849). A past day gets the red **Unclosed** flag and a single **→ FTL** button.
-4. **→ FTL** (`eodGoToFTL`, line 983) sets `MDRState.selectedDate` to that day and opens the FTL day view, which shows the same End of Day → button. Back to step 1.
+1. On mobile, an FTL day with a clock-in and no clock-out shows **End of Day →** (`mdrRenderDayBottom`, `field-travel-log.js` lines 4076-4077), on any day viewed, not only today.
+2. It calls `mdrGoToEndOfDay` (`app-morning-brief.js` line 674), which opens the Exceptions Queue.
+3. The queue offers **Clock Out** only on today's card (`ex.isToday && !ex.clockOut`, line 849). A past day gets the red **Unclosed** flag and a **→ FTL** button.
+4. **→ FTL** (`eodGoToFTL`, line 983) opens that day's FTL view, which shows End of Day → again. Back to step 1.
 
-Nothing in that path can write a clock-out for a past day. The only other route is the small **Edit** button beside the punch row (`mdrEditPunch`, line 4583), which makes you step through clock-in first and pre-fills both times.
+Nothing in that path can write a past clock-out. The only other route is the small **Edit** button (`mdrEditPunch`, line 4583), which steps through clock-in first and pre-fills both times. Desktop is not looped because the desktop FTL has its own Clock out button (`drEditClockOut`, line 1501).
 
-Desktop is not looped because the desktop FTL has its own Clock out button (`drEditClockOut`, line 1501). The queue function is shared, so the change below also reaches the desktop queue (Open question 3).
+Where missed punch-outs show up today: the desktop Daily Dashboard has an orange "Payroll Alert, Missing Clock-out" box (`renderMorningBriefDesktop`, `app-morning-brief.js` lines 285-300, query at line 243). The phone Morning Brief has nothing like it. The End of Day queue flags Unclosed days on both, but only if you open it.
 
-## Decision (Kevin, 2026-10-28): clock-out picker with no preset
+## Decisions (Kevin, 2026-11-04)
 
-A pre-filled time (the current time, or the clock-in time) lets a tired tap-through record a wrong clock-out on a past day. For a past day the person must say when they actually left, so the picker opens empty.
+- A past day is clocked out from the FTL day view, where the stops and times are on screen, so the time is picked from what the log shows, not guessed. The picker opens blank (no preset). No reference line is added.
+- The Exceptions Queue and the new phone alert send you to that day's FTL. Neither gets its own Clock Out button.
+- Today's Clock Out keeps its pre-filled picker, unchanged.
+- Overnight shifts are allowed through an "Overnight shift" checkbox on the picker, protected by a second confirm prompt.
+- The admin gets a warning in the existing Alerts center (warn only). An approval mode is wanted later for other businesses; build only what keeps that door open.
 
 ## Changes
 
-**1. Exceptions Queue card** (`_eodRenderQueue`, `app-morning-brief.js`)
+**1. FTL day view, bottom strip** (`mdrRenderDayBottom`, `field-travel-log.js`)
 
-- On a card that is **not** today, has a clock-in, and has no clock-out, add a red **Clock Out** button beside **→ FTL**, same style as today's button. The data is already on the card object (`ex.clockIn`, `ex.clockOut`, `ex.date`).
-- A past day with no clock-in does not get the button (nothing to close).
-- Today's card is unchanged.
+- If the viewed day (`MDRState.selectedDate`) is not today (`tzTodayStr()`), has a clock-in, and has no clock-out: the red button reads **Clock out** and calls `mdrClockOutPastDay()`. For today, the button stays **End of Day →** and behaves as now.
+- Where a day's Out time is shown in the FTL day views (mobile bottom strip and timeline, desktop punch pill), add "(next day)" after the time when the clock-out falls on a later date than the day being viewed, comparing dates in the Settings timezone.
 
-**2. New function `eodClockOutPast(dateStr)`** (`app-morning-brief.js`, next to `eodClockOut`)
+**2. New `mdrClockOutPastDay()`** (`field-travel-log.js`, next to `mdrClockOut`)
 
-- Opens the time picker (change 3) titled with that day's date, for example "Clock out, Mon Nov 2", with a blank start.
-- On confirm: build the time on **that card's date** (`dateStr`), not on `MDRState.selectedDate`.
-- Reject a time at or before that day's clock-in, with a toast naming the clock-in time; nothing is saved and the picker closes (the person taps Clock Out again).
-- Write the day's `day_review` row for the queue's technician (the same tech `initEndOfDay` loaded) and `review_date = dateStr`: `clock_out` (ISO), `clock_out_backdated = true`, `clock_out_source = 'manual'`, `modified_by`, `modified_at`. Look the row up by tech and date and patch it by id, the way `dbDesktopPunchIn` does, with the refresh in the success callback. Do not use `mdrUpsertDayReview`, which keys on `MDRState.selectedDate`.
-- On success: toast ("Clocked out Mon Nov 2 at 5:15 PM"), then reload the queue (`initEndOfDay` on mobile, `initEndOfDayDesktop` on desktop). On failure: toast "Could not save clock-out" and leave the day unclosed.
+- Opens the picker in blank mode (change 3), titled with the technician's name and the date, for example "Clock out, Jaden, Mon Nov 2". The name matters because the admin may be viewing someone else's day.
+- Includes an unchecked **Overnight shift (clock-out is the next day)** checkbox.
+- On Confirm:
+  1. Build the clock-out on the viewed day, or on the next calendar day if Overnight is checked. Advance the calendar date by one day, then apply the typed time, in the phone's time zone as clock-in does today. Do not add 24 hours, so a daylight-saving night cannot shift the time.
+  2. It must be after the day's clock-in. If it is not and Overnight is unchecked, show "That time is before the clock-in. Was this an overnight shift?" and keep the picker open; nothing is saved.
+  3. Reject a clock-out more than 24 hours after the clock-in.
+  4. If Overnight is checked, show a second prompt: "Overnight shift. This records your clock-out at 1:30 AM Tue Nov 4, the day after the shift began. Your admin will be notified. Is this really an overnight shift?" with **No, go back** as the primary button and **Yes, overnight shift** as the secondary. Back returns to the picker; nothing is saved.
+  5. Save through `mdrUpsertDayReview` (in this flow `MDRState.selectedDate` is the viewed day): `clock_out` (ISO), `clock_out_backdated = true`, `clock_out_source = 'manual'`. Toast on success, and the day view reloads.
 
 **3. Time picker blank mode** (`drShowTimePicker`, `field-travel-log.js` line 1416)
 
-- Add an optional fifth parameter `blank`. Existing four-argument callers (clock in, edit punch, desktop clock out) are untouched and stay pre-filled.
+- Add an optional fifth parameter `opts` (`{ blank: true, overnightBox: true }`). The existing four-argument callers (clock in, edit punch, desktop clock out, today's Clock Out) are untouched and stay pre-filled.
 - In blank mode the hour and minute boxes are empty with a "--" placeholder, and neither AM nor PM is selected.
-- `drTpConfirm` today turns an empty hour into 12, an empty minute into 0, and an unselected AM/PM into PM (lines 1463-1465). In blank mode it must instead refuse: toast "Enter the hour, minutes and AM or PM", keep the picker open, call nothing.
+- `drTpConfirm` today turns an empty hour into 12, an empty minute into 0 and an unselected AM/PM into PM (lines 1463-1465). In blank mode it must instead refuse: toast "Enter the hour, minutes and AM or PM", picker stays open, no callback.
+
+**4. Phone Missing Clock-out banner** (`initMorningBrief`, mobile Morning Brief, `app-morning-brief.js`)
+
+- Same query as the desktop (line 243): days before today with a clock-in and no clock-out, newest first, limit 20. A technician sees only their own days; an admin sees every technician's days with names, as the desktop does.
+- Same orange banner as desktop, placed under the punch card. Each row: date, technician, clock-in time, and a **Fix in FTL** link. The link sets `MDRState.tech` to the row's technician as well as `MDRState.selectedDate`, then opens that day in the mobile FTL, where the new Clock out button is.
+- Hidden when there are no missing days. The desktop alert is unchanged.
+
+**5. Exceptions Queue**: unchanged. Past cards keep **→ FTL**.
+
+**6. Database migration** `supabase/migrations/v5.21_overnight_punch_alert.sql` (applied to the live database before the JS is deployed, as with v5.20). It follows the alert pattern in `v5.10_work_order_nte.sql`.
+
+- Seed `settings` key `overnight_punch_policy` = `warn`, using the `insert ... where not exists` form from v5.15. There is no Settings screen toggle in this build. `approve` is reserved for the future (see below).
+- New trigger function `day_review_overnight_alert()` (security definer, `search_path = public`, grants revoked as in v5.10), fired after insert or update of `clock_out` on `day_review`. When the new `clock_out` is not null and its date in the Settings timezone (`settings.timezone`, default `America/New_York`) is later than `review_date`:
+  - skip if an unresolved alert already exists for this `day_review` id with the same `clock_out`;
+  - otherwise insert into `alerts`: `alert_type = 'overnight_punch'`, `severity = 'warning'`, `subject_table = 'day_review'`, `subject_id = day_review.id`, a ready-to-show message ("Overnight punch: Jaden clocked out at 1:30 AM Tue Nov 4 for the shift that began Mon Nov 3. Check that it is real."), and `details` with the day_review id, tech id, review date, clock-in and clock-out.
+- A same-day clock-out raises nothing. An admin's own overnight punch raises an alert too; warn-only mode has no auto-approve.
+- During the build, check whether the Alerts panel can open a `day_review` subject. If it cannot, the message carries the details and no link is built; anything more goes back to Kevin.
+
+**7. Future approval mode (not built).** A setting value `approve`, a new `day_review.overnight_status` column (pending, approved), Approve and Reject on the same alert, and the existing **Accept day** button blocked while pending. Nothing in this build blocks that: the alert already holds the `day_review` id and the policy setting already exists.
 
 ## Acceptance checks
 
-1. A past day with a clock-in and no clock-out shows **Unclosed** plus **Clock Out** and **→ FTL** on its queue card.
-2. Tapping **Clock Out** opens the picker with the day's date in the title, empty hour and minute, and neither AM nor PM selected.
-3. Confirm with an empty hour, an empty minute or no AM/PM: toast, picker stays open, nothing saved.
-4. A time at or before the clock-in: toast, nothing saved.
-5. A valid time saves `clock_out` on that day's row only, with `clock_out_backdated = true` and `clock_out_source = 'manual'`. Other days and today's row are unchanged.
-6. The card's **Unclosed** flag clears and its On Clock hours now show. Other flags (Unreviewed, Gap) stay as they were.
-7. Opening that day through **→ FTL** shows the Out time and no **End of Day →** button. No loop.
-8. Cancel leaves the day unclosed.
-9. Today's card behaves exactly as before.
-10. Clock in, Edit punch and the desktop FTL Clock out still open pre-filled.
-11. Desktop queue: the new button works the same way, and the desktop FTL is unaffected.
-12. `node --check` passes on both changed files. Version bump, cache busters, CHANGELOG line, commit message `v5.21: ...`.
+1. A past day with a clock-in and no clock-out shows a red **Clock out** in the FTL day view. Today's day still shows **End of Day →**.
+2. The picker opens with empty hour and minute, neither AM nor PM selected, the technician and date in the title, and Overnight unchecked.
+3. Confirm with an empty hour, empty minute or no AM/PM: toast, picker stays open, nothing saved.
+4. A normal time after the clock-in saves on that day only (`clock_out_backdated = true`, `clock_out_source = 'manual'`). The day view shows the Out time, the Unclosed flag clears in the queue, and no alert is raised.
+5. A time before the clock-in with Overnight unchecked: the "Was this an overnight shift?" message, nothing saved.
+6. Overnight checked: the second prompt appears. **No, go back** returns to the picker with nothing saved. **Yes** saves the clock-out on the next calendar day, and the Out time shows "(next day)".
+7. A saved overnight punch raises one warning in the Alerts center (bell and Dashboard card) naming the technician, day and time. Saving the same time again raises no second alert; a different overnight time raises a new one.
+8. A same-day clock-out raises no alert. A clock-out more than 24 hours after the clock-in is rejected.
+9. Across the daylight-saving change on Sun Nov 1 2026, an overnight punch lands on the right next-day time. Test with a time outside the repeated 1 to 2 AM hour.
+10. The phone banner shows a technician only their own missing days and shows an admin everyone's with names. **Fix in FTL** opens that day for that technician, and the banner is gone when nothing is missing.
+11. The desktop Daily Dashboard alert and the Exceptions Queue behave as before.
+12. Clock in, Edit punch, the desktop FTL Clock out and today's Clock Out still open pre-filled.
+13. `node --check` passes on every changed JS file. Version bump, cache busters, CHANGELOG line, commit `v5.21: ...`. The migration is applied first.
 
-Test on a real day that needs closing (the loop reproduction). A wrong test entry can be corrected with the **Edit** button on mobile, or cleared with Clear in the desktop FTL clock-out picker (`drEditClockOut` allows Clear once a punch exists).
+Test on a real day that needs closing, and use a day you can correct afterward: a wrong test entry can be fixed with **Edit** on mobile, or cleared with Clear in the desktop FTL clock-out picker. An overnight test will raise a real alert; mark it Resolved.
 
 ## Out of scope
 
-- Today's Clock Out (still pre-filled with the current time; Open question 2).
-- The End of Day → button on a past day in the FTL (Open question 4).
-- Overnight shifts: the picker accepts times on the card's own date only.
-- Break punches, day review status, submit and kickback logic.
-
-## Open questions for Kevin
-
-1. **Overnight:** is same-date-only acceptable? No part of the app handles a shift that ends after midnight today, so this spec does not either.
-2. **Today's card:** keep the pre-filled picker (recommended, the current time is usually right for today), or make it blank too?
-3. **Desktop queue:** it shares this code, so it gets the new button. OK, or mobile only?
-4. **End of Day → on a past day:** leave it going to the queue (recommended, smaller change), or open the picker directly?
+- Approval mode and a Settings toggle for it (change 7 describes how it would be added).
+- The Exceptions Queue, today's Clock Out, break punches, day review status, submit and kickback logic.
+- Overtime and payroll calculations. Overtime appears on the phone week summary, but this spec does not change it. Under warn-only, an overnight punch counts toward totals as soon as it is saved, and the admin corrects it if the warning shows it was a mistake.
+- Desktop clock-out and **Edit** remain same-day only. Overnight punches are entered through the new picker; correcting one from the desktop is not covered.
 
 ## Found while reading, not in this spec (needs Kevin's decision)
 
-- **Today's Clock Out can write to the wrong day.** `eodConfirmClockOut` (`app-morning-brief.js` line 885) uses `MDRState.selectedDate || tzTodayStr()` as the date, and `mdrUpsertDayReview` also keys on `MDRState.selectedDate`. After **→ FTL** on a past card, `MDRState.selectedDate` is that past day. If the person then goes back to the queue and taps today's **Clock Out**, the time may be written to the past day's row instead of today's. Only `dashClockOut` resets the date to today first. Found by reading the code, not reproduced. A fix is one line (set the date to today before opening the picker), but it is outside this spec.
-- The Unclosed flag is also raised for a past day with no clock-in at all (`!r.clock_out`, line 740). Harmless here because those days get no Clock Out button.
+- **Today's Clock Out can write to the wrong day.** `eodConfirmClockOut` (`app-morning-brief.js` line 885) uses `MDRState.selectedDate || tzTodayStr()` as the date, and `mdrUpsertDayReview` keys on `MDRState.selectedDate`. After **→ FTL** on a past card, `MDRState.selectedDate` is that past day. If the person then goes back to the queue and taps today's **Clock Out**, the time may be written to the past day's row instead of today's. Only `dashClockOut` resets the date to today first. Found by reading the code, not reproduced. A fix is one line (set the date to today before opening the picker).
+- The Unclosed flag is also raised for a past day with no clock-in at all (`!r.clock_out`, line 740). Harmless here, because those days never get a Clock out button.
