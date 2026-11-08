@@ -19,3 +19,14 @@ Kevin designs and writes specs in a separate Claude chat. That chat cannot see t
 - **After every build,** bump `APP_VERSION`, add the `CHANGELOG.md` entry, and put the version in the commit message (`v[X.XX]: ...`). The chat side reads the changelog to learn what shipped, so a build without a changelog line is invisible to it.
 - **If a build deviates from its spec** (skipped, changed, or added something), say so in the changelog entry and tell Kevin, so the spec and the code do not drift.
 - **Open problems found while building** that are outside the spec go to Kevin in the reply, not into code.
+
+## Preflight: permissions and connections before any long session (Kevin, 2026-11-08)
+
+Kevin often works on something else while a build runs. A permission prompt that nobody sees stops the whole session for 20 minutes or more. So:
+
+1. **Before the first edit, list everything the session will need**, step by step, from the spec: repo access (push to which branch), database access (read, write, migrations), edge function deploys, Netlify or other deploys, Claude Docs and Todoist writes, anything that needs Kevin to sign in (browser checks), folders on his computer, tools that must be loaded first, and any key or secret.
+2. **Trigger every one of them up front, in one batch,** with a harmless first use (load the tool, a read query, a test push to a scratch branch, a dry run). Then tell Kevin in one message how many approvals are waiting and what each is for, and wait for him once, at the start.
+3. **List anything that can only be approved at the moment it happens** (for example a first production write) with the step it comes at, so Kevin knows when he is needed. Ask whether he will be away.
+4. **Order the work so unblocked steps run first** and approval-needing steps are grouped together.
+5. **If you are blocked anyway,** say so immediately in the reply (and send a push notification if that tool is available), keep working on anything that is not blocked, and never wait silently.
+6. The preflight is **not** permission to build. Kevin must still say the exact phrase "okay to build".
