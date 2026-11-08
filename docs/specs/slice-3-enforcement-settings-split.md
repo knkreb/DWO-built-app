@@ -35,7 +35,7 @@ The rest of the tables are authenticated-only, but several are wide open to **ev
 
 ### 2.3 What does depend on anonymous reads
 
-The **login screen** reads `company_name` and `company_logo_url` from `settings` before anyone signs in (`app-core.js` ~L220 and ~L648). Keep exactly those two keys readable without login (section 4.4). Everything else in `settings` must require login.
+The **login screen** reads `company_name` and `company_logo_url` from `settings` before anyone signs in (`app-core.js` ~L220 and ~L648). **Decision 2026-11-08:** no exception. The login screen stops reading the database; it uses a copy saved on the device, or the Dynamiq mark. See `docs/specs/close-anonymous-access.md`, which ships first.
 
 ### 2.4 Settings write access
 
@@ -55,7 +55,7 @@ One version, five steps, in this order. Each database step has its own migration
 | Step | What | Gate before the next step |
 |---|---|---|
 | A | App runtime (`can()`, hide/show) with enforcement still off in the database | Kevin, Jadyn, Test Admin, Test User log in; sidebar and menus match the Field Tech template; nothing broke for admin |
-| B | Remove anonymous access (4.4) | Login screen still shows logo and name; app loads for all four logins; GPS pings still arrive (check `location_event` max timestamp after a ping) |
+| B | Anonymous access (4.4) | **Already done by `docs/specs/close-anonymous-access.md`, which ships before slice 2.** Here: only re-verify (4.4 step 3) |
 | C | Module policies (4.2 and 4.3) | QC checks 1–12 pass as Test Admin and Test User |
 | D | QuickBooks gate (6) | QC checks 13–15 |
 | E | Settings split and My Settings (7) | QC checks 16–20 |
@@ -96,7 +96,7 @@ All policies `to authenticated`. No `public`/`anon` policy remains on any table 
 | `customers` | `customers`, `customer_contacts`, `customer_contact_roles`, `contact_role_types` |
 | `customer_limits` | `customer_thresholds` |
 | `vendors` | `vendors`, `vendor_invoices`, `vendor_import_history`, `vendor_export_history` |
-| `sites` | `locations`, `location_entity_types` |
+| `sites` | `locations` (INSERT also allowed with `field_travel_log` edit, see 4.5 item 1), `location_entity_types` |
 | `invoicing` | `invoice_runs` |
 | `purchase_orders` | `purchase_orders`, `purchase_order_customers`, `po_change_orders`, `po_status_bucket` |
 | `exports` | `export_history` (insert also needs the QuickBooks flag, see 6) |
@@ -114,23 +114,21 @@ All policies `to authenticated`. No `public`/`anon` policy remains on any table 
 
 ### 4.4 Anonymous access
 
-1. Drop every policy whose role is `public`/`anon`, on every table (full list in 2.1; re-query at build time).
-2. Add the one exception, for the login screen:
+Done earlier by `docs/specs/close-anonymous-access.md` (ships before slice 2): no table has a `public`/`anon` policy and the login screen no longer reads the database. In this slice, only:
 
-```sql
-create policy settings_login_branding on public.settings for select to anon
-  using (key in ('company_name','company_logo_url'));
-create policy settings_select on public.settings for select to authenticated using (true);
-```
-
-3. Verify with rolled-back `anon` queries: `select count(*)` returns 0 on every table, except `settings` returning exactly 2 rows.
-4. Confirm the logo file itself (Supabase Storage) is a public bucket; the login screen needs it. Do not change the bucket.
+1. Re-run the policy listing and confirm no `public`/`anon` policy came back.
+2. The interim "any logged-in user" policies that spec created are the ones slice 3 replaces in 4.2 and 4.3.
+3. Re-verify with rolled-back `anon` queries: `select count(*)` returns 0 on **every** table, `settings` included. There is no exception.
 
 ### 4.5 Expected cross-module dependencies (decide with Kevin, do not guess)
 
 These are places where the Field Tech template and the current screens may collide. Diagnose each; the spec's default is in bold.
 
-1. **Stop tagging in Field Travel Log.** Field Tech has `sites` = view, but the FTL has a GPS "tag this stop as a site" workflow. If it writes to `locations`: **block it for view-only users and show "Ask Kevin to add this site"**; Kevin's rule is that techs see sites but cannot change them. Report what you find.
+1. **Stop tagging in Field Travel Log (decided 2026-11-08).** Techs can tag a stop as a new site; an admin reviews it afterward. Verified: tagging posts a new row to `locations` directly (`field-travel-log.js` ~L1953 and ~L3735), so today there is no review. Build:
+   - Policy: `locations` INSERT allowed with `has_module('field_travel_log','edit')` or `has_module('sites','edit')`. UPDATE and DELETE need `sites` edit. The tech's tag works at once, so their day is not blocked.
+   - A database trigger on `locations` insert: when the creator is not an admin-template user, raise an `alerts` row (`alert_type = 'site_tagged_for_review'`, severity `info`, subject = the new site, message "[tech] tagged a new site: [name]. Review it."). It uses the existing Alerts center and its Unread → Acknowledged → In progress → Resolved flow; Kevin resolves it after checking name, address and radius. Raise it from a `security definer` trigger (the alerts table takes no client inserts).
+   - Diagnose first: if tagging also PATCHes `locations` right after the insert (names, radius), list every field it sets. Those updates must be allowed for the creator on rows they just created, or the tag step must send everything in the insert.
+   - A true approve/reject queue (pending state, reject removes the site) is the later queue spec that also covers customers and equipment. Alerts is the interim review.
 2. **Quoted work orders.** The work order screen for a quoted WO reads quoted billing data. **Allow select on `quoted_invoices` with `work_orders` view** (4.3), keep writes at `quoted_billing` edit.
 3. **Customer limit warnings** shown on a work order (`app-customer-limits.js`) read `customer_thresholds` and NTE rows. **Techs see NTE (view). Customer limit warnings stay admin-only** unless Kevin says otherwise; the work order must not error when it cannot read thresholds.
 4. **Daily Dashboard widgets.** Each widget loads only if the user has its module (6.4). A tech's dashboard simply shows fewer cards.
@@ -218,7 +216,7 @@ New entry in the sidebar and mobile menu, available to every active user:
 
 Defaults and fallback for barcode formats: the device value if set, else the company value in `settings.barcode_formats`, else `CODE_128`. The company row stays in the database as the fallback default, but its editor leaves Admin Settings → System (comment out with a MOVED marker). Scanner code (`app-core.js` ~L5785 and ~L5852) reads through one function `getBarcodeFormats()` instead of `AppState.settings.barcode_formats`. `saveBarcodeFormat()` writes to the device store.
 
-Decision for Kevin to confirm: default technician and font size stay **per device** (browser storage), as today, rather than moving into the database per user. That keeps this slice free of a new table. If he wants them to follow the user across devices, it is a small follow-up.
+Confirmed by Kevin 2026-11-08: font size (and default technician, same storage today) stay **per device** in browser storage, not in the database. No new table.
 
 ## 8. NTE visible to technicians
 
@@ -236,9 +234,10 @@ Kevin, 2026-11-08: a tech must see in real time whether a work order is over its
 Run as **Test Admin** and **Test User**. Database checks run in rolled-back transactions as each login (`set local role authenticated` + `set_config('request.jwt.claims', …)`); real writes only with Kevin's OK, on the Office Test Customer and a test work order. Claude cannot type passwords; Kevin signs in once in the built-in browser pane for any screen check.
 
 **Step B (anonymous)**
-1. As `anon`: row count is 0 on every table except `settings`, which returns exactly `company_name` and `company_logo_url`.
-2. The login screen still shows the logo and company name when signed out.
-3. A GPS ping sent to the location receiver still lands in `location_event` after the policies change.
+1. As `anon`: row count is 0 on every table, `settings` included. (Set up by `close-anonymous-access.md`; re-verify here.)
+2. The login screen shows the saved logo on a device that has signed in before, and the Dynamiq mark on a device that has not.
+3. A GPS ping sent to the location receiver still lands in `location_event`.
+3a. A Field Tech tags a new site in Field Travel Log: the site is created, and one `site_tagged_for_review` alert appears for the admin. A Field Tech cannot edit or delete an existing site.
 
 **Step C (modules)**
 
@@ -296,6 +295,8 @@ Run as **Test Admin** and **Test User**. Database checks run in rolled-back tran
 - 2026-11-08: WO NTE visible to techs in real time (view).
 - 2026-11-08: Technicians have no customer-create right for now; queue deferred.
 - 2026-11-08: Barcode formats are per device, with the company value as fallback.
-- 2026-11-08 (Claude): anonymous access to company data found and added to this slice as step B. Not in the Build Doc.
-- 2026-11-08 (Claude): default technician and font size left per device; flagged for Kevin.
+- 2026-11-08 (Claude): anonymous access to company data found. Kevin: fix it now. Moved into its own earlier spec, `close-anonymous-access.md`.
+- 2026-11-08: no exception for the login screen. Company name and logo are saved on the device and the Dynamiq mark is the default; the database serves nothing to logged-out visitors.
+- 2026-11-08: font size per device. Default technician per device (same storage; Claude kept it with font size).
+- 2026-11-08: techs can tag a new site in Field Travel Log; an admin reviews it (interim: alert in the Alerts center, true approval queue later).
 - 2026-11-08 (Claude): QuickBooks flag limit stated honestly (file is made in the browser).
