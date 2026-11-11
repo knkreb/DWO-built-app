@@ -30,3 +30,13 @@ Kevin often works on something else while a build runs. A permission prompt that
 4. **Order the work so unblocked steps run first** and approval-needing steps are grouped together.
 5. **If you are blocked anyway,** say so immediately in the reply (and send a push notification if that tool is available), keep working on anything that is not blocked, and never wait silently.
 6. The preflight is **not** permission to build. Kevin must still say the exact phrase "okay to build".
+
+## Rollback and backups: know the way back before any change (Kevin, 2026-11-11)
+
+1. **Every spec has a short "Rollback" section:** what undoes the change and what that costs. If there is no clean undo, the spec says so and Kevin must approve that explicitly.
+2. **Database changes that alter or delete policies, tables or data:**
+   - Confirm with Kevin that the latest Supabase daily backup exists (Claude cannot see or take backups). Daily backups are the only safety net: point-in-time recovery is not purchased, so a restore loses everything entered since that backup.
+   - Export the current policies, and copy affected tables into the `backup_` schema right before the change (for example `backup.hours_entries_YYYYMMDD`).
+   - Write and syntax-check the rollback file **before** running the change. Run multi-step changes in one transaction.
+   - For a large change (for example slice 3 enforcement), also have Kevin make a full dump file first, and lead him through it step by step during the preflight.
+3. **App changes:** record the previous version number in the CHANGELOG.md entry so it can be redeployed as-is.
