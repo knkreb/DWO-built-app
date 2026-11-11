@@ -1,6 +1,6 @@
 // SHORT TERM DWO — app-core.js (clean - no nested template literals)
 
-const APP_VERSION = '5.23';
+const APP_VERSION = '5.24';
 
 const SUPABASE_URL = 'https://yrupnxlxgubfsjmptgxm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_is9jKWo4fgjmWc4yvLuiFA_sfghUrrH';
@@ -212,6 +212,7 @@ function selSize() { return Object.keys(AppState.desktopSelected).length; }
 // Apply company branding immediately from localStorage — before auth, before window load
 document.addEventListener('DOMContentLoaded', function() {
   applyFontSize();
+  /* MOVED TO app-branding.js — v5.24 — 2026-11-11 (logged-out settings read removed; login screen now uses only the branding saved on this device)
   var n = localStorage.getItem('dwo_company_name');
   var l = localStorage.getItem('dwo_company_logo_url');
   if (n || l) applyCompanyBranding(n, l);
@@ -233,6 +234,8 @@ document.addEventListener('DOMContentLoaded', function() {
       applyCompanyBranding(name, logo);
     }).catch(function(){});
   }
+  */
+  if (typeof brandingApplyFromDevice === 'function') brandingApplyFromDevice();
 });
 
 window.addEventListener('load', function() {
@@ -267,9 +270,13 @@ window.addEventListener('load', function() {
   if (storedVersion && storedVersion !== APP_VERSION) {
     sb.signOut().then(function() {
       var savedTech = localStorage.getItem('dwo_default_tech');
+      /* v5.24: the company name and logo saved on this device must survive an app update (login screen uses them) */
+      var savedBranding = {};
+      ['dwo_company_name','dwo_company_logo_data','dwo_company_logo_src'].forEach(function(k){ var v = localStorage.getItem(k); if (v !== null) savedBranding[k] = v; });
       localStorage.clear();
       localStorage.setItem('dwo_app_version', APP_VERSION);
       if (savedTech) localStorage.setItem('dwo_default_tech', savedTech);
+      Object.keys(savedBranding).forEach(function(k){ try { localStorage.setItem(k, savedBranding[k]); } catch(e) {} });
       showScreen('screen-login'); showHeader(false);
       var errEl = document.getElementById('login-error');
       if (errEl) errEl.textContent = 'App updated — please sign in again.';
@@ -515,6 +522,7 @@ function loadAllData() {
       if (AppState.settings.company_name) localStorage.setItem('dwo_company_name', AppState.settings.company_name);
       if (AppState.settings.company_logo_url !== undefined) localStorage.setItem('dwo_company_logo_url', AppState.settings.company_logo_url||'');
       applyCompanyBranding(AppState.settings.company_name, AppState.settings.company_logo_url);
+      if (typeof brandingRefreshAfterLogin === 'function') brandingRefreshAfterLogin(AppState.settings); /* v5.24: save name and logo on this device */
       subscribeToWorkOrders();
       subscribeToHoursEntries();
       if (typeof invLoadActiveRun === 'function') invLoadActiveRun();
@@ -639,6 +647,7 @@ function loadWoFlags() {
   });
 }
 
+/* MOVED TO app-branding.js — v5.24 — 2026-11-11 (loadCompanyBranding no longer reads the settings table before sign-in; the new version uses only the branding saved on this device)
 function loadCompanyBranding() {
   // Read from localStorage first for instant display before auth
   var cachedName = localStorage.getItem('dwo_company_name');
@@ -656,6 +665,7 @@ function loadCompanyBranding() {
     applyCompanyBranding(name||cachedName, logo!==null?logo:cachedLogo);
   }).catch(function(){});
 }
+*/
 
 function applyFontSize() {
   var scale = localStorage.getItem('dwo_font_size') || '1';
@@ -4498,6 +4508,7 @@ function uploadCompanyLogo(input) {
     if (r.ok) {
       var publicUrl = SUPABASE_URL + '/storage/v1/object/public/company-assets/' + path;
       saveCompanySetting('company_logo_url', publicUrl);
+      if (typeof brandingRefreshDeviceLogo === 'function') brandingRefreshDeviceLogo(publicUrl, true); /* v5.24: refresh the copy saved on this device */
       showToast('Logo uploaded');
     } else {
       r.text().then(function(t){ showToast('Upload failed: ' + t); });

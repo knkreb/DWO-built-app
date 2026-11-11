@@ -416,7 +416,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   <div id="screen-login-inner">
     <!-- v5.08: login header replaced by the large Providence Mechanical logo below. Original: 80px company logo, wrench mark, h1 company name, p "Providence Mechanical", version line (kept) -->
     <div class="login-stack">
-    <img class="login-company-logo-lg" src="brand/providence-mechanical-logo.svg" alt="Providence Mechanical">
+    <!-- v5.24 was: <img class="login-company-logo-lg" src="brand/providence-mechanical-logo.svg" alt="Providence Mechanical"> — the login screen now shows the logo saved on this device, Dynamiq by default (app-branding.js) -->
+    <img class="login-company-logo-lg" id="login-brand-logo" src="brand/dynamiq-lockup.svg" alt="Dynamiq">
     <div class="login-card">
       <div class="login-logo" style="margin-bottom:20px">
         <p id="login-version" style="font-size:11px;color:var(--text-muted);margin-top:0"></p>
@@ -1132,7 +1133,8 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 </style>
 <script src="gps-engine.js?v=10"></script>
 <script src="app-morning-brief.js?v=138"></script>
-<script src="app-core.js?v=168"></script>
+<script src="app-core.js?v=169"></script>
+<script src="app-branding.js?v=1"></script>
 <script src="app-mobile-ui.js?v=1"></script>
 <script src="app-sites-travel.js?v=1"></script>
 <script src="app-users.js?v=1"></script>
