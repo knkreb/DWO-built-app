@@ -40,3 +40,12 @@ Kevin often works on something else while a build runs. A permission prompt that
    - Write and syntax-check the rollback file **before** running the change. Run multi-step changes in one transaction.
    - For a large change (for example slice 3 enforcement), also have Kevin make a full dump file first, and lead him through it step by step during the preflight.
 3. **App changes:** record the previous version number in the CHANGELOG.md entry so it can be redeployed as-is.
+
+## New modules and users: never leave permissions behind (Kevin, 2026-11-11)
+
+Every new module or feature screen must be registered in the permissions system **in the same build**:
+1. A `modules` row, and a permission row for **every** template (new modules default to `none` for Field Tech unless the spec says otherwise). Put this sentence at the top of the migration file.
+2. Enforcement policies for its tables (slice 3 pattern) and a nav entry that follows the module's access level.
+3. The new module appears in the Permissions grid in Settings.
+
+Every build's QC includes: sign in as Test User and Test Admin and confirm the new module shows or hides correctly; confirm Add user still works (create a throwaway user, log in, deactivate); confirm the new module appears in the Permissions grid.
