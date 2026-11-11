@@ -38,6 +38,8 @@ Nobody who is not logged in can read or write any company data. Nobody without a
 
 Files: `supabase/migrations/v<next>_close_anonymous_access.sql`, plus `v<next>_policies_before.sql` (an export of every current policy, taken first) and `v<next>_close_anonymous_access_rollback.sql` (re-creates the exported policies). Kevin approves each step; do not run it without "okay to build".
 
+**Rollback contract.** The rollback file must (1) drop every `<table>_<cmd>_authed` policy created in 4.2, (2) re-create every policy from the "before" export, including the original plain-`true` conditions changed in section 5, and (3) be written and syntax-checked **before** the change runs. Running it reopens the logged-out exposure, so it is an emergency undo only. The app change in section 6 rolls back by redeploying the previous version (record the previous version number in the changelog entry).
+
 ### 4.1 Diagnose first
 
 1. Export all current policies from `pg_policies` to the "before" file.
