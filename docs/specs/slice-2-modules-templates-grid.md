@@ -1,6 +1,6 @@
 # Spec — Roles and Permissions, Slice 2: Modules, Templates, Permission Grid
 
-**Target version:** v5.24 (check the top of `CHANGELOG.md` and `APP_VERSION` first; use the next free number) · **Base:** v5.23 (commit 1ddd56d) · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
+**Target version:** v5.25 (was v5.24 until the close-anonymous-access fix took v5.24 on 2026-11-11; check the top of `CHANGELOG.md` and `APP_VERSION` first; use the next free number) · **Base:** v5.24 (commit 1ddd56d) · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
 **Design doc:** DWO Roles and Permissions Slices 2 and 3 Build Doc (Claude Docs) · **Slice 1 spec:** `docs/specs/slice-1-user-identity.md` · **Next:** `docs/specs/slice-3-enforcement-settings-split.md`
 
 > Claude Code: read this whole file before touching code. Do not write or deploy anything until Kevin says the exact phrase **"okay to build"**. `git fetch` first. Diagnose first (SQL, then code). Run `node --check` on every changed JS file. Bump `APP_VERSION` and cache busters. Add the CHANGELOG line and the version in the commit message.
@@ -73,7 +73,7 @@ Claude Code: before seeding, grep the sidebar (`index.html` ~L558), the mobile m
 
 ## 5. Database changes
 
-Put them in `supabase/migrations/v5.24_permissions.sql`. Kevin runs or approves each step; do not run it from Claude Code without "okay to build". Write a rollback file `v5.24_permissions_rollback.sql` (drop the new functions, then the tables in reverse order). Nothing existing references the new objects, so the rollback is clean.
+Put them in `supabase/migrations/v5.25_permissions.sql`. Kevin runs or approves each step; do not run it from Claude Code without "okay to build". Write a rollback file `v5.24_permissions_rollback.sql` (drop the new functions, then the tables in reverse order). Nothing existing references the new objects, so the rollback is clean.
 
 ### 5.1 Tables
 

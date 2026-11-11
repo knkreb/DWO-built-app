@@ -1,6 +1,6 @@
 # Spec — Roles and Permissions, Slice 3: Enforcement, QuickBooks Gate, Settings Split
 
-**Target version:** v5.25 (use the next free number; `git fetch` and check `CHANGELOG.md` first) · **Requires:** slice 2 (v5.24) deployed and QC-passed · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
+**Target version:** v5.26 (was v5.25 before the close-anonymous-access fix took v5.24; use the next free number; `git fetch` and check `CHANGELOG.md` first) · **Requires:** slice 2 (v5.25) deployed and QC-passed · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
 **Design doc:** DWO Roles and Permissions Slices 2 and 3 Build Doc (Claude Docs) · **Previous:** `docs/specs/slice-2-modules-templates-grid.md`
 
 > Claude Code: read this whole file, and the slice 2 spec, before touching code. Do not write or deploy anything until Kevin says the exact phrase **"okay to build"**. This slice changes who can read and write production data, so work in the order in section 3 and stop for Kevin's go-ahead at each gate. Diagnose first (SQL, then code). Run `node --check` on every changed JS file. Bump `APP_VERSION` and cache busters.
@@ -50,7 +50,7 @@ Verified as Test User: `settings` update changes 0 rows; as Test Admin 1 row. In
 
 ## 3. Build order and gates
 
-One version, five steps, in this order. Each database step has its own migration file and its own rollback file. **Before step A, export every current policy definition to `supabase/migrations/v5.25_policies_before.sql`** (from `pg_policies`) so rollback is exact.
+One version, five steps, in this order. Each database step has its own migration file and its own rollback file. **Before step A, export every current policy definition to `supabase/migrations/v5.26_policies_before.sql`** (from `pg_policies`) so rollback is exact.
 
 | Step | What | Gate before the next step |
 |---|---|---|
@@ -136,7 +136,7 @@ These are places where the Field Tech template and the current screens may colli
 
 ### 4.6 Rollback
 
-`v5.25_rls_rollback.sql` restores `v5.25_policies_before.sql`. Test it on a database branch before the production run, or have Kevin review it line by line if no branch is available.
+`v5.26_rls_rollback.sql` restores `v5.26_policies_before.sql`. Test it on a database branch before the production run, or have Kevin review it line by line if no branch is available.
 
 ## 5. App changes
 
