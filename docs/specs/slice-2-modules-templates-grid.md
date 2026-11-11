@@ -1,6 +1,6 @@
 # Spec — Roles and Permissions, Slice 2: Modules, Templates, Permission Grid
 
-**Target version:** v5.25 (was v5.24 until the close-anonymous-access fix took v5.24 on 2026-11-11; check the top of `CHANGELOG.md` and `APP_VERSION` first; use the next free number) · **Base:** v5.24 (commit 1ddd56d) · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
+**Target version:** v5.25 (was v5.24 until the close-anonymous-access fix took v5.24 on 2026-11-11; check the top of `CHANGELOG.md` and `APP_VERSION` first; use the next free number) · **Base:** v5.24 (main at 1994f4d) · **Written:** 2026-11-08 · **Status:** corrected 2026-11-11 after the cross-module review (section 11); awaiting Kevin's "okay to build"
 **Design doc:** DWO Roles and Permissions Slices 2 and 3 Build Doc (Claude Docs) · **Slice 1 spec:** `docs/specs/slice-1-user-identity.md` · **Next:** `docs/specs/slice-3-enforcement-settings-split.md`
 
 > Claude Code: read this whole file before touching code. Do not write or deploy anything until Kevin says the exact phrase **"okay to build"**. `git fetch` first. Diagnose first (SQL, then code). Run `node --check` on every changed JS file. Bump `APP_VERSION` and cache busters. Add the CHANGELOG line and the version in the commit message.
@@ -73,7 +73,7 @@ Claude Code: before seeding, grep the sidebar (`index.html` ~L558), the mobile m
 
 ## 5. Database changes
 
-Put them in `supabase/migrations/v5.25_permissions.sql`. Kevin runs or approves each step; do not run it from Claude Code without "okay to build". Write a rollback file `v5.24_permissions_rollback.sql` (drop the new functions, then the tables in reverse order). Nothing existing references the new objects, so the rollback is clean.
+Put them in `supabase/migrations/v5.25_permissions.sql`. Kevin runs or approves each step; do not run it from Claude Code without "okay to build". Write a rollback file `v5.25_permissions_rollback.sql` (drop the new functions, then the tables in reverse order). Nothing existing references the new objects, so the rollback is clean.
 
 ### 5.1 Tables
 
@@ -105,6 +105,7 @@ create table public.template_permissions (
   created_at   timestamptz not null default now(),
   modified_at  timestamptz not null default now(),
   modified_by  text not null default '',
+  label        text not null default '',   -- set by trigger (5.3); read by the audit trail
   unique (template_key, module_key)
 );
 
@@ -117,6 +118,7 @@ create table public.user_permissions (        -- one row per DIFFERENCE from the
   created_at  timestamptz not null default now(),
   modified_at timestamptz not null default now(),
   modified_by text not null default '',
+  label       text not null default '',   -- set by trigger (5.3); names the user in the audit trail
   unique (profile_id, module_key),
   check (level is not null or qb_allowed is not null)
 );
@@ -152,6 +154,7 @@ No anonymous (`public` role) policy on any of them.
 - `template_permissions`: any insert, update or delete is refused when the template has `locked = true` (Admin). The Admin template always stays full.
 - `user_permissions`: an insert or update is refused when the profile's template is `admin`. An admin user cannot be restricted by an override.
 - Both raise a plain-English error the grid can show as-is: "The Admin template is locked." / "Admin users can't be restricted."
+- A before insert/update trigger on each table sets `label`: `template_permissions.label = template_key || ' · ' || module_key`; `user_permissions.label = <the user's display_name from profiles> || ' · ' || module_key`. The audit trail reads it, so a change reads "Jadyn · vendors" and not just "vendors" (without it the Audit Log would not say whose override changed).
 
 ### 5.4 Functions
 
@@ -208,7 +211,7 @@ Seed with `insert ... select` from `modules` so a typo cannot leave a module wit
 
 ### 5.7 Audit
 
-Attach the generic trigger to `template_permissions` and `user_permissions` so every change to access is in the Audit Log. **Read `audit_row_changes()` in `v4.89_operational_audit_trail.sql` first**: it takes `(label_col, work_order_fk_col, excludes)` and expects an `id` column (both tables have one). Use `module_key` as the label column and exclude `created_at,modified_at,modified_by`. If the Audit Log module filter has a fixed list of table names, add the two new tables (module label "Permissions"). Do not audit `modules` or `access_templates`: they change only by migration.
+Attach the generic trigger to `template_permissions` and `user_permissions` so every change to access is in the Audit Log. **Read `audit_row_changes()` in `v4.89_operational_audit_trail.sql` first**: it takes `(label_col, work_order_fk_col, excludes)` and expects an `id` column (both tables have one). Use `label` as the label column (5.3) and exclude `created_at,modified_at,modified_by,label`. The Audit Log module filter is a fixed list (`AUDIT_MODULES`, `app-alerts.js` ~L220): add the two new tables to it (see 6.3). Do not audit `modules` or `access_templates`: they change only by migration.
 
 ### 5.8 No seed for users
 
@@ -216,11 +219,11 @@ Nobody gets an override row at go-live. Kevin and Jadyn simply follow their temp
 
 ## 6. App changes
 
-New file **`app-permissions.js`** (script tag after `app-users.js`). Slice 3 adds the runtime helpers to the same file. No code moves out of existing files in this slice, except the Settings tab list gets one entry.
+New file **`app-permissions.js`** (script tag after `app-users.js`). Slice 3 adds the runtime helpers to the same file. No code moves out of existing files in this slice, except the Settings tab list gets one entry and the Audit Log filter list gets two (see 6.3).
 
 ### 6.1 Permissions tab (Settings, admin only)
 
-Add `{id:'permissions', label:'Permissions'}` to the admin-only tabs in `renderSettings()` (next to Alerts and Audit Log). Desktop layout. A banner at the top: **"Permissions are recorded here but not enforced until v5.25. Nothing below changes what anyone can do yet."** (slice 3 removes the banner.)
+Add `{id:'permissions', label:'Permissions'}` to the admin-only tabs in `renderSettings()` (next to Alerts and Audit Log). Desktop layout. A banner at the top: **"Permissions are recorded here but not enforced until v5.26. Nothing below changes what anyone can do yet."** (slice 3 removes the banner.)
 
 **Section A: Templates.** One table. Rows = the 23 modules, grouped Screens / Features / Admin. Columns = Admin (locked, shown greyed with a lock) and Field Tech. Each Field Tech cell: a level dropdown (None / View / Edit) and a QuickBooks checkbox. Changes save on change with a toast; a failed save reverts the control and shows the error text.
 
@@ -235,12 +238,18 @@ Under the grid: "N users differ from their template" with a list of the differen
 
 Below both sections: a read-only line "Admin Settings, this screen and the Users block are admin-only for everyone and are not modules."
 
+**Settings is rendered twice.** `renderSettings(containerId)` runs once for the mobile body and once for the desktop body, and both can exist in the page at the same time. Build the grid with no fixed element ids (use classes, or ids scoped by `containerId`) and update every matching element, or the visible copy can stay stale (the v4.88 Audit Log bug). **On a phone the Permissions tab is hidden** (desktop job, same as Customer Invoice Generation); Kevin can change this.
+
 ### 6.2 Do not do in this slice
 
 - No change to what any screen shows or any button does.
 - No change to `loadUserRole`, `AppState.userRole` or `profiles.template`.
 - No new template creation in the UI.
 - No change to existing RLS policies.
+
+### 6.3 Audit Log filter list (one small edit outside the new file)
+
+In `app-alerts.js`, add to `AUDIT_MODULES` (~L220): `['template_permissions','Permissions (templates)']` and `['user_permissions','Permissions (users)']`. Without them the new rows are audited but cannot be filtered, and the Module column shows the raw table name.
 
 ## 7. QC checks
 
@@ -255,9 +264,12 @@ Claude runs the database checks as each login inside a transaction that always r
 7. Audit: checks 5 and 6 each leave the expected `audit_log` rows (override add, change, remove) and the refused ones leave none.
 8. Permissions tab: visible to Kevin and Test Admin; not visible to Test User or Jadyn; Test User cannot reach it by calling the render function (the data reads return nothing for others' rows and the tab is not rendered).
 9. Grid behavior: change a Field Tech cell, reload, value persists; override cell highlights; "Use template default" clears it; "N users differ" count is right.
-10. Nothing else changed: Kevin, Jadyn, Test Admin and Test User each log in; sidebar items, mobile menu and Settings tabs are identical to v5.23 (apart from the new Permissions tab for admins). Settings saves still work for admins and are still blocked for Test User.
+10. Nothing else changed: Kevin, Jadyn, Test Admin and Test User each log in; sidebar items, mobile menu and Settings tabs are identical to v5.24 (apart from the new Permissions tab for admins). Settings saves still work for admins and are still blocked for Test User.
 11. `select count(*) from information_schema.table_privileges where grantee in ('anon','public') and table_name in ('modules','access_templates','template_permissions','user_permissions')` = 0 for write privileges, and an anonymous read of each returns 0 rows.
 12. Rollback file runs clean on a branch database (or is reviewed by Kevin if no branch is available).
+13. Add user still works (CLAUDE.md rule): create a throwaway user, log in as them, see only the Field Tech items, deactivate. The new user appears in the Permissions grid and follows the Field Tech template with no override rows. (Real write; Kevin's OK; clean up after.)
+14. The Permissions grid lists all 23 modules in the order of section 3, and every module has a row for both templates.
+15. Audit rows name the user: an override change on Test User shows "Test User · vendors" as its context, and the Audit Log module filter offers the two Permissions entries.
 
 ## 8. Out of scope
 
@@ -275,3 +287,29 @@ Claude runs the database checks as each login inside a transaction that always r
 - 2026-11-08: Technicians get no customer-create right for now; approval queue deferred to its own spec.
 - 2026-11-08 (Claude): admin template locked and admin users cannot be restricted by overrides, so no one can lock themselves out of the Permissions screen. Added for Kevin's review.
 - 2026-11-08 (Claude): `id` column added to both permission tables so the existing audit trigger works unchanged.
+- 2026-11-11 (Claude): corrections from the cross-module review applied (audit `label` column, `AUDIT_MODULES` edit, settings double-render note, stale version text, Rollback section, QC 13 to 15). See sections 10 and 11.
+
+## 10. Rollback
+
+- **Database:** run `supabase/migrations/v5.25_permissions_rollback.sql` (drop the label and lockout triggers and the four functions, then the four tables in reverse order). Nothing existing references these objects, so the undo is clean. Cost: any permission settings entered after go-live are lost; no other table is touched.
+- **App:** redeploy v5.24 and record "previous version: v5.24" in the CHANGELOG entry. The Permissions tab disappears; nothing else changes because nothing reads the new tables.
+- **Backup:** this slice only creates tables, so no full dump is needed. Before the migration, Kevin confirms the latest Supabase daily backup exists. Write and syntax-check the rollback file before the migration runs, and run the migration in one transaction.
+
+## 11. Cross-module impact review (2026-11-11)
+
+Design-level pass against main at 1994f4d (read-only). Result: slice 2 does not change what any current screen, login or table does. Corrections applied in this file:
+
+1. Audit rows now name the user (`label` column, 5.1, 5.3, 5.7, QC 15).
+2. The fixed `AUDIT_MODULES` list gets the two new tables (5.7, 6.3).
+3. Stale text fixed: base commit, banner version (v5.26), rollback file name, QC baseline (v5.24).
+4. Rollback section added (section 10).
+5. QC 13 to 15 added (Add user, all 23 modules in the grid, audit label); Settings double-render and phone behaviour added to 6.1.
+
+Checked and clean:
+
+- All 23 modules map to existing sidebar items, mobile menu items, Settings tabs and admin gates. No gated feature falls outside the list.
+- Add user: `admin-users` accepts only `admin` and `field` (decision 5). New users follow their template with no override rows.
+- `get_user_role()`, `profiles.template` and the v5.24 `*_authed` policies are untouched.
+- New tables only; no `public`/`anon` policy (QC 11).
+
+Carried to slice 3: device-settings keep-list (step 0) and stale v5.24 policy text; see `slice-3-enforcement-settings-split.md`.

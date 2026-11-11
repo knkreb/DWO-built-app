@@ -1,6 +1,6 @@
 # Spec — Roles and Permissions, Slice 3: Enforcement, QuickBooks Gate, Settings Split
 
-**Target version:** v5.26 (was v5.25 before the close-anonymous-access fix took v5.24; use the next free number; `git fetch` and check `CHANGELOG.md` first) · **Requires:** slice 2 (v5.25) deployed and QC-passed · **Written:** 2026-11-08 · **Status:** awaiting Kevin's review
+**Target version:** v5.26 (was v5.25 before the close-anonymous-access fix took v5.24; use the next free number; `git fetch` and check `CHANGELOG.md` first) · **Requires:** slice 2 (v5.25) deployed and QC-passed · **Written:** 2026-11-08 · **Status:** corrected 2026-11-11 after the cross-module review; awaiting Kevin's "okay to build"
 **Design doc:** DWO Roles and Permissions Slices 2 and 3 Build Doc (Claude Docs) · **Previous:** `docs/specs/slice-2-modules-templates-grid.md`
 
 > Claude Code: read this whole file, and the slice 2 spec, before touching code. Do not write or deploy anything until Kevin says the exact phrase **"okay to build"**. This slice changes who can read and write production data, so work in the order in section 3 and stop for Kevin's go-ahead at each gate. Diagnose first (SQL, then code). Run `node --check` on every changed JS file. Bump `APP_VERSION` and cache busters.
@@ -50,10 +50,11 @@ Verified as Test User: `settings` update changes 0 rows; as Test Admin 1 row. In
 
 ## 3. Build order and gates
 
-One version, five steps, in this order. Each database step has its own migration file and its own rollback file. **Before step A, export every current policy definition to `supabase/migrations/v5.26_policies_before.sql`** (from `pg_policies`) so rollback is exact.
+One version: a small step 0, then five steps (A to E), in this order. Each database step has its own migration file and its own rollback file. **Before step A, export every current policy definition to `supabase/migrations/v5.26_policies_before.sql`** (from `pg_policies`) so rollback is exact. Per CLAUDE.md this is a large change: Kevin also confirms the latest Supabase daily backup exists and makes a full dump file first (Claude leads him through it during the preflight), and the affected tables are copied into the `backup_` schema right before step C. A restore of the daily backup loses everything entered since it was taken, so the dump is made the same day.
 
 | Step | What | Gate before the next step |
 |---|---|---|
+| 0 | Device-settings keep-list (5.6): the app-update reset keeps font size and barcode formats | After an app update on Kevin's phone, font size and default technician are as he left them |
 | A | App runtime (`can()`, hide/show) with enforcement still off in the database | Kevin, Jadyn, Test Admin, Test User log in; sidebar and menus match the Field Tech template; nothing broke for admin |
 | B | Anonymous access (4.4) | **Already done by `docs/specs/close-anonymous-access.md`, which ships before slice 2.** Here: only re-verify (4.4 step 3) |
 | C | Module policies (4.2 and 4.3) | QC checks 1–12 pass as Test Admin and Test User |
@@ -78,7 +79,9 @@ For each table, replace its policies with:
 | INSERT / UPDATE | `has_module(<module>, 'edit')` |
 | DELETE | `has_module(<module>, 'edit')` **only if the client deletes from that table**; otherwise `false` (nobody deletes) as today |
 
-All policies `to authenticated`. No `public`/`anon` policy remains on any table except the one in 4.4. Admin-template users pass every check because `has_module` returns true for them.
+All policies `to authenticated`. No `public`/`anon` policy remains on any table (v5.24 removed them all; there is no exception). Admin-template users pass every check because `has_module` returns true for them.
+
+v5.24 created `<table>_<cmd>_authed` policies and tightened 47 plain-`true` policies to `get_user_role() is not null`. This slice's migration drops those by name and replaces them with the module policies. Build the drop list from a fresh `pg_policies` export taken at build time, not from this spec.
 
 **Claude Code: diagnose first.** For each table below, grep the client (`sb.delete`, `sb.patch`, `sb.post`, `sb.get`) to confirm which commands it actually uses and which screens touch it. Where a screen a Field Tech can open reads or writes a table mapped to a module the template denies, stop and list it for Kevin rather than loosening a policy. Expected such cases are in section 4.5.
 
@@ -184,6 +187,10 @@ Kevin: Customer Invoice Generation is "an admin and desktop job". Permissions do
 
 When the database refuses a write (row count 0 or a policy error), show "You don't have permission to do that" and log nothing sensitive. Review `sb.post/patch/delete` handlers: PATCH returns 0 rows with no error under row-level security, so a successful HTTP response with an empty result must be treated as a refusal where the app expects one row back.
 
+### 5.6 Device-settings keep-list (step 0)
+
+The app-update reset (`app-core.js` ~L270 to L282) signs the user out and runs `localStorage.clear()` on every version change, keeping only `dwo_default_tech` and the three branding keys (v5.24). My Settings (7.2) stores font size and barcode formats on the device, so without this fix they reset at every update. Add `dwo_font_size` and `dwo_barcode_formats` to the keys the reset keeps (same pattern as `savedBranding`). Do this first, before any My Settings work, and change nothing else in the reset. QC: set a font size, bump the version, reload; the font size is unchanged.
+
 ## 6. QuickBooks gate
 
 "App access no longer equals authorization to touch QuickBooks." The flag per module is `has_qb(module)` in the database and `canQB(module)` in the app.
@@ -261,7 +268,7 @@ Run as **Test Admin** and **Test User**. Database checks run in rolled-back tran
 9. Dashboard for Test User shows only cards the template allows.
 10. Inactive user: a deactivated login gets nothing (existing behavior still holds).
 11. Anonymous or logged-out requests to any table return nothing (re-run the 4.4 check after step C).
-12. Policy review: `select tablename, policyname, roles from pg_policies where schemaname='public'` shows no `public`/`anon` role except `settings_login_branding`, and no remaining `using (true)` write policy on a table in the 4.3 map.
+12. Policy review: `select tablename, policyname, roles from pg_policies where schemaname='public'` shows no `public`/`anon` role at all (v5.24 removed `settings_login_branding`; the login screen uses device-saved branding), and no remaining `using (true)` or interim `get_user_role() is not null` policy on a table in the 4.3 map.
 
 **Step D (QuickBooks)**
 
@@ -300,3 +307,5 @@ Run as **Test Admin** and **Test User**. Database checks run in rolled-back tran
 - 2026-11-08: font size per device. Default technician per device (same storage; Claude kept it with font size).
 - 2026-11-08: techs can tag a new site in Field Travel Log; an admin reviews it (interim: alert in the Alerts center, true approval queue later).
 - 2026-11-08 (Claude): QuickBooks flag limit stated honestly (file is made in the browser).
+- 2026-11-11 (Claude): corrections from the cross-module review: step 0 keep-list for device settings, v5.24 policy names, no login-branding exception, backup and full dump per CLAUDE.md.
+- 2026-11-11 (Kevin, settled, not yet specced): one default technician rule; the logged-in tech always wins and the device default is only a fallback for logins with no technician record. Merges `drGetDefaultTech` and `getDefaultTechId`. Section 7.2's default-technician row stays as written until that small spec exists.
